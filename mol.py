@@ -4,6 +4,7 @@ from PIL import Image
 import numpy as np
 import imageio
 import random
+import shutil
 import scipy
 import time
 import gym
@@ -160,7 +161,7 @@ class PyMolEnv(gym.Env):
             print("done because beyond_max_steps", beyond_max_steps)
             print("done because stop loss", stop_loss)
             self.make_gif()
-            # delete the image folder
+            # delete the image folder to save space
             shutil.rmtree(self.episode_images_path)
         return observation, reward, done, info
     # we move 1 atom

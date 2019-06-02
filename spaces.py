@@ -1,34 +1,6 @@
-import numpy as np
 import string
 import random
 import gym
-
-
-class String(gym.Space):
-    def __init__(
-                self,
-                length=None,
-                min_length=1,
-                max_length=180,
-                min=0,
-                max=127
-            ):
-        self.length = length
-        self.min_length = min_length
-        self.max_length = max_length
-        self.letters = string.ascii_letters + " .,!-"
-
-    def sample(self):
-        length = random.randint(self.min_length, self.max_length)
-        string = ""
-        for i in range(length):
-            letter = random.choice(self.letters)
-            string += letter
-        return string
-
-    def contains(self, x):
-        return type(x) is "str" and len(x) > self.min and len(x) < self.max
-
 
 class Array(gym.Space):
     def __init__(self, shape, variance=1., mean=0., high=None, low=None, dtype=np.float32):
@@ -67,28 +39,3 @@ class Array(gym.Space):
                 if all(self.low < x < self.high):
                     return True
         return False
-
-
-class List(gym.Space):
-    def __init__(self, subspace, length=None):
-        self.subspace = subspace
-        self.length = length
-        self.list = []
-
-    def sample(self):
-        if self.length is None:
-            length = random.randint(0,3)
-        else:
-            length = self.length
-        sample = []
-        for i in range(length):
-            subsample = self.subspace.sample
-            sample.append(subsample)
-        self.list = sample
-        return sample
-
-    def contains(self, x):
-        if x in self.list:
-            return True
-        else:
-            return False
