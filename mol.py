@@ -1,4 +1,4 @@
-from slackclient import SlackClient
+# from slackclient import SlackClient
 from gym import spaces
 from PIL import Image
 import numpy as np
@@ -13,67 +13,56 @@ import os
 from src.tasks.spaces import Array
 from pymol import cmd
 
-
 class PyMolEnv(gym.Env):
-    def __init__(self, nurture, task):
-        # setup state
+    def __init__(self, config):
+        # setup
         self.run_time_stamp = str(time.time())
         self.root = os.path.dirname(os.path.abspath("."))
-        print("pymol root", self.root)
-        self.task_root = self.root + "/metamage/src/tasks/molecules"
-        print("pymol task_root", self.task_root)
-        self.run_path = os.path.join(self.task_root, "runs", self.run_time_stamp)
-        print("pymol run_path", self.run_path)
-        os.makedirs(self.run_path)
+        self.images_path = os.path.join(self.root, "images")
+        self.csvs_path = os.path.join(self.root, "csvs")
+        self.pdbs_path = os.path.join(self.root, "pdbs")
+        self.gifs_path = os.path.join(self.root, "gifs")
         self.pedagogy = self.load_pedagogy()
         self.colors_chosen = []
-        self.nurture = nurture
+        self.config = config
         self.episode = 0
         self.task = task
         # define spaces
-        self.observation_space = spaces.Dict({
-            "chains": Array(shape=(None, 6)),
-            "aminos": Array(shape=(None, 7)),
-            "bonds": Array(shape=(None, 1)),
-            "image": Array(shape=(3, 128, 128)),
-            "atoms": Array(shape=(None, 17))
-        })
-        self.action_space = spaces.Dict({
-            "potentials": Array(shape=(None, 3))
-        })
+        self.observation_space = Array(shape=(None, 17))
+        self.action_space = Array(shape=(None, 3))
 
     def reset(self):
         self.episode += 1
         # clean up!
         cmd.delete("all")
-        self.image_path = os.path.join(self.run_path, str(self.episode))
-        os.makedirs(self.image_path)
-        os.makedirs(self.image_path + "/stacks")
-        os.makedirs(self.image_path + "/pngs")
-        os.makedirs(self.image_path + "/jpgs")
-        self.pdb = random.choice(self.pedagogy)
-        self.pdb_folder_path = os.path.join(self.task_root, "inputs/pdbs/")
-        self.pdb_path = self.pdb_folder_path + self.pdb + ".pdb"
+        # set up image path
+        self.episode_image_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
+        os.makedirs(self.episode_image_path)
+        self.episode_stacks_path = os.path.join(self.episode_image_path, "stacks")
+        os.makedirs(self.episode_stacks_path)
+        self.episode_stacks_path = os.path.join(self.episode_image_path, "pngs")
+        os.makedirs(self.episode_pngs_path)
+        self.episode_stacks_path = os.path.join(self.episode_image_path, "jpgs")
+        os.makedirs(self.episode_jpgs_path)
+        # load a pdb
+        self.pdb = random.choice(self.pedagogy) + ".pdb"
+        self.pdb_path = os.path.join(self.pdbs_path, pdb)
         print("loading", self.pdb_path)
         if not os.path.exists(self.pdb_path):
-            cmd.fetch(self.pdb, path=self.pdb_folder_path, type="pdb")
+            cmd.fetch(self.pdb, path=self.pdbs_path, type="pdb")
         elif os.path.exists(self.pdb_path):
             cmd.load(self.pdb_path)
         cmd.remove("solvent")
         # 5. prepare for task setup
         cmd.select(name="current", selection="all")
-        self.get_metadata(self.task)
-        if self.task is "dock":
-            self.undock()
-        if self.task is "fold":
-            self.unfold()
-        self.action_space = spaces.Dict({
-            "potentials": Array(
-                shape=self.velocities.shape,
-                high=4.2,
-                low=-4.2
-                )
-        })
+        self.get_metadata()
+        self.undock()
+        # update action space with the shape
+        self.action_space = Array(
+            shape=self.velocities.shape,
+            high=4.2,
+            low=-4.2
+            )
         self.current = self.get_observation()
         # we need to know the initial work to calculate stop loss
         self.initial_work = self.calculate_reward()
@@ -82,14 +71,14 @@ class PyMolEnv(gym.Env):
     def undock(self):
         print("mol undock chains", self.chains)
         steps_in_undock = random.randint(
-            self.nurture.min_steps_in_undock,
-            self.nurture.max_steps_in_undock
+            self.config.min_steps_in_undock,
+            self.config.max_steps_in_undock
             )
         print("undocking", self.pdb, steps_in_undock, "times")
         sum_vector = {}
         step_vector_array = []
-        min_undock = self.nurture.min_undock
-        max_undock = self.nurture.max_undock
+        min_undock = self.config.min_undock
+        max_undock = self.config.max_undock
         # make a list of steps
         for step in range(steps_in_undock):
             current_step_vectors = []
@@ -147,51 +136,13 @@ class PyMolEnv(gym.Env):
             self.get_image()
             self.step_number += 1
 
-    def unfold(self):
-        print("task", self.task, "self.chains", self.chains)
-        chain = self.chains[0]
-        print("unfolding chain", chain)
-        index_cmd_string = "current and byca (chain {})".format(chain)
-        self.get_image()
-        self.step_number += 1
-        for name, index in cmd.index(index_cmd_string):
-            selection_string_array = [
-                'current and first (({}`{}) extend 2 and name C)'.format(name, index), # prev C
-                'current and first (({}`{}) extend 1 and name N)'.format(name, index), # this N
-                'current and ({}`{})'.format(name, index),                             # this CA
-                'current and last (({}`{}) extend 1 and name C)'.format(name, index),  # this C
-                'current and last (({}`{}) extend 2 and name N)'.format(name, index),  # next N
-            ]
-            try:
-                phi_random = random.randint(-360, 360)
-                cmd.set_dihedral(
-                    selection_string_array[0],
-                    selection_string_array[1],
-                    selection_string_array[2],
-                    selection_string_array[3],
-                    phi_random
-                )
-            except:
-                print("failed to set phi at: ", name, index)
-            try:
-                psi_random = random.randint(-360, 360)
-                cmd.set_dihedral(
-                    selection_string_array[1],
-                    selection_string_array[2],
-                    selection_string_array[3],
-                    selection_string_array[4],
-                    psi_random
-                )
-            except:
-                print("failed to set psi at: ", name, index)
-        self.get_image()
-
+    # we execute physics here:
     def step(self, action):
         force = -1 * action["potentials"]
         acceleration = force / np.transpose(self.masses)
         noise = np.random.normal(
             loc=0.0,
-            scale=self.nurture.atomic_noise,
+            scale=self.config.atomic_noise,
             size=self.velocities.shape)
         print("acceleration dtype", acceleration.dtype, "noise dtype", noise.dtype)
         self.velocities += acceleration + noise
@@ -199,8 +150,8 @@ class PyMolEnv(gym.Env):
         np.array([self.move_atom(xyz) for xyz in self.velocities])
         self.positions += self.velocities
         reward = self.calculate_reward()
-        stop_loss = self.work > self.initial_work * self.nurture.stop_loss_multiple
-        beyond_max_steps = self.step_number > self.nurture.max_steps
+        stop_loss = self.work > self.initial_work * self.config.stop_loss_multiple
+        beyond_max_steps = self.step_number > self.config.max_steps
         done = stop_loss or beyond_max_steps
         observation = self.get_observation()
         info = None
@@ -208,27 +159,28 @@ class PyMolEnv(gym.Env):
         if done:
             print("done because beyond_max_steps", beyond_max_steps)
             print("done because stop loss", stop_loss)
-            gif_path, gif_name = self.make_gif()
-            self.slack_file(gif_path, gif_name)
+            self.make_gif()
+            # delete the image folder
+            shutil.rmtree(self.episode_images_path)
         return observation, reward, done, info
-
+    # we move 1 atom
     def move_atom(self, vector):
         movement_vector = list(vector)
         atom_selection_string = "id " + str(self.atom_index)
         cmd.translate(movement_vector, atom_selection_string)
         self.atom_index += 1
-
+    # we calculate reward
     def calculate_reward(self):
         distance = scipy.spatial.distance.cdist(
             self.positions,
             self.original_positions
             )
-        # work to move the atoms to the proper spot
+        # calculate work to move the atoms to the proper spot
         mass = np.transpose(self.masses[0,:])
         self.work = distance * mass
         self.work = np.triu(self.work, 1)  # k=1 should zero main diagonal
         self.work = np.sum(self.work)
-        # work to slow the atoms to a stop
+        # calculate work to slow the atoms to a stop
         work_to_stop = np.transpose(self.velocities) * mass
         work_to_stop = np.triu(work_to_stop, 1)
         work_to_stop = np.sum(self.work)
@@ -237,16 +189,8 @@ class PyMolEnv(gym.Env):
         # reward is the opposite of work
         return -1 * self.work
 
-    def get_metadata(self, task):
+    def get_metadata(self):
         self.chains = cmd.get_chains("current")
-        # we only fold 1 chain at a time for now:
-        if self.task is "fold":
-            chain_to_fold = random.choice(self.chains)
-            for chain in self.chains:
-                if chain is not chain_to_fold:
-                    cmd.delete("chain {}".format(chain))
-            self.chains = [chain_to_fold]
-        # now get position, velocity, features, masses
         self.step_number = 0
         model = cmd.get_model("current", 1)
         self.original_positions = np.array(model.get_coord_list())
@@ -257,80 +201,11 @@ class PyMolEnv(gym.Env):
         self.masses = np.array([masses, masses, masses])
 
     def get_observation(self):  # chains, aminos, images, atoms, bonds
-        observation = {}
-        observation["chains"] = self.get_chains()
-        observation["amino"] = self.get_amino()
-        observation["bond"] = self.get_bonds()
-        observation["image"] = self.get_image()
-        observation["atom"] = self.get_atom()
+        observation = self.get_atom()
         return observation
 
-    def get_chains(self):  # string, num_aminos, num_atoms, x, y, z
-        print("mol get_chains")
-        print("self.chains", self.chains)
-        chains = []
-        for chain in self.chains:
-            name = ord(chain)/26
-            selector = "current and chain {} name ca".format(chain)
-            num_aminos = cmd.count_atoms(selector)
-            selector = "current and chain {}".format(chain)
-            num_atoms = cmd.count_atoms(selector)
-            x, y, z = cmd.centerofmass("chain " + chain)
-            features = [x, y, z, name, num_aminos, num_atoms]
-            chains.append(features)
-        print(chains)
-        return np.array(chains)
-
-    def get_amino(self):  # chain, resv, oneletter, index, x, y, z
-        print("get amino!")
-        # get the data
-        self.aminos = []
-        space = {"aminos": self.aminos}
-        cmd.iterate_state(
-            -1,
-            "(name ca)",
-            "aminos.append((chain, resv, oneletter, index, x, y, z))",
-            space=space
-            )
-        # convert the data to numpy array
-        aminos = np.array([self.convert_amino(amino) for amino in self.aminos])
-        print("aminos", aminos)
-        return aminos
-
-    def convert_amino(self, amino):
-        chain, resv, oneletter, index, x, y, z = amino
-        return np.array([index, x, y, z, ord(amino[0].lower())/26, resv, ord(amino[2].lower())/26])
-
-    def get_bonds(self):
-        array = []
-        np.array([self.get_bond(array, name, index) for name, index in cmd.index("name ca")])
-        return np.array(array)
-
-    def get_bond(self, array, name, index):
-        selection_string_array = [
-            'first (({}`{}) extend 2 and name C)'.format(name, index),  # prev C
-            'first (({}`{}) extend 1 and name N)'.format(name, index),  # this N
-            '({}`{})'.format(name, index),                            # this CA
-            'last (({}`{}) extend 1 and name C)'.format(name, index),  # this C
-            'last (({}`{}) extend 2 and name N)'.format(name, index),  # next N
-        ]
-        try:
-            phi = cmd.get_dihedral(
-                selection_string_array[0], selection_string_array[1],
-                selection_string_array[2], selection_string_array[3], state=1)
-            array.append([phi])
-        except:
-            print("failed to get dihedral at ", name, index)
-        try:
-            psi = cmd.get_dihedral(
-                selection_string_array[1], selection_string_array[2],
-                selection_string_array[3], selection_string_array[4], state=1)
-            array.append([psi])
-        except:
-            print("failed to get dihedral at ", name, index)
-
     def get_image(self):
-        step_indicator = "p{}-{}-s{}".format(
+        step_indicator = "e-{}_p-{}_s-{}".format(
             self.episode,
             self.pdb,
             self.step_number)
@@ -341,8 +216,7 @@ class PyMolEnv(gym.Env):
         vstack = np.vstack(images)
         print("vstack shape", vstack.shape)
         # save the picture
-        image_path = self.image_path + "/stacks/" + "{}.jpg".format(
-            step_indicator)
+        image_path = os.path.join(self.episode_img_paths + "stacks", step_indicator + ".jpg")
         vstack_img = Image.fromarray(vstack)
         vstack_img.save(image_path)
         return vstack
@@ -356,24 +230,24 @@ class PyMolEnv(gym.Env):
               self.pdb,
               "step: ",
               self.step_number)
-        png_path_x = self.image_path + "/pngs/" + step_indicator + "-X.png"
-        cmd.png(png_path_x, width=self.nurture.image_size, height=self.nurture.image_size)
-        jpg_path_x = os.path.join(self.image_path, "jpgs", step_indicator + "-X.jpg")
+        png_path_x = os.path.join(self.episode_images_path, "pngs", step_indicator + "-X.png")
+        cmd.png(png_path_x, width=self.config.image_size, height=self.config.image_size)
+        jpg_path_x = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-X.jpg")
         command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_x, jpg_path_x)
         os.system(command)
         time.sleep(0.02)
         cmd.rotate('y', 90)
-        png_path_y = self.image_path + "/pngs/" + step_indicator + "-Y.png"
-        cmd.png(png_path_y, width=self.nurture.image_size, height=self.nurture.image_size)
-        jpg_path_y = os.path.join(self.image_path, "jpgs", step_indicator + "-Y.jpg")
+        png_path_y = os.path.join(self.episode_images_path, "pngs", step_indicator + "-Y.png")
+        cmd.png(png_path_y, width=self.config.image_size, height=self.config.image_size)
+        jpg_path_y = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-Y.jpg")
         command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_y, jpg_path_y)
         os.system(command)
         time.sleep(0.02)
         cmd.rotate('y', -90)
         cmd.rotate('z', 90)
-        png_path_z = self.image_path + "/pngs/" + step_indicator + "-Z.png"
-        cmd.png(png_path_z, width=self.nurture.image_size, height=self.nurture.image_size)
-        jpg_path_z = os.path.join(self.image_path, "jpgs", step_indicator + "-Z.jpg")
+        png_path_z = os.path.join(self.episode_images_path + "pngs" + step_indicator + "-Z.png")
+        cmd.png(png_path_z, width=self.config.image_size, height=self.config.image_size)
+        jpg_path_z = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-Z.jpg")
         command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_z, jpg_path_z)
         os.system(command)
         time.sleep(0.02)
@@ -447,15 +321,15 @@ class PyMolEnv(gym.Env):
                 return color
 
     def make_gif(self):
-        gif_name = "r{}-p{}-{}.gif".format(
+        gif_name = "r-{}_e-{}_p-{}.gif".format(
             self.run_time_stamp,
             self.episode,
             self.pdb)
-        gif_path = os.path.join(self.root, "results/gifs", gif_name)
+        gif_path = os.path.join(self.root, "gifs", gif_name)
         imagepaths = []
         images = []
-        for stackname in os.listdir(self.image_path + "/stacks"):
-            filepath = os.path.join(self.image_path, "stacks", stackname)
+        for stackname in os.listdir(self.episode_stacks_path):
+            filepath = os.path.join(self.episode_stacks_path, stackname)
             imagepaths.append(filepath)
         imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
         for imagepath in imagepaths:
@@ -465,11 +339,3 @@ class PyMolEnv(gym.Env):
         print("saving gif to", gif_path)
         imageio.mimsave(gif_path, images)
         return gif_path, gif_name
-
-    def slack_file(self, file_path, file_name):
-        slack = SlackClient(self.nurture.slack_token)
-        slack.api_call('files.upload',
-                       channels='#gifs',
-                       as_user=True,
-                       filename=file_name,
-                       file=open(file_path, 'rb'),)
