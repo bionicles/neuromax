@@ -1,4 +1,3 @@
-# from slackclient import SlackClient
 from gym import spaces
 from PIL import Image
 import numpy as np
@@ -72,14 +71,14 @@ class PyMolEnv(gym.Env):
     def undock(self):
         print("mol undock chains", self.chains)
         steps_in_undock = random.randint(
-            self.config.min_steps_in_undock,
-            self.config.max_steps_in_undock
+            self.config.MIN_STEPS_IN_UNDOCK,
+            self.config.MAX_STEPS_IN_UNDOCK
             )
         print("undocking", self.pdb, steps_in_undock, "times")
         sum_vector = {}
         step_vector_array = []
-        min_undock = self.config.min_undock
-        max_undock = self.config.max_undock
+        min_undock = self.config.MIN_UNDOCK_DISTANCE
+        max_undock = self.config.MAX_UNDOCK_DISTANCE
         # make a list of steps
         for step in range(steps_in_undock):
             current_step_vectors = []
@@ -143,7 +142,7 @@ class PyMolEnv(gym.Env):
         acceleration = force / np.transpose(self.masses)
         noise = np.random.normal(
             loc=0.0,
-            scale=self.config.atomic_noise,
+            scale=self.config.ATOM_JIGGLE,
             size=self.velocities.shape)
         print("acceleration dtype", acceleration.dtype, "noise dtype", noise.dtype)
         self.velocities += acceleration + noise
@@ -151,8 +150,8 @@ class PyMolEnv(gym.Env):
         np.array([self.move_atom(xyz) for xyz in self.velocities])
         self.positions += self.velocities
         reward = self.calculate_reward()
-        stop_loss = self.work > self.initial_work * self.config.stop_loss_multiple
-        beyond_max_steps = self.step_number > self.config.max_steps
+        stop_loss = self.work > self.initial_work * self.config.STOP_LOSS_MULTIPLE
+        beyond_max_steps = self.step_number > self.config.NUM_STEPS
         done = stop_loss or beyond_max_steps
         observation = self.get_observation()
         info = None
@@ -232,14 +231,14 @@ class PyMolEnv(gym.Env):
               "step: ",
               self.step_number)
         png_path_x = os.path.join(self.episode_images_path, "pngs", step_indicator + "-X.png")
-        cmd.png(png_path_x, width=self.config.image_size, height=self.config.image_size)
+        cmd.png(png_path_x, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         jpg_path_x = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-X.jpg")
         command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_x, jpg_path_x)
         os.system(command)
         time.sleep(0.02)
         cmd.rotate('y', 90)
         png_path_y = os.path.join(self.episode_images_path, "pngs", step_indicator + "-Y.png")
-        cmd.png(png_path_y, width=self.config.image_size, height=self.config.image_size)
+        cmd.png(png_path_y, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         jpg_path_y = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-Y.jpg")
         command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_y, jpg_path_y)
         os.system(command)
@@ -247,7 +246,7 @@ class PyMolEnv(gym.Env):
         cmd.rotate('y', -90)
         cmd.rotate('z', 90)
         png_path_z = os.path.join(self.episode_images_path + "pngs" + step_indicator + "-Z.png")
-        cmd.png(png_path_z, width=self.config.image_size, height=self.config.image_size)
+        cmd.png(png_path_z, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         jpg_path_z = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-Z.jpg")
         command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_z, jpg_path_z)
         os.system(command)
