@@ -1,7 +1,13 @@
 # neuromax.py - why?: config + train
+from model import make_model
+from mol import PyMolEnv
+
+# we use a helper class for dict
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
+
+# we keep parameters together to save time
 config = AttrDict({
     # env
     "MAX_UNDOCK_DISTANCE": 100,
@@ -16,22 +22,19 @@ config = AttrDict({
     "IMAGE_SIZE": 256,
     "ATOM_JIGGLE": 1,
     # model
+    "ACTIVATION": "tanh",
     "NUM_BLOCKS": 2,
     "NUM_LAYERS": 2
 })
-# make the models
+
+# we make the env and model
 env = PyMolEnv(config)
 model = Model(config)
-# one protein
-def run_episode(episode_number):
+
+# we run the training
+for episode_number in config.NUM_EPISODES:
     observation = env.reset()
     done = false
     while not done:
-        run_step()
-# one step
-def run_step():
-    action = model.step(observation)
-    observation, reward, done = env.step(action)
-# run the training
-for episode_number in config.NUM_EPISODES:
-    run_episode(episode_number)
+        action = model.step(observation)
+        observation, reward, done = env.step(action)

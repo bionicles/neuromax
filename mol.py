@@ -10,8 +10,10 @@ import gym
 import csv
 import os
 
-from src.tasks.spaces import Array
-from pymol import cmd
+from spaces import Array
+import pymol
+
+cmd = pymol.cmd
 
 class PyMolEnv(gym.Env):
     def __init__(self, config):
@@ -210,11 +212,11 @@ class PyMolEnv(gym.Env):
             self.pdb,
             self.step_number)
         image_paths = self.take_pictures(step_indicator)
-        [print(image_path, "\n") for image_path in image_paths]
+        # [print(image_path, "\n") for image_path in image_paths]
         images = [np.asarray(Image.open(image)) for image in image_paths]
-        [print(image.shape) for image in images]
+        # [print(image.shape) for image in images]
         vstack = np.vstack(images)
-        print("vstack shape", vstack.shape)
+        # print("vstack shape", vstack.shape)
         # save the picture
         image_path = os.path.join(self.episode_img_paths + "stacks", step_indicator + ".jpg")
         vstack_img = Image.fromarray(vstack)

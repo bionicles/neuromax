@@ -4,15 +4,19 @@
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras import Model
 
-def make_model(config):
-    in = Input(shape=(1, None, config.ATOM_DIMENSION)
-    out = make_block(in)
-    for block_num in config.NUM_BLOCKS - 1:
-        out = out + make_block(out)
-    return Model(in, out)
 
+# we make one block in a res-net
 def make_block(tensor, config):
-    out = Dense(tensor)
+    output = Dense(tensor, activation=config.ACTIVATION)
     for layer_num in config.NUM_LAYERS - 1:
-        out = Dense(out)
-    return out
+        output = Dense(output, activation=config.ACTIVATION)
+    return output
+
+
+# we make a model
+def make_model(config):
+    input = Input(shape=(1, None, config.ATOM_DIMENSION))
+    output = make_block(input, config)
+    for i in range(config.NUM_BLOCKS):
+        output += make_block(out, config)
+    return Model(input, output)
