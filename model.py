@@ -32,7 +32,7 @@ def make_block(input_layer, config, block_num):
     return output
 # we make a model
 def make_model(config):
-    input = Input(shape=(1, None, config.ATOM_DIMENSION))
+    input = Input(shape=(config.ATOM_DIMENSION, ))
     output = make_block(input, config, block_num = 0) # initial block
     output_shortcut = output
     for i in range(1, config.NUM_BLOCKS): #start count blocks from 1, useful to connect blocks using their numbers
