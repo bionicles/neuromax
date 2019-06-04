@@ -30,20 +30,6 @@ def make_block(input_layer, config, block_num):
         if config.DROPOUT: #True or False
         	output = Dropout(rate = config.DROPOUT_RATE)(output) # not sure if dropout layer support names option
     return output
-
-def connect_blocks(blocks, connect_to = config.CONNECT_BLOCK_AT):
-	print(blocks)
-	output = blocks[0]
-	output_shortcut = blocks[0]
-	for i in range(1, len(blocks)):
-		output = output(blocks[i])
-		if i%config.CONNECT_BLOCK_AT == 0:
-			output = average([output, output_shortcut])
-			output_shortcut = output
-	return output
-
-
-
 # we make a model
 def make_model(config):
     input = Input(shape=(1, None, config.ATOM_DIMENSION))
