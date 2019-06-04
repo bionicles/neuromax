@@ -3,7 +3,6 @@
 
 from tensorflow.keras.layers import Input, Dense, Dropout, average, Layer
 from tensorflow.keras import Model
-from keras.utils import print_summary
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
@@ -44,4 +43,4 @@ def make_model(config):
     return Model(input, model_output)
 
 model = make_model(config)
-print_summary(model)
+model.summary()
