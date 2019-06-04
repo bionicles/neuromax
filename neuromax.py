@@ -24,7 +24,11 @@ config = AttrDict({
     # model
     "ACTIVATION": "tanh",
     "NUM_BLOCKS": 2,
-    "NUM_LAYERS": 2
+    "NUM_LAYERS": 2,
+    "UNITS": 500,
+    "DROPOUT_RATE": 0.0,
+    "CONNECT_BLOCK_AT": 4,
+    "OUTPUT_SHAPE": 3
 })
 
 # we make the env and model
