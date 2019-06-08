@@ -42,7 +42,6 @@ class PyMolEnv(gym.Env):
         self.episode_stacks_path = os.path.join(self.episode_image_path, "stacks")
         os.makedirs(self.episode_stacks_path)
         self.episode_stacks_path = os.path.join(self.episode_image_path, "pngs")
-        print(self.episode_stacks_path)
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
         self.pdb_path = os.path.join(self.pdbs_path, self.pdb)
