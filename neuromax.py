@@ -1,5 +1,5 @@
 # neuromax.py - why?: config + train
-from model import make_model, make_block
+from model import make_model
 from mol import PyMolEnv
 
 # we use a helper class for dict
