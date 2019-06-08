@@ -3,23 +3,11 @@
 
 from tensorflow.keras.layers import Input, Dense, Dropout, average, Layer
 from tensorflow.keras import Model
+from tensorflow.keras.utils import plot_model
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
 
-# we keep parameters together to save time
-config = AttrDict({
-    "ACTIVATION": "tanh",
-    "NUM_BLOCKS": 20,
-    "NUM_LAYERS": 2,
-    "UNITS": 50,
-    "DROPOUT_RATE": 0.0,
-    "CONNECT_BLOCK_AT": 4,
-    "OUTPUT_SHAPE": 3,
-    "DROPOUT": False,
-    "DROPOUT_RATE": 0.0,
-    "ATOM_DIMENSION": 17
-})
 
 # we make one block in a res-net
 def make_block(input_layer, config, block_num):
@@ -40,7 +28,7 @@ def make_model(config):
             output = average([output, output_shortcut])
             output_shortcut = output
     model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION)(output) 
-    return Model(input, model_output)
-
-model = make_model(config)
-model.summary()
+    model = Model(input, model_output)
+    model.compile(loss = config.LOSS_FUNCTION, optimizer = config.OPTIMIZER)
+    plot_model(model, show_shapes = True)
+    return model

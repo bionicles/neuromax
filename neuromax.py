@@ -23,22 +23,26 @@ config = AttrDict({
     "ATOM_JIGGLE": 1,
     # model
     "ACTIVATION": "tanh",
-    "NUM_BLOCKS": 2,
+    "NUM_BLOCKS": 6,
     "NUM_LAYERS": 2,
-    "UNITS": 500,
-    "DROPOUT_RATE": 0.0,
-    "CONNECT_BLOCK_AT": 4,
-    "OUTPUT_SHAPE": 3
+    "UNITS": 50,
+    "DROPOUT": False,
+    "DROPOUT_RATE": 0.1,
+    "CONNECT_BLOCK_AT": 2,
+    "OUTPUT_SHAPE": 3,
+    "LOSS_FUNCTION": "mse",
+    "OPTIMIZER": "adam"
 })
 
 # we make the env and model
 env = PyMolEnv(config)
-model = Model(config)
+model = make_model(config)
 
 # we run the training
-for episode_number in config.NUM_EPISODES:
+for episode_number in range(config.NUM_EPISODES):
     observation = env.reset()
-    done = false
+    print("***********", observation.shape)
+    done = False
     while not done:
         action = model.step(observation)
         observation, reward, done = env.step(action)
