@@ -42,7 +42,7 @@ class PyMolEnv(gym.Env):
         os.makedirs(self.episode_image_paths)
         self.episode_stacks_path = os.path.join(self.episode_image_paths, "stacks")
         os.makedirs(self.episode_stacks_path)
-        self.episode_stacks_path = os.path.join(self.episode_image_paths, "pngs")
+        self.episode_stacks_path = os.path.join(self.episode_image_paths)
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
         self.pdb_path = os.path.join(self.pdbs_path, self.pdb)
@@ -215,7 +215,7 @@ class PyMolEnv(gym.Env):
         vstack = np.vstack(images)
         # print("vstack shape", vstack.shape)
         # save the picture
-        image_path = os.path.join(self.episode_img_paths, "stacks", step_indicator + ".png")
+        image_path = os.path.join(self.episode_image_paths, "stacks", step_indicator + ".png")
         vstack_img = Image.fromarray(vstack)
         vstack_img.save(image_path)
         return vstack
@@ -229,16 +229,16 @@ class PyMolEnv(gym.Env):
               self.pdb,
               "step: ",
               self.step_number)
-        png_path_x = os.path.join(self.episode_image_paths, "pngs", step_indicator + "-X.png")
+        png_path_x = os.path.join(self.episode_image_paths, step_indicator + "-X.png")
         cmd.png(png_path_x, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('y', 90)
-        png_path_y = os.path.join(self.episode_image_paths, "pngs", step_indicator + "-Y.png")
+        png_path_y = os.path.join(self.episode_image_paths, step_indicator + "-Y.png")
         cmd.png(png_path_y, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('y', -90)
         cmd.rotate('z', 90)
-        png_path_z = os.path.join(self.episode_image_paths + "pngs" + step_indicator + "-Z.png")
+        png_path_z = os.path.join(self.episode_image_paths, step_indicator + "-Z.png")
         cmd.png(png_path_z, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('z', -90)
