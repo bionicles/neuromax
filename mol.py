@@ -160,7 +160,7 @@ class PyMolEnv(gym.Env):
             print("done because stop loss", stop_loss)
             self.make_gif()
             # delete the image folder to save space
-            shutil.rmtree(self.episode_images_path)
+            shutil.rmtree(self.episode_image_paths)
         return observation, reward, done, info
     # we move 1 atom
     def move_atom(self, vector):
@@ -229,16 +229,16 @@ class PyMolEnv(gym.Env):
               self.pdb,
               "step: ",
               self.step_number)
-        png_path_x = os.path.join(self.episode_images_path, "pngs", step_indicator + "-X.png")
+        png_path_x = os.path.join(self.episode_image_paths, "pngs", step_indicator + "-X.png")
         cmd.png(png_path_x, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('y', 90)
-        png_path_y = os.path.join(self.episode_images_path, "pngs", step_indicator + "-Y.png")
+        png_path_y = os.path.join(self.episode_image_paths, "pngs", step_indicator + "-Y.png")
         cmd.png(png_path_y, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('y', -90)
         cmd.rotate('z', 90)
-        png_path_z = os.path.join(self.episode_images_path + "pngs" + step_indicator + "-Z.png")
+        png_path_z = os.path.join(self.episode_image_paths + "pngs" + step_indicator + "-Z.png")
         cmd.png(png_path_z, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('z', -90)
