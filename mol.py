@@ -28,7 +28,7 @@ class PyMolEnv(gym.Env):
         self.colors_chosen = []
         self.config = config
         self.episode = 0
-        self.episode_images_path = './images'
+        self.episode_image_paths = './images'
         # define spaces
         self.observation_space = Array(shape=(None, 17))
         self.action_space = Array(shape=(None, 3))
@@ -38,7 +38,7 @@ class PyMolEnv(gym.Env):
         # clean up!
         cmd.delete("all")
         # set up image path
-        self.episode_images_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
+        self.episode_image_paths = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
         os.makedirs(self.episode_image_paths)
         self.episode_stacks_path = os.path.join(self.episode_image_paths, "stacks")
         os.makedirs(self.episode_stacks_path)
