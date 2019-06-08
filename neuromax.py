@@ -34,7 +34,7 @@ config = AttrDict({
 
 # we make the env and model
 env = PyMolEnv(config)
-model = Model(config)
+model = make_model(config)
 
 # we run the training
 for episode_number in config.NUM_EPISODES:

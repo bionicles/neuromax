@@ -28,5 +28,6 @@ def make_model(config):
             output = average([output, output_shortcut])
             output_shortcut = output
     model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION)(output) 
+    model = Model(input, model_output)
     plot_model(model)
-    return Model(input, model_output)
+    return model
