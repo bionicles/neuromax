@@ -28,6 +28,7 @@ class PyMolEnv(gym.Env):
         self.colors_chosen = []
         self.config = config
         self.episode = 0
+        self.episode_images_path = './images'
         # define spaces
         self.observation_space = Array(shape=(None, 17))
         self.action_space = Array(shape=(None, 3))
@@ -37,11 +38,11 @@ class PyMolEnv(gym.Env):
         # clean up!
         cmd.delete("all")
         # set up image path
-        self.episode_image_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
-        os.makedirs(self.episode_image_path)
-        self.episode_stacks_path = os.path.join(self.episode_image_path, "stacks")
+        self.episode_images_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
+        os.makedirs(self.episode_image_paths)
+        self.episode_stacks_path = os.path.join(self.episode_image_paths, "stacks")
         os.makedirs(self.episode_stacks_path)
-        self.episode_stacks_path = os.path.join(self.episode_image_path, "pngs")
+        self.episode_stacks_path = os.path.join(self.episode_image_paths, "pngs")
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
         self.pdb_path = os.path.join(self.pdbs_path, self.pdb)
@@ -214,7 +215,7 @@ class PyMolEnv(gym.Env):
         vstack = np.vstack(images)
         # print("vstack shape", vstack.shape)
         # save the picture
-        image_path = os.path.join(self.episode_img_paths + "stacks", step_indicator + ".jpg")
+        image_path = os.path.join(self.episode_img_paths, "stacks", step_indicator + ".png")
         vstack_img = Image.fromarray(vstack)
         vstack_img.save(image_path)
         return vstack
@@ -230,27 +231,18 @@ class PyMolEnv(gym.Env):
               self.step_number)
         png_path_x = os.path.join(self.episode_images_path, "pngs", step_indicator + "-X.png")
         cmd.png(png_path_x, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
-        jpg_path_x = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-X.jpg")
-        command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_x, jpg_path_x)
-        os.system(command)
         time.sleep(0.02)
         cmd.rotate('y', 90)
         png_path_y = os.path.join(self.episode_images_path, "pngs", step_indicator + "-Y.png")
         cmd.png(png_path_y, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
-        jpg_path_y = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-Y.jpg")
-        command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_y, jpg_path_y)
-        os.system(command)
         time.sleep(0.02)
         cmd.rotate('y', -90)
         cmd.rotate('z', 90)
         png_path_z = os.path.join(self.episode_images_path + "pngs" + step_indicator + "-Z.png")
         cmd.png(png_path_z, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
-        jpg_path_z = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-Z.jpg")
-        command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_z, jpg_path_z)
-        os.system(command)
         time.sleep(0.02)
         cmd.rotate('z', -90)
-        return (jpg_path_x, jpg_path_y, jpg_path_z)
+        return (png_path_x, png_path_y, png_path_z)
 
     def get_atom(self):
         model = cmd.get_model("current", 1)
