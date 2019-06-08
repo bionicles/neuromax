@@ -37,9 +37,9 @@ env = PyMolEnv(config)
 model = make_model(config)
 
 # we run the training
-for episode_number in config.NUM_EPISODES:
+for episode_number in range(config.NUM_EPISODES):
     observation = env.reset()
-    done = false
+    done = False
     while not done:
         action = model.step(observation)
         observation, reward, done = env.step(action)
