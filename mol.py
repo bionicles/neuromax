@@ -21,9 +21,9 @@ class PyMolEnv(gym.Env):
         self.run_time_stamp = str(time.time())
         self.root = os.path.dirname(os.path.abspath("."))
         self.images_path = "./images"
-        self.csvs_path = os.path.join(self.root, "csvs")
-        self.pdbs_path = os.path.join(self.root, "pdbs")
-        self.gifs_path = os.path.join(self.root, "gifs")
+        self.csvs_path = "csvs"
+        self.pdbs_path = "pdbs"
+        self.gifs_path = "gifs"
         self.pedagogy = self.load_pedagogy()
         self.colors_chosen = []
         self.config = config
