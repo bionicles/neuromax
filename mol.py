@@ -1,4 +1,4 @@
-from gym import spaces
+
 from PIL import Image
 import numpy as np
 import imageio
@@ -285,7 +285,7 @@ class PyMolEnv(gym.Env):
 
     def load_pedagogy(self):
         results = []
-        csvpath = os.path.join(self.task_root, "inputs/csvs/2chains.csv")
+        csvpath = os.path.join(self.root, "inputs/csvs/2chains.csv")
         with open(csvpath) as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:

@@ -1,5 +1,5 @@
 # neuromax.py - why?: config + train
-from model import make_model
+from model import make_model, make_block
 from mol import PyMolEnv
 
 # we use a helper class for dict
@@ -23,11 +23,12 @@ config = AttrDict({
     "ATOM_JIGGLE": 1,
     # model
     "ACTIVATION": "tanh",
-    "NUM_BLOCKS": 2,
+    "NUM_BLOCKS": 6,
     "NUM_LAYERS": 2,
-    "UNITS": 500,
-    "DROPOUT_RATE": 0.0,
-    "CONNECT_BLOCK_AT": 4,
+    "UNITS": 50,
+    "DROPOUT": False,
+    "DROPOUT_RATE": 0.1,
+    "CONNECT_BLOCK_AT": 2,
     "OUTPUT_SHAPE": 3
 })
 
