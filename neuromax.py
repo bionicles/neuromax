@@ -29,7 +29,9 @@ config = AttrDict({
     "DROPOUT": False,
     "DROPOUT_RATE": 0.1,
     "CONNECT_BLOCK_AT": 2,
-    "OUTPUT_SHAPE": 3
+    "OUTPUT_SHAPE": 3,
+    "LOSS_FUNCTION": "mse",
+    "OPTIMIZER": "adam"
 })
 
 # we make the env and model
@@ -39,6 +41,7 @@ model = make_model(config)
 # we run the training
 for episode_number in range(config.NUM_EPISODES):
     observation = env.reset()
+    print("***********", observation.shape)
     done = False
     while not done:
         action = model.step(observation)

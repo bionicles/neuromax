@@ -29,5 +29,6 @@ def make_model(config):
             output_shortcut = output
     model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION)(output) 
     model = Model(input, model_output)
+    model.compile(loss = config.LOSS_FUNCTION, optimizer = config.OPTIMIZER)
     plot_model(model, show_shapes = True)
     return model
