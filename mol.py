@@ -45,7 +45,7 @@ class PyMolEnv(gym.Env):
         print(self.episode_stacks_path)
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
-        self.pdb_path = os.path.join(self.pdbs_path, pdb)
+        self.pdb_path = os.path.join(self.pdbs_path, self.pdb)
         print("loading", self.pdb_path)
         if not os.path.exists(self.pdb_path):
             cmd.fetch(self.pdb, path=self.pdbs_path, type="pdb")
