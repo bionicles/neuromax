@@ -28,7 +28,6 @@ class PyMolEnv(gym.Env):
         self.colors_chosen = []
         self.config = config
         self.episode = 0
-        self.task = task
         # define spaces
         self.observation_space = Array(shape=(None, 17))
         self.action_space = Array(shape=(None, 3))
