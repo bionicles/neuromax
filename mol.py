@@ -38,14 +38,12 @@ class PyMolEnv(gym.Env):
         # clean up!
         cmd.delete("all")
         # set up image path
-        self.episode_image_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
+        self.episode_images_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
         os.makedirs(self.episode_image_path)
-        self.episode_stacks_path = os.path.join(self.episode_image_path, "stacks")
+        self.episode_stacks_path = os.path.join(self.episode_images_path, "stacks")
         os.makedirs(self.episode_stacks_path)
-        self.episode_stacks_path = os.path.join(self.episode_image_path, "pngs")
+        self.episode_stacks_path = os.path.join(self.episode_images_path, "pngs")
         os.makedirs(self.episode_pngs_path)
-        self.episode_stacks_path = os.path.join(self.episode_image_path, "jpgs")
-        os.makedirs(self.episode_jpgs_path)
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
         self.pdb_path = os.path.join(self.pdbs_path, pdb)
@@ -69,6 +67,16 @@ class PyMolEnv(gym.Env):
         # we need to know the initial work to calculate stop loss
         self.initial_work = self.calculate_reward()
         return self.current
+
+    def get_metadata(self):
+        self.chains = cmd.get_chains("current")
+        self.step_number = 0
+        model = cmd.get_model("current", 1)
+        self.original_positions = np.array(model.get_coord_list())
+        self.velocities = np.array([[0., 0., 0.] for atom in model.atom])
+        self.features = np.array([self.get_atom_features(atom) for atom in model.atom])
+        masses = np.array([atom.get_mass() for atom in model.atom])
+        self.masses = np.array([masses, masses, masses])
 
     def undock(self):
         print("mol undock chains", self.chains)
@@ -137,7 +145,6 @@ class PyMolEnv(gym.Env):
                 cmd.rotate("z", chain_vector[5], "current and chain " + chain)
             self.get_image()
             self.step_number += 1
-
     # we execute physics here:
     def step(self, action):
         force = -1 * action["potentials"]
@@ -165,13 +172,14 @@ class PyMolEnv(gym.Env):
             # delete the image folder to save space
             shutil.rmtree(self.episode_images_path)
         return observation, reward, done, info
+        
     # we move 1 atom
     def move_atom(self, vector):
         movement_vector = list(vector)
         atom_selection_string = "id " + str(self.atom_index)
         cmd.translate(movement_vector, atom_selection_string)
         self.atom_index += 1
-    # we calculate reward
+
     def calculate_reward(self):
         distance = scipy.spatial.distance.cdist(
             self.positions,
@@ -191,17 +199,6 @@ class PyMolEnv(gym.Env):
         # reward is the opposite of work
         return -1 * self.work
 
-    def get_metadata(self):
-        self.chains = cmd.get_chains("current")
-        self.step_number = 0
-        model = cmd.get_model("current", 1)
-        self.original_positions = np.array(model.get_coord_list())
-        self.velocities = np.array([[0., 0., 0.] for atom in model.atom])
-        self.features = np.array(
-            [self.get_atom_features(atom) for atom in model.atom])
-        masses = np.array([atom.get_mass() for atom in model.atom])
-        self.masses = np.array([masses, masses, masses])
-
     def get_observation(self):  # chains, aminos, images, atoms, bonds
         observation = self.get_atom()
         return observation
@@ -218,7 +215,7 @@ class PyMolEnv(gym.Env):
         vstack = np.vstack(images)
         # print("vstack shape", vstack.shape)
         # save the picture
-        image_path = os.path.join(self.episode_img_paths + "stacks", step_indicator + ".jpg")
+        image_path = os.path.join(self.episode_images_path, "stacks", step_indicator, "png")
         vstack_img = Image.fromarray(vstack)
         vstack_img.save(image_path)
         return vstack
@@ -234,27 +231,18 @@ class PyMolEnv(gym.Env):
               self.step_number)
         png_path_x = os.path.join(self.episode_images_path, "pngs", step_indicator + "-X.png")
         cmd.png(png_path_x, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
-        jpg_path_x = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-X.jpg")
-        command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_x, jpg_path_x)
-        os.system(command)
         time.sleep(0.02)
         cmd.rotate('y', 90)
         png_path_y = os.path.join(self.episode_images_path, "pngs", step_indicator + "-Y.png")
         cmd.png(png_path_y, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
-        jpg_path_y = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-Y.jpg")
-        command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_y, jpg_path_y)
-        os.system(command)
         time.sleep(0.02)
         cmd.rotate('y', -90)
         cmd.rotate('z', 90)
         png_path_z = os.path.join(self.episode_images_path + "pngs" + step_indicator + "-Z.png")
         cmd.png(png_path_z, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
-        jpg_path_z = os.path.join(self.episode_images_path, "jpgs", step_indicator + "-Z.jpg")
-        command = "convert \"{}\" -alpha remove \"{}\"".format(png_path_z, jpg_path_z)
-        os.system(command)
         time.sleep(0.02)
         cmd.rotate('z', -90)
-        return (jpg_path_x, jpg_path_y, jpg_path_z)
+        return (png_path_x, png_path_y, png_path_z)
 
     def get_atom(self):
         model = cmd.get_model("current", 1)
@@ -285,7 +273,7 @@ class PyMolEnv(gym.Env):
 
     def load_pedagogy(self):
         results = []
-        csvpath = os.path.join(self.task_root, "inputs/csvs/2chains.csv")
+        csvpath = os.path.join(self.root, "csvs", "2chains.csv")
         with open(csvpath) as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
