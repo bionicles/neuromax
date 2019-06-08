@@ -285,7 +285,7 @@ class PyMolEnv(gym.Env):
 
     def load_pedagogy(self):
         results = []
-        csvpath = os.path.join(self.root, "inputs/csvs/2chains.csv")
+        csvpath = os.path.join(self.root, "neuromax-2019/csvs/pedagogy.csv")
         with open(csvpath) as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
