@@ -137,7 +137,7 @@ class PyMolEnv(gym.Env):
 
     # we execute physics here:
     def step(self, action):
-        force = -1 * action["potentials"]
+        force = -1 * action
         acceleration = force / np.transpose(self.masses)
         noise = np.random.normal(
             loc=0.0,
@@ -315,13 +315,14 @@ class PyMolEnv(gym.Env):
             self.run_time_stamp,
             self.episode,
             self.pdb)
-        gif_path = os.path.join(self.root, "gifs", gif_name)
+        gif_path = os.path.join(self.gifs_path, gif_name)
         imagepaths = []
         images = []
         for stackname in os.listdir(self.episode_stacks_path):
             filepath = os.path.join(self.episode_stacks_path, stackname)
             imagepaths.append(filepath)
         imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+        del imagepaths[0] # delete the folder path that contain stacked images from the list
         for imagepath in imagepaths:
             print("processing ", imagepath)
             image = imageio.imread(imagepath)
