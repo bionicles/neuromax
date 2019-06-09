@@ -1,9 +1,9 @@
 # model.py
 # why? run the model on the input
 
-from tensorflow.keras.layers import Input, Dense, Dropout, average, Layer
-from tensorflow.keras import Model
-from tensorflow.keras.utils import plot_model
+from keras.layers import Input, Dense, Dropout, average, Layer
+from keras import Model
+from keras.utils import plot_model
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__

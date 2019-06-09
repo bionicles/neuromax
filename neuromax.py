@@ -1,6 +1,9 @@
 # neuromax.py - why?: config + train
 from model import make_model
 from mol import PyMolEnv
+from rl.agents.dqn import DQNAgent
+from rl.policy import EpsGreedyQPolicy
+from rl.memory import SequentialMemory
 
 # we use a helper class for dict
 class AttrDict(dict):
@@ -38,10 +41,18 @@ config = AttrDict({
 env = PyMolEnv(config)
 model = make_model(config)
 
+policy = EpsGreedyQPolicy()
+memory = SequentialMemory(limit=50000, window_length=1)
+dqn = DQNAgent(model=model, nb_actions=config.ACTION_DIMENSION, memory=memory, nb_steps_warmup=10, target_model_update=1e-2, policy=policy)
+dqn.compile(config.OPTIMIZER, metrics=[config.LOSS_FUNCTION])
+
+# Okay, now it's time to learn something! We visualize the training here for show, but this slows down training quite a lot. 
+dqn.fit(env, nb_steps=5000, verbose=1)
+"""
 # we run the training
 for episode_number in range(config.NUM_EPISODES):
     observation = env.reset()
     done = False
     while not done:
         action = model.predict(observation)
-        observation, reward, done, info = env.step(action)
+        observation, reward, done, info = env.step(action)"""
