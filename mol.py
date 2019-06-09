@@ -67,16 +67,6 @@ class PyMolEnv(gym.Env):
         self.initial_work = self.calculate_reward()
         return self.current
 
-    def get_metadata(self):
-        self.chains = cmd.get_chains("current")
-        self.step_number = 0
-        model = cmd.get_model("current", 1)
-        self.original_positions = np.array(model.get_coord_list())
-        self.velocities = np.array([[0., 0., 0.] for atom in model.atom])
-        self.features = np.array([self.get_atom_features(atom) for atom in model.atom])
-        masses = np.array([atom.get_mass() for atom in model.atom])
-        self.masses = np.array([masses, masses, masses])
-
     def undock(self):
         print("mol undock chains", self.chains)
         steps_in_undock = random.randint(
@@ -144,9 +134,10 @@ class PyMolEnv(gym.Env):
                 cmd.rotate("z", chain_vector[5], "current and chain " + chain)
             self.get_image()
             self.step_number += 1
+
     # we execute physics here:
     def step(self, action):
-        force = -1 * action["potentials"]
+        force = -1 * action
         acceleration = force / np.transpose(self.masses)
         noise = np.random.normal(
             loc=0.0,
@@ -162,7 +153,6 @@ class PyMolEnv(gym.Env):
         beyond_max_steps = self.step_number > self.config.NUM_STEPS
         done = stop_loss or beyond_max_steps
         observation = self.get_observation()
-        info = None
         self.step_number += 1
         if done:
             print("done because beyond_max_steps", beyond_max_steps)
@@ -178,7 +168,7 @@ class PyMolEnv(gym.Env):
         atom_selection_string = "id " + str(self.atom_index)
         cmd.translate(movement_vector, atom_selection_string)
         self.atom_index += 1
-
+    # we calculate reward
     def calculate_reward(self):
         distance = scipy.spatial.distance.cdist(
             self.positions,
@@ -197,6 +187,17 @@ class PyMolEnv(gym.Env):
             self.work += work_to_stop
         # reward is the opposite of work
         return -1 * self.work
+
+    def get_metadata(self):
+        self.chains = cmd.get_chains("current")
+        self.step_number = 0
+        model = cmd.get_model("current", 1)
+        self.original_positions = np.array(model.get_coord_list())
+        self.velocities = np.array([[0., 0., 0.] for atom in model.atom])
+        self.features = np.array(
+            [self.get_atom_features(atom) for atom in model.atom])
+        masses = np.array([atom.get_mass() for atom in model.atom])
+        self.masses = np.array([masses, masses, masses])
 
     def get_observation(self):  # chains, aminos, images, atoms, bonds
         observation = self.get_atom()
@@ -272,7 +273,7 @@ class PyMolEnv(gym.Env):
 
     def load_pedagogy(self):
         results = []
-        csvpath = os.path.join(self.root, "csvs", "2chains.csv")
+        csvpath = os.path.join(self.root, "neuromax-2019/csvs/pedagogy.csv")
         with open(csvpath) as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
@@ -314,13 +315,16 @@ class PyMolEnv(gym.Env):
             self.run_time_stamp,
             self.episode,
             self.pdb)
-        gif_path = os.path.join(self.root, "gifs", gif_name)
+        gif_path = os.path.join(self.gifs_path, gif_name)
         imagepaths = []
         images = []
         for stackname in os.listdir(self.episode_stacks_path):
             filepath = os.path.join(self.episode_stacks_path, stackname)
             imagepaths.append(filepath)
+        print(imagepaths)
         imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+        del imagepaths[0] # delete the folder path that contain stacked images from the list
+        print(imagepaths)
         for imagepath in imagepaths:
             print("processing ", imagepath)
             image = imageio.imread(imagepath)

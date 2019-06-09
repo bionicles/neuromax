@@ -41,8 +41,7 @@ model = make_model(config)
 # we run the training
 for episode_number in range(config.NUM_EPISODES):
     observation = env.reset()
-    print("***********", observation.shape)
     done = False
     while not done:
-        action = model.step(observation)
+        action = model.predict(observation)
         observation, reward, done = env.step(action)
