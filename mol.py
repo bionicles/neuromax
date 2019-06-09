@@ -42,7 +42,6 @@ class PyMolEnv(gym.Env):
         os.makedirs(self.episode_image_paths)
         self.episode_stacks_path = os.path.join(self.episode_image_paths, "stacks")
         os.makedirs(self.episode_stacks_path)
-        self.episode_stacks_path = os.path.join(self.episode_image_paths)
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
         self.pdb_path = os.path.join(self.pdbs_path, self.pdb)
@@ -159,7 +158,7 @@ class PyMolEnv(gym.Env):
             print("done because stop loss", stop_loss)
             self.make_gif()
             # delete the image folder to save space
-            shutil.rmtree(self.episode_image_paths)
+            #shutil.rmtree(self.episode_image_paths)
         return observation, reward, done
     # we move 1 atom
     def move_atom(self, vector):
@@ -320,8 +319,10 @@ class PyMolEnv(gym.Env):
         for stackname in os.listdir(self.episode_stacks_path):
             filepath = os.path.join(self.episode_stacks_path, stackname)
             imagepaths.append(filepath)
+        print(imagepaths)
         imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
         del imagepaths[0] # delete the folder path that contain stacked images from the list
+        print(imagepaths)
         for imagepath in imagepaths:
             print("processing ", imagepath)
             image = imageio.imread(imagepath)
