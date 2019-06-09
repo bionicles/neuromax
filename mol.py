@@ -158,7 +158,7 @@ class PyMolEnv(gym.Env):
             print("done because stop loss", stop_loss)
             self.make_gif()
             # delete the image folder to save space
-            #shutil.rmtree(self.episode_image_paths)
+            shutil.rmtree(self.episode_image_paths)
         return observation, reward, done
     # we move 1 atom
     def move_atom(self, vector):
