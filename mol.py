@@ -38,20 +38,11 @@ class PyMolEnv(gym.Env):
         # clean up!
         cmd.delete("all")
         # set up image path
-<<<<<<< HEAD
-        self.episode_images_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
-        os.makedirs(self.episode_image_path)
-        self.episode_stacks_path = os.path.join(self.episode_images_path, "stacks")
-        os.makedirs(self.episode_stacks_path)
-        self.episode_stacks_path = os.path.join(self.episode_images_path, "pngs")
-        os.makedirs(self.episode_pngs_path)
-=======
         self.episode_image_paths = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
         os.makedirs(self.episode_image_paths)
         self.episode_stacks_path = os.path.join(self.episode_image_paths, "stacks")
         os.makedirs(self.episode_stacks_path)
         self.episode_stacks_path = os.path.join(self.episode_image_paths)
->>>>>>> 0412ea1c5d5f18d7d42847ab5f62db86cd1806db
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
         self.pdb_path = os.path.join(self.pdbs_path, self.pdb)
@@ -75,16 +66,6 @@ class PyMolEnv(gym.Env):
         # we need to know the initial work to calculate stop loss
         self.initial_work = self.calculate_reward()
         return self.current
-
-    def get_metadata(self):
-        self.chains = cmd.get_chains("current")
-        self.step_number = 0
-        model = cmd.get_model("current", 1)
-        self.original_positions = np.array(model.get_coord_list())
-        self.velocities = np.array([[0., 0., 0.] for atom in model.atom])
-        self.features = np.array([self.get_atom_features(atom) for atom in model.atom])
-        masses = np.array([atom.get_mass() for atom in model.atom])
-        self.masses = np.array([masses, masses, masses])
 
     def undock(self):
         print("mol undock chains", self.chains)
@@ -153,6 +134,7 @@ class PyMolEnv(gym.Env):
                 cmd.rotate("z", chain_vector[5], "current and chain " + chain)
             self.get_image()
             self.step_number += 1
+
     # we execute physics here:
     def step(self, action):
         force = -1 * action
@@ -180,14 +162,13 @@ class PyMolEnv(gym.Env):
             # delete the image folder to save space
             shutil.rmtree(self.episode_image_paths)
         return observation, reward, done, info
-
     # we move 1 atom
     def move_atom(self, vector):
         movement_vector = list(vector)
         atom_selection_string = "id " + str(self.atom_index)
         cmd.translate(movement_vector, atom_selection_string)
         self.atom_index += 1
-
+    # we calculate reward
     def calculate_reward(self):
         distance = scipy.spatial.distance.cdist(
             self.positions,
@@ -207,6 +188,17 @@ class PyMolEnv(gym.Env):
         # reward is the opposite of work
         return -1 * self.work
 
+    def get_metadata(self):
+        self.chains = cmd.get_chains("current")
+        self.step_number = 0
+        model = cmd.get_model("current", 1)
+        self.original_positions = np.array(model.get_coord_list())
+        self.velocities = np.array([[0., 0., 0.] for atom in model.atom])
+        self.features = np.array(
+            [self.get_atom_features(atom) for atom in model.atom])
+        masses = np.array([atom.get_mass() for atom in model.atom])
+        self.masses = np.array([masses, masses, masses])
+
     def get_observation(self):  # chains, aminos, images, atoms, bonds
         observation = self.get_atom()
         return observation
@@ -223,7 +215,7 @@ class PyMolEnv(gym.Env):
         vstack = np.vstack(images)
         # print("vstack shape", vstack.shape)
         # save the picture
-        image_path = os.path.join(self.episode_images_path, "stacks", step_indicator, "png")
+        image_path = os.path.join(self.episode_image_paths, "stacks", step_indicator + ".png")
         vstack_img = Image.fromarray(vstack)
         vstack_img.save(image_path)
         return vstack
@@ -281,7 +273,7 @@ class PyMolEnv(gym.Env):
 
     def load_pedagogy(self):
         results = []
-        csvpath = os.path.join(self.root, "csvs", "2chains.csv")
+        csvpath = os.path.join(self.root, "neuromax-2019/csvs/pedagogy.csv")
         with open(csvpath) as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
