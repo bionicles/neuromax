@@ -153,7 +153,6 @@ class PyMolEnv(gym.Env):
         beyond_max_steps = self.step_number > self.config.NUM_STEPS
         done = stop_loss or beyond_max_steps
         observation = self.get_observation()
-        info = None
         self.step_number += 1
         if done:
             print("done because beyond_max_steps", beyond_max_steps)
@@ -161,7 +160,7 @@ class PyMolEnv(gym.Env):
             self.make_gif()
             # delete the image folder to save space
             shutil.rmtree(self.episode_image_paths)
-        return observation, reward, done, info
+        return observation, reward, done
     # we move 1 atom
     def move_atom(self, vector):
         movement_vector = list(vector)
