@@ -19,8 +19,8 @@ class PyMolEnv(gym.Env):
     def __init__(self, config):
         # setup
         self.run_time_stamp = str(time.time())
-        self.root = os.path.dirname(os.path.abspath("."))
-        self.images_path = "./images"
+        self.root = os.path.abspath(".")
+        self.images_path = os.path.join(root, "images")
         self.csvs_path = "csvs"
         self.pdbs_path = "pdbs"
         self.gifs_path = "gifs"
@@ -28,7 +28,6 @@ class PyMolEnv(gym.Env):
         self.colors_chosen = []
         self.config = config
         self.episode = 0
-        self.episode_image_paths = './images'
         # define spaces
         self.observation_space = Array(shape=(None, 17))
         self.action_space = Array(shape=(None, 3))
@@ -38,20 +37,12 @@ class PyMolEnv(gym.Env):
         # clean up!
         cmd.delete("all")
         # set up image path
-<<<<<<< HEAD
         self.episode_images_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
         os.makedirs(self.episode_image_path)
         self.episode_stacks_path = os.path.join(self.episode_images_path, "stacks")
         os.makedirs(self.episode_stacks_path)
         self.episode_stacks_path = os.path.join(self.episode_images_path, "pngs")
         os.makedirs(self.episode_pngs_path)
-=======
-        self.episode_image_paths = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
-        os.makedirs(self.episode_image_paths)
-        self.episode_stacks_path = os.path.join(self.episode_image_paths, "stacks")
-        os.makedirs(self.episode_stacks_path)
-        self.episode_stacks_path = os.path.join(self.episode_image_paths)
->>>>>>> 0412ea1c5d5f18d7d42847ab5f62db86cd1806db
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
         self.pdb_path = os.path.join(self.pdbs_path, self.pdb)
@@ -178,7 +169,7 @@ class PyMolEnv(gym.Env):
             print("done because stop loss", stop_loss)
             self.make_gif()
             # delete the image folder to save space
-            shutil.rmtree(self.episode_image_paths)
+            # shutil.rmtree(self.episode_images_path)
         return observation, reward, done, info
 
     # we move 1 atom
@@ -223,7 +214,7 @@ class PyMolEnv(gym.Env):
         vstack = np.vstack(images)
         # print("vstack shape", vstack.shape)
         # save the picture
-        image_path = os.path.join(self.episode_images_path, "stacks", step_indicator, "png")
+        image_path = os.path.join(self.episode_images_path, "stacks", step_indicator + ".png")
         vstack_img = Image.fromarray(vstack)
         vstack_img.save(image_path)
         return vstack
@@ -237,16 +228,16 @@ class PyMolEnv(gym.Env):
               self.pdb,
               "step: ",
               self.step_number)
-        png_path_x = os.path.join(self.episode_image_paths, step_indicator + "-X.png")
+        png_path_x = os.path.join(self.episode_images_path, step_indicator + "-X.png")
         cmd.png(png_path_x, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('y', 90)
-        png_path_y = os.path.join(self.episode_image_paths, step_indicator + "-Y.png")
+        png_path_y = os.path.join(self.episode_images_path, step_indicator + "-Y.png")
         cmd.png(png_path_y, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('y', -90)
         cmd.rotate('z', 90)
-        png_path_z = os.path.join(self.episode_image_paths, step_indicator + "-Z.png")
+        png_path_z = os.path.join(self.episode_images_path, step_indicator + "-Z.png")
         cmd.png(png_path_z, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('z', -90)
