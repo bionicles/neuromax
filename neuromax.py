@@ -12,7 +12,7 @@ config = AttrDict({
     # env
     "MAX_UNDOCK_DISTANCE": 100,
     "MIN_UNDOCK_DISTANCE": 10,
-    "MAX_STEPS_IN_UNDOCK": 4,
+    "MAX_STEPS_IN_UNDOCK": 3,
     "MIN_STEPS_IN_UNDOCK": 2,
     "STOP_LOSS_MULTIPLE": 10,
     "ACTION_DIMENSION": 3,
@@ -44,4 +44,4 @@ for episode_number in range(config.NUM_EPISODES):
     done = False
     while not done:
         action = model.predict(observation)
-        observation, reward, done = env.step(action)
+        observation, reward, done, info = env.step(action)
