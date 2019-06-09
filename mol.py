@@ -20,7 +20,8 @@ class PyMolEnv(gym.Env):
         # setup
         self.run_time_stamp = str(time.time())
         self.root = os.path.abspath(".")
-        self.images_path = os.path.join(root, "images")
+        print(self.root)
+        self.images_path = os.path.join(self.root, "images")
         self.csvs_path = "csvs"
         self.pdbs_path = "pdbs"
         self.gifs_path = "gifs"
@@ -38,10 +39,10 @@ class PyMolEnv(gym.Env):
         cmd.delete("all")
         # set up image path
         self.episode_images_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
-        os.makedirs(self.episode_image_path)
+        os.makedirs(self.episode_images_path)
         self.episode_stacks_path = os.path.join(self.episode_images_path, "stacks")
         os.makedirs(self.episode_stacks_path)
-        self.episode_stacks_path = os.path.join(self.episode_images_path, "pngs")
+        self.episode_pngs_path = os.path.join(self.episode_images_path, "pngs")
         os.makedirs(self.episode_pngs_path)
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
@@ -160,7 +161,7 @@ class PyMolEnv(gym.Env):
             self.make_gif()
             # delete the image folder to save space
             # shutil.rmtree(self.episode_images_path)
-        return observation, reward, done, info
+        return observation, reward, done
 
     # we move 1 atom
     def move_atom(self, vector):
@@ -273,7 +274,7 @@ class PyMolEnv(gym.Env):
 
     def load_pedagogy(self):
         results = []
-        csvpath = os.path.join(self.root, "neuromax-2019/csvs/pedagogy.csv")
+        csvpath = os.path.join(self.root, "csvs/pedagogy.csv")
         with open(csvpath) as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
