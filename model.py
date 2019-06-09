@@ -27,8 +27,11 @@ def make_model(config):
         if i%config.CONNECT_BLOCK_AT == 0:
             output = average([output, output_shortcut])
             output_shortcut = output
-    model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION)(output) 
+    model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION, name = "Output_Layer")(output) 
     model = Model(input, model_output)
-    model.compile(loss = config.LOSS_FUNCTION, optimizer = config.OPTIMIZER)
-    plot_model(model, show_shapes = True)
+    model.summary()
+    try:
+        plot_model(model, show_shapes = True)
+    except:
+        print("Fail to save the model architecture!!")
     return model

@@ -66,6 +66,7 @@ class PyMolEnv(gym.Env):
         self.current = self.get_observation()
         # we need to know the initial work to calculate stop loss
         self.initial_work = self.calculate_reward()
+        print("************", self.current.shape)
         return self.current
 
     def undock(self):
