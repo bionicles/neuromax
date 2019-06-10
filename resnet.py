@@ -1,13 +1,9 @@
-# model.py
-# why? run the model on the input
+# resnet.py
+# why? define a resnet component for RL agents
 
 from tensorflow.keras.layers import Input, Dense, Dropout, average, Layer
-from tensorflow.keras import Model
 from tensorflow.keras.utils import plot_model
-class AttrDict(dict):
-    __getattr__ = dict.__getitem__
-    __setattr__ = dict.__setitem__
-
+from tensorflow.keras import Model
 
 # we make one block in a res-net
 def make_block(input_layer, config, block_num):
@@ -27,7 +23,7 @@ def make_model(config):
         if i%config.CONNECT_BLOCK_AT == 0:
             output = average([output, output_shortcut])
             output_shortcut = output
-    model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION, name = "Output_Layer")(output) 
+    model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION, name = "Output_Layer")(output)
     """model = Model(input, model_output)
     model.summary()
     try:
@@ -35,18 +31,3 @@ def make_model(config):
     except:
         print("Fail to save the model architecture!!")"""
     return model_output
-
-class ActorCriticModel(Model):
-  def __init__(self, config):
-    super(ActorCriticModel, self).__init__()
-    self.policy_resnet = make_model(config)
-    self.critic_resnet = make_model(config)
-    self.policy_logits = Dense(config.ACTION_DIMENSION, activation = 'relu')
-    self.values = Dense(1, activation = 'relu')
-  def call(self, inputs):
-    # Forward pass
-    before_logits = self.policy_resnet(inputs)
-    policy = self.policy_logits(before_logits)
-    before_critic = self.critic_resnet(inputs)
-    critic = self.values(before_critic)
-    return policy, critic

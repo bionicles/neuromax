@@ -5,7 +5,6 @@ from spaces import MasterAgent
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
-
 # we keep parameters together to save time
 config = AttrDict({
     # env
