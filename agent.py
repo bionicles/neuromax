@@ -1,8 +1,8 @@
 # agent.py why?: solve environments with rl
-from tf.keras.layers import Dense
+from tensorflow.keras.layers import Dense
 import matplotlib.pyplot as plt
 from resnet import make_resnet
-from tf.keras import Model
+from tensorflow.keras import Model
 import tensorflow as tf
 from queue import Queue
 import numpy as np

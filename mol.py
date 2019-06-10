@@ -9,7 +9,7 @@ import gym
 import csv
 import os
 
-from gym.spaces import Array
+from array import Array
 import pymol
 
 cmd = pymol.cmd
