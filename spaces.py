@@ -1,24 +1,22 @@
 from mol import PyMolEnv
 from queue import Queue 
-
+import tensorflow as tf
 
 class MasterAgent():
     def __init__(self, config, env):
         self.config = config
-        save_dir = args.save_dir
+        save_dir = config.SAVE_DIR
         self.save_dir = save_dir
         if not os.path.exists(save_dir):
           os.makedirs(save_dir)
-
-        self.action_size = env.action_space.n
         self.opt = tf.train.AdamOptimizer(args.lr, use_locking=True)
 
         self.global_model = ActorCriticModel()  # global network
 
     def train(self):
-
+        res_queue = Queue()
         workers = [Worker(config = self.config, self.global_model,
-                          self.opt, res_queue,
+                          self.opt, res_queue, env
                           save_dir=self.save_dir) for i in range(multiprocessing.cpu_count())]
 
         for i, worker in enumerate(workers):
