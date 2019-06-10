@@ -31,7 +31,10 @@ config = AttrDict({
     "CONNECT_BLOCK_AT": 2,
     "OUTPUT_SHAPE": 3,
     "LOSS_FUNCTION": "mse",
-    "OPTIMIZER": "adam"
+    "OPTIMIZER": "adam",
+    "SAVE_DIR": "model_weights",
+    # A3C
+    "NUM_WORKERS": 3,
 })
 
 # we make the env and model

@@ -1,9 +1,11 @@
 from mol import PyMolEnv
 from queue import Queue 
 import tensorflow as tf
+import threading
 
 class MasterAgent():
     def __init__(self, config, env):
+        self.env = env
         self.config = config
         save_dir = config.SAVE_DIR
         self.save_dir = save_dir
@@ -16,8 +18,8 @@ class MasterAgent():
     def train(self):
         res_queue = Queue()
         workers = [Worker(config = self.config, self.global_model,
-                          self.opt, res_queue, env
-                          save_dir=self.save_dir) for i in range(multiprocessing.cpu_count())]
+                          self.opt, res_queue, self.env
+                          save_dir=self.save_dir) for i in range(config.NUM_WORKERS)]
 
         for i, worker in enumerate(workers):
           print("Starting worker {}".format(i))
@@ -84,7 +86,7 @@ class Worker(threading.Thread):
     def run(self):
         total_step = 1
         mem = Memory()
-        while Worker.global_episode < config.max_eps:
+        while Worker.global_episode < config.NUM_EPISODES:
           current_state = self.env.reset()
           mem.clear()
           ep_reward = 0.
