@@ -90,17 +90,10 @@ class Worker(threading.Thread):
           mem.clear()
           ep_reward = 0.
           ep_steps = 0
-          self.ep_loss = 0
-
           time_count = 0
           done = False
           while not done:
-            logits, _ = self.local_model(
-                tf.convert_to_tensor(current_state[None, :],
-                                     dtype=tf.float32))
-            probs = tf.nn.softmax(logits)
-
-            action = np.random.choice(self.action_size, p=probs.numpy()[0])
+            action, _ = self.local_model(current_state)
             new_state, reward, done, _ = self.env.step(action)
             if done:
               reward = -1
@@ -139,7 +132,7 @@ class Worker(threading.Thread):
                           "episode score: {}".format(self.save_dir, ep_reward))
                     self.global_model.save_weights(
                         os.path.join(self.save_dir,
-                                     'model_{}.h5'.format(self.game_name))
+                                     'model.h5')
                     )
                     Worker.best_score = ep_reward
                 Worker.global_episode += 1
@@ -157,9 +150,7 @@ class Worker(threading.Thread):
         if done:
           reward_sum = 0.  # terminal
         else:
-          reward_sum = self.local_model(
-              tf.convert_to_tensor(new_state[None, :],
-                                   dtype=tf.float32))[-1].numpy()[0]
+          _, reward_sum = self.local_model(new_state)
 
         # Get discounted rewards
         discounted_rewards = []
@@ -168,7 +159,7 @@ class Worker(threading.Thread):
           discounted_rewards.append(reward_sum)
         discounted_rewards.reverse()
 
-        logits, values = self.local_model(
+        policy, values = self.local_model(
             tf.convert_to_tensor(np.vstack(memory.states),
                                  dtype=tf.float32))
         # Get our advantages
@@ -178,39 +169,29 @@ class Worker(threading.Thread):
         value_loss = advantage ** 2
 
         # Calculate our policy loss
-        actions_one_hot = tf.one_hot(memory.actions, self.action_size, dtype=tf.float32)
+        actions_one_hot = tf.one_hot(memory.actions, self.config.ACTION_DIMENSION, dtype=tf.float32)
 
-        policy = tf.nn.softmax(logits)
         entropy = tf.reduce_sum(policy * tf.log(policy + 1e-20), axis=1)
 
         policy_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=actions_one_hot,
-                                                                 logits=logits)
+                                                                 logits=policy)
         policy_loss *= tf.stop_gradient(advantage)
         policy_loss -= 0.01 * entropy
         total_loss = tf.reduce_mean((0.5 * value_loss + policy_loss))
         return total_loss
-     def play(self):
-        env = gym.make(self.game_name).unwrapped
+     def dock(self):
         state = env.reset()
         model = self.global_model
-        model_path = os.path.join(self.save_dir, 'model_{}.h5'.format(self.game_name))
+        model_path = os.path.join(self.save_dir, 'model.h5')
         print('Loading model from: {}'.format(model_path))
         model.load_weights(model_path)
         done = False
         step_counter = 0
         reward_sum = 0
 
-        try:
-          while not done:
-            env.render(mode='rgb_array')
-            policy, value = model(tf.convert_to_tensor(state[None, :], dtype=tf.float32))
-            policy = tf.nn.softmax(policy)
-            action = np.argmax(policy)
+        while not done:
+            action, value = model(state)
             state, reward, done, _ = env.step(action)
             reward_sum += reward
             print("{}. Reward: {}, action: {}".format(step_counter, reward_sum, action))
             step_counter += 1
-        except KeyboardInterrupt:
-          print("Received Keyboard Interrupt. Shutting down.")
-        finally:
-        env.close()
