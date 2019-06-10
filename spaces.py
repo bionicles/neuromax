@@ -23,13 +23,13 @@ class MasterAgent():
     def __init__(self, config, env):
         self.env = env
         self.config = config
-        save_dir = config.SAVE_DIR
+        save_dir = self.config.SAVE_DIR
         self.save_dir = save_dir
         if not os.path.exists(save_dir):
           os.makedirs(save_dir)
-        self.opt = tf.train.AdamOptimizer(config.LR, use_locking=True)
+        self.opt = tf.train.AdamOptimizer(self.config.LR, use_locking=True)
 
-        self.global_model = ActorCriticModel()  # global network
+        self.global_model = ActorCriticModel(self.config)  # global network
 
     def train(self):
         res_queue = Queue()
