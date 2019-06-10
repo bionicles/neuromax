@@ -1,9 +1,9 @@
 # model.py
 # why? run the model on the input
 
-from keras.layers import Input, Dense, Dropout, average, Layer
-from keras import Model
-from keras.utils import plot_model
+from tensorflow.keras.layers import Input, Dense, Dropout, average, Layer
+from tensorflow.keras import Model
+from tensorflow.keras.utils import plot_model
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
@@ -36,7 +36,7 @@ def make_model(config):
         print("Fail to save the model architecture!!")
     return model
 
-class ActorCriticModel(keras.Model):
+class ActorCriticModel(Model):
   def __init__(self, config):
     super(ActorCriticModel, self).__init__()
     self.policy_resnet = make_model(config)
