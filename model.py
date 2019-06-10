@@ -28,13 +28,13 @@ def make_model(config):
             output = average([output, output_shortcut])
             output_shortcut = output
     model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION, name = "Output_Layer")(output) 
-    #model = Model(input, model_output)
-    #model.summary()
+    """model = Model(input, model_output)
+    model.summary()
     try:
         plot_model(model, show_shapes = True)
     except:
-        print("Fail to save the model architecture!!")
-    return model
+        print("Fail to save the model architecture!!")"""
+    return model_output
 
 class ActorCriticModel(Model):
   def __init__(self, config):

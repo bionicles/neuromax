@@ -35,7 +35,7 @@ class MasterAgent():
         res_queue = Queue()
         workers = [Worker(self.config, self.global_model,
                           self.opt, res_queue, self.env,
-                          self.save_dir) for i in range(config.NUM_WORKERS)]
+                          i) for i in range(self.config.NUM_WORKERS)]
 
         for i, worker in enumerate(workers):
           print("Starting worker {}".format(i))
