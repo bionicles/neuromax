@@ -28,10 +28,25 @@ def make_model(config):
             output = average([output, output_shortcut])
             output_shortcut = output
     model_output = Dense(units = config.OUTPUT_SHAPE, activation = config.ACTIVATION, name = "Output_Layer")(output) 
-    model = Model(input, model_output)
-    model.summary()
+    #model = Model(input, model_output)
+    #model.summary()
     try:
         plot_model(model, show_shapes = True)
     except:
         print("Fail to save the model architecture!!")
     return model
+
+class ActorCriticModel(keras.Model):
+  def __init__(self, config):
+    super(ActorCriticModel, self).__init__()
+    self.policy_resnet = make_model(config)
+    self.critic_resnet = make_model(config)
+    self.policy_logits = Dense(config.ACTION_DIMENSION, activation = 'relu')
+    self.values = Dense(1, activation = 'relu')
+  def call(self, inputs):
+    # Forward pass
+    before_logits = self.policy_resnet(inputs)
+    policy = self.policy_logits(before_logits)
+    before_critic = self.critic_resnet(inputs)
+    critic = self.values(before_critic)
+    return policy, critic
