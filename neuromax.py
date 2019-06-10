@@ -1,6 +1,6 @@
 # neuromax.py - why?: config + train
 from mol import PyMolEnv
-from spaces import MasterAgent
+from agent import MasterAgent
 # we use a helper class for dict
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
@@ -39,5 +39,5 @@ config = AttrDict({
 
 # we make the env and model
 env = PyMolEnv(config)
-Agent = MasterAgent(config = config, env = env)
+Agent = MasterAgent(config, env)
 Agent.train()

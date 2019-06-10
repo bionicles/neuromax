@@ -1,19 +1,19 @@
-
 from PIL import Image
 import numpy as np
 import imageio
 import random
-import shutil
+# import shutil
 import scipy
 import time
 import gym
 import csv
 import os
 
-from spaces import Array
+from gym.spaces import Array
 import pymol
 
 cmd = pymol.cmd
+
 
 class PyMolEnv(gym.Env):
     def __init__(self, config):
@@ -22,16 +22,16 @@ class PyMolEnv(gym.Env):
         self.root = os.path.abspath(".")
         print(self.root)
         self.images_path = os.path.join(self.root, "images")
-        self.csvs_path = "csvs"
-        self.pdbs_path = "pdbs"
-        self.gifs_path = "gifs"
+        self.csvs_path = os.path.join(self.root, "csvs")
+        self.pdbs_path = os.path.join(self.root, "pdbs")
+        self.gifs_path = os.path.join(self.root, "gifs")
         self.pedagogy = self.load_pedagogy()
         self.colors_chosen = []
         self.config = config
         self.episode = 0
         # define spaces
         self.observation_space = Array(shape=(None, 17))
-        self.action_space = Array(shape=(None, 3))
+        self.action_space = Array(shape=(None, 3), high=(6,), low=(-6,))
 
     def reset(self):
         self.episode += 1
@@ -60,8 +60,8 @@ class PyMolEnv(gym.Env):
         # update action space with the shape
         self.action_space = Array(
             shape=self.velocities.shape,
-            high=4.2,
-            low=-4.2
+            high=(6,),
+            low=(-6,)
             )
         self.current = self.get_observation()
         # we need to know the initial work to calculate stop loss
@@ -138,6 +138,7 @@ class PyMolEnv(gym.Env):
 
     # we execute physics here:
     def step(self, action):
+        print("env step action.shape", action)
         force = -1 * action
         acceleration = force / np.transpose(self.masses)
         noise = np.random.normal(
@@ -170,8 +171,11 @@ class PyMolEnv(gym.Env):
         atom_selection_string = "id " + str(self.atom_index)
         cmd.translate(movement_vector, atom_selection_string)
         self.atom_index += 1
+
     # we calculate reward
     def calculate_reward(self):
+        print("self.positions.shape", self.positions.shape)
+        print("self.original_positions.shape", self.original_positions.shape)
         distance = scipy.spatial.distance.cdist(
             self.positions,
             self.original_positions
@@ -325,7 +329,7 @@ class PyMolEnv(gym.Env):
             imagepaths.append(filepath)
         print(imagepaths)
         imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
-        del imagepaths[0] # delete the folder path that contain stacked images from the list
+        del imagepaths[0]  # delete stacked images folder from the list
         print(imagepaths)
         for imagepath in imagepaths:
             print("processing ", imagepath)
