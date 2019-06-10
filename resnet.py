@@ -14,7 +14,7 @@ def make_block(input_layer, config, block_num):
         	output = Dropout(rate = config.DROPOUT_RATE)(output) # not sure if dropout layer support names option
     return output
 # we make a model
-def make_model(config):
+def make_resnet(config):
     input = Input(shape=(config.ATOM_DIMENSION, ))
     output = make_block(input, config, block_num = 0) # initial block
     output_shortcut = output

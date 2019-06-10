@@ -1,14 +1,15 @@
 # agent.py
 # we define a RL agent to solve environments
 
-from resnet import make_model
+from resnet import make_resnet
 import tensorflow as tf
-
-class ActorCriticModel(Model):
+from queue import Queue
+import os
+class ActorCriticModel(keras.Model):
   def __init__(self, config):
     super(ActorCriticModel, self).__init__()
-    self.policy_resnet = make_model(config)
-    self.critic_resnet = make_model(config)
+    self.policy_resnet = make_resnet(config)
+    self.critic_resnet = make_resnet(config)
     self.policy_logits = Dense(config.ACTION_DIMENSION, activation = 'relu')
     self.values = Dense(1, activation = 'relu')
   def call(self, inputs):

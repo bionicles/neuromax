@@ -1,10 +1,5 @@
-from model import ActorCriticModel
-from queue import Queue
-import tensorflow as tf
-import threading
 import gym
 import numpy as np
-import os
 
 class Array(gym.Space):
     def __init__(self, shape, variance=1., mean=0., high=None, low=None, dtype=np.float32):
