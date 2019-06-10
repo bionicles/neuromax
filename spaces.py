@@ -4,7 +4,7 @@ import tensorflow as tf
 import threading
 import gym
 import numpy as np
-
+import os
 
 class Array(gym.Space):
     def __init__(self, shape, variance=1., mean=0., high=None, low=None, dtype=np.float32):
@@ -27,7 +27,7 @@ class MasterAgent():
         self.save_dir = save_dir
         if not os.path.exists(save_dir):
           os.makedirs(save_dir)
-        self.opt = tf.train.AdamOptimizer(args.lr, use_locking=True)
+        self.opt = tf.train.AdamOptimizer(config.LR, use_locking=True)
 
         self.global_model = ActorCriticModel()  # global network
 

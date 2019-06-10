@@ -34,7 +34,8 @@ config = AttrDict({
     "SAVE_DIR": "model_weights",
     # A3C
     "NUM_WORKERS": 3,
-    "UPDATE_FREQ": 3
+    "UPDATE_FREQ": 3,
+    "LR": 0.01
 })
 
 # we make the env and model
