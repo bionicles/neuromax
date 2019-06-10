@@ -1,9 +1,10 @@
 from mol import PyMolEnv
-
+from queue import Queue 
 
 
 class MasterAgent():
-    def __init__(self, env):
+    def __init__(self, config, env):
+        self.config = config
         save_dir = args.save_dir
         self.save_dir = save_dir
         if not os.path.exists(save_dir):
@@ -16,7 +17,7 @@ class MasterAgent():
 
     def train(self):
 
-        workers = [Worker(self.global_model,
+        workers = [Worker(config = self.config, self.global_model,
                           self.opt, res_queue,
                           save_dir=self.save_dir) for i in range(multiprocessing.cpu_count())]
 
@@ -85,7 +86,7 @@ class Worker(threading.Thread):
     def run(self):
         total_step = 1
         mem = Memory()
-        while self.global_episode < config.max_eps:
+        while Worker.global_episode < config.max_eps:
           current_state = self.env.reset()
           mem.clear()
           ep_reward = 0.
