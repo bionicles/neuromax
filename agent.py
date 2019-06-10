@@ -7,6 +7,7 @@ import tensorflow as tf
 from queue import Queue
 import numpy as np
 import threading
+from d import d
 import os
 
 
