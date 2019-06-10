@@ -1,4 +1,4 @@
-from mol import PyMolEnv
+from model import ActorCriticModel
 from queue import Queue 
 import tensorflow as tf
 import threading
@@ -101,14 +101,13 @@ class Worker(threading.Thread):
             ep_reward += reward
             mem.store(current_state, action, reward)
 
-            if time_count == args.update_freq or done:
+            if time_count == config.UPDATE_FREQ or done:
               # Calculate gradient wrt to local model. We do so by tracking the
               # variables involved in computing the loss by using tf.GradientTape
               with tf.GradientTape() as tape:
                 total_loss = self.compute_loss(done,
                                                new_state,
-                                               mem,
-                                               args.gamma)
+                                               mem)
               self.ep_loss += total_loss
               # Calculate local gradients
               grads = tape.gradient(total_loss, self.local_model.trainable_weights)
@@ -130,9 +129,9 @@ class Worker(threading.Thread):
                 if ep_reward > Worker.best_score:
                   with Worker.save_lock:
                     print("Saving best model to {}, "
-                          "episode score: {}".format(self.save_dir, ep_reward))
+                          "episode score: {}".format(self.config.SAVE_DIR, ep_reward))
                     self.global_model.save_weights(
-                        os.path.join(self.save_dir,
+                        os.path.join(self.config.save_dir,
                                      'model.h5')
                     )
                     Worker.best_score = ep_reward
