@@ -2,8 +2,8 @@
 # why? define a resnet component for RL agents
 
 from tensorflow.keras.layers import Input, Dense, Dropout, Add
-from tensorflow.keras.utils import plot_model
-from tensorflow.keras import Model
+# from tensorflow.keras.utils import plot_model
+# from tensorflow.keras import Model
 
 
 def make_block(input_layer, config, block_num):

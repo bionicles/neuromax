@@ -4,7 +4,15 @@ import gym
 
 
 class Array(gym.Space):
-    def __init__(self, shape, variance=1., mean=0., high=None, low=None, dtype=np.float32):
+    def __init__(
+            self,
+            shape,
+            variance=1.,
+            mean=0.,
+            high=None,
+            low=None,
+            dtype=np.float32
+            ):
         self.shape = shape
         self.dtype = dtype
         # sampling
@@ -16,4 +24,6 @@ class Array(gym.Space):
 
     def sample(self):
         if self.shape is not None and None in self.shape:
-            raise ValueError("cannot sample arrays with unspecified dimensionality")
+            raise ValueError("cannot sample arrays with shape None")
+        else:
+            return np.random.normal(self.mean, self.variance, self.shape)

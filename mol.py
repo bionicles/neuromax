@@ -38,11 +38,14 @@ class PyMolEnv(gym.Env):
         # clean up!
         cmd.delete("all")
         # set up image path
-        self.episode_images_path = os.path.join(self.images_path, self.run_time_stamp, str(self.episode))
+        self.episode_images_path = os.path.join(
+            self.images_path, self.run_time_stamp, str(self.episode))
         os.makedirs(self.episode_images_path)
-        self.episode_stacks_path = os.path.join(self.episode_images_path, "stacks")
+        self.episode_stacks_path = os.path.join(
+            self.episode_images_path, "stacks")
         os.makedirs(self.episode_stacks_path)
-        self.episode_pngs_path = os.path.join(self.episode_images_path, "pngs")
+        self.episode_pngs_path = os.path.join(
+            self.episode_images_path, "pngs")
         os.makedirs(self.episode_pngs_path)
         # load a pdb
         self.pdb = random.choice(self.pedagogy) + ".pdb"
@@ -66,6 +69,7 @@ class PyMolEnv(gym.Env):
         self.current = self.get_observation()
         # we need to know the initial work to calculate stop loss
         self.initial_work = self.calculate_reward()
+        self.max_work = self.initial_work * self.config.STOP_LOSS_MULTIPLE
         return self.current
 
     def undock(self):
@@ -136,7 +140,6 @@ class PyMolEnv(gym.Env):
             self.get_image()
             self.step_number += 1
 
-    # we execute physics here:
     def step(self, action):
         print("env step action.shape", action)
         force = -1 * action
@@ -145,13 +148,12 @@ class PyMolEnv(gym.Env):
             loc=0.0,
             scale=self.config.ATOM_JIGGLE,
             size=self.velocities.shape)
-        print("acceleration dtype", acceleration.dtype, "noise dtype", noise.dtype)
         self.velocities += acceleration + noise
         self.atom_index = 0
         np.array([self.move_atom(xyz) for xyz in self.velocities])
         self.positions += self.velocities
         reward = self.calculate_reward()
-        stop_loss = self.work > self.initial_work * self.config.STOP_LOSS_MULTIPLE
+        stop_loss = self.work > self.max_work
         beyond_max_steps = self.step_number > self.config.NUM_STEPS
         done = stop_loss or beyond_max_steps
         observation = self.get_observation()
@@ -181,7 +183,7 @@ class PyMolEnv(gym.Env):
             self.original_positions
             )
         # calculate work to move the atoms to the proper spot
-        mass = np.transpose(self.masses[0,:])
+        mass = np.transpose(self.masses[0, :])
         self.work = distance * mass
         self.work = np.triu(self.work, 1)  # k=1 should zero main diagonal
         self.work = np.sum(self.work)
@@ -221,7 +223,8 @@ class PyMolEnv(gym.Env):
         vstack = np.vstack(images)
         # print("vstack shape", vstack.shape)
         # save the picture
-        image_path = os.path.join(self.episode_images_path, "stacks", step_indicator + ".png")
+        image_path = os.path.join(
+            self.episode_images_path, "stacks", step_indicator + ".png")
         vstack_img = Image.fromarray(vstack)
         vstack_img.save(image_path)
         return vstack
@@ -235,17 +238,29 @@ class PyMolEnv(gym.Env):
               self.pdb,
               "step: ",
               self.step_number)
-        png_path_x = os.path.join(self.episode_images_path, step_indicator + "-X.png")
-        cmd.png(png_path_x, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
+        png_path_x = os.path.join(
+            self.episode_images_path, step_indicator + "-X.png")
+        cmd.png(
+            png_path_x,
+            width=self.config.IMAGE_SIZE,
+            height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('y', 90)
-        png_path_y = os.path.join(self.episode_images_path, step_indicator + "-Y.png")
-        cmd.png(png_path_y, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
+        png_path_y = os.path.join(
+            self.episode_images_path, step_indicator + "-Y.png")
+        cmd.png(
+            png_path_y,
+            width=self.config.IMAGE_SIZE,
+            height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('y', -90)
         cmd.rotate('z', 90)
-        png_path_z = os.path.join(self.episode_images_path, step_indicator + "-Z.png")
-        cmd.png(png_path_z, width=self.config.IMAGE_SIZE, height=self.config.IMAGE_SIZE)
+        png_path_z = os.path.join(
+            self.episode_images_path, step_indicator + "-Z.png")
+        cmd.png(
+            png_path_z,
+            width=self.config.IMAGE_SIZE,
+            height=self.config.IMAGE_SIZE)
         time.sleep(0.02)
         cmd.rotate('z', -90)
         return (png_path_x, png_path_y, png_path_z)
@@ -307,7 +322,8 @@ class PyMolEnv(gym.Env):
             cmd.color(color, chain_string)
 
     def pick_a_color(self):
-        colors = ["red", "orange", "yellow", "green", "blue", "marine", "violet"]
+        colors = [
+            "red", "orange", "yellow", "green", "blue", "marine", "violet"]
         color_is_chosen = False
         while not color_is_chosen:
             color = random.choice(colors)

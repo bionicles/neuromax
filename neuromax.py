@@ -1,11 +1,13 @@
 # neuromax.py - why?: config + train
 from mol import PyMolEnv
 from agent import MasterAgent
-# we use a helper class for dict
+
+
 class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
-# we keep parameters together to save time
+
+
 config = AttrDict({
     # env
     "MAX_UNDOCK_DISTANCE": 100,
