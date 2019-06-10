@@ -22,7 +22,7 @@ class MasterAgent():
 
         for i, worker in enumerate(workers):
           print("Starting worker {}".format(i))
-          worker.start()
+          worker.run()
 
         moving_average_rewards = []  # record episode reward to plot
         while True:
@@ -179,19 +179,3 @@ class Worker(threading.Thread):
         policy_loss -= 0.01 * entropy
         total_loss = tf.reduce_mean((0.5 * value_loss + policy_loss))
         return total_loss
-     def dock(self):
-        state = env.reset()
-        model = self.global_model
-        model_path = os.path.join(self.save_dir, 'model.h5')
-        print('Loading model from: {}'.format(model_path))
-        model.load_weights(model_path)
-        done = False
-        step_counter = 0
-        reward_sum = 0
-
-        while not done:
-            action, value = model(state)
-            state, reward, done, _ = env.step(action)
-            reward_sum += reward
-            print("{}. Reward: {}, action: {}".format(step_counter, reward_sum, action))
-            step_counter += 1
