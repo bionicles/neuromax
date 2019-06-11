@@ -1,9 +1,9 @@
 # neuromax.py - why?: 1 simple file with functions over classes
 from tensorflow.keras.layers import Input, Dense, Add
+from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
 from scipy.spatial.distance import cdist
 from tf.keras.backend import stack
-import tensorflow as tf
 from pymol import cmd
 from PIL import Image
 import numpy as np
@@ -70,7 +70,6 @@ CRITIC_RECIPE = [
         "type": Dense,
         "units": 1,
         "fn": "tanh"})]
-
 
 # task
 MAX_UNDOCK_DISTANCE = 100
@@ -388,8 +387,7 @@ def step(potentials):
     new_positions = current_positions + velocities
     work = calculate_work()
     done = work > max_work
-    positions = get_positions()
-    state = stack(positions, velocities, features)
+    state = stack(new_positions, velocities, features)
     return state, work, done
 
 
@@ -406,23 +404,38 @@ def make_block(array, prior):
     return Add([output, prior])
 
 
-def make_resnet(recipe, input):
+def make_resnet(recipe, input, name, initial_input):
     output = make_block(recipe, input)
     for block in range(0, BLOCKS_PER_RESNET):
         output = make_block(recipe, output)
-    resnet = Model(input, output)
+    output_tuple = recipe[1]
+    output = Dense(units=output_tuple[0], activation = output_tuple[1])(output)
+    resnet = Model(initial_input, output)
+    plot_model(resnet, name, show_shapes = True)
     return resnet, output
 
 
-def make_agent():
-    input = Input((NUM_FEATURES, ))
-    predictor, prediction = make_resnet(PREDICTOR_RECIPE, input)
-    actor_input = stack([input, prediction])
-    actor, action = make_resnet(ACTOR_RECIPE, actor_input)
-    critic_input = stack([actor_input, action])
-    critic, criticism = make_resnet(CRITIC_RECIPE, critic_input)
-    agent = Model(input, [prediction, action, criticism])
-    tf.keras.utils.plot_model(agent, show_shapes=True)
+def make_agent(num_features):
+    predictor_input = Input((PREDICTOR_INPUT_SHAPE, ))
+    predictor_first_layer = Dense(units=UNITS_PREDICTOR, activation = 'tanh')(predictor_input)
+    predictor, prediction = make_resnet(PREDICTOR_RECIPE, predictor_first_layer,
+                                                        name = 'predictor.png',
+                                                        initial_input = input)
+    predictor_to_actor = stack([predictor_input, prediction])
+    actor_input = Input((ACTOR_INPUT_SHAPE, ))
+    actor_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(actor_input)
+    actor, action = make_resnet(ACTOR_RECIPE, actor_first_layer,
+                                            name = 'actor.png',
+                                            initial_input = actor_input)
+    critic_input = Input((CRITIC_INPUT_SHAPE, ))
+    critic_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(critic_input)
+    critic, criticism = make_resnet(CRITIC_RECIPE, critic_first_layer,
+                                                name = 'critic.png',
+                                                initial_input =critic_input)
+    actor_to_critic = stack()
+
+    agent = Model(predictor.input, [prediction, action, criticism])
+    plot_model(agent, "agent.png",show_shapes=True)
     return predictor, actor, critic, agent
 
 
