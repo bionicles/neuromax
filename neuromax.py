@@ -134,8 +134,8 @@ def get_features(atom):
     ])
 
 def calculate_work():
-    distance = cdist(current_positions, original_positions)
-    # work to move atoms to their original positions
+    distance = cdist(current_positions, initial_positions)
+    # work to move atoms back to initial positions
     work = distance * transpose_masses
     work = np.triu(work, 1)  # k=1 should zero main diagonal
     work = np.sum(work)
@@ -263,8 +263,8 @@ def reset(screenshotting):
     # setup task
     cmd.remove("solvent")
     cmd.select(name="current", selection="all")
-    original_positions = get_positions()
-    velocities = np.random.normal(size=original_positions.shape)
+    initial_positions = get_positions()
+    velocities = np.random.normal(size=initial_positions.shape)
     features, masses = get_metadata()
     transpose_masses = np.transpose(masses)
     undock(screenshotting)
@@ -272,7 +272,7 @@ def reset(screenshotting):
     current_positions = get_positions()
     initial_work = calculate_reward()
     max_work = initial_work * STOP_LOSS_MULTIPLE
-    return original_positions, features, masses, transpose_masses current_positions, max_work
+    return initial_positions, features, masses, transpose_masses current_positions, max_work
 
 def move_atom(xyz, atom_index):
     xyz = list(xyz)
@@ -334,14 +334,15 @@ def train():
     memory = []
     while not converged:
         screenshotting = episode % SCREENSHOT_EVERY == 0
-        current_state = reset(screenshotting)
+        initial_positions, features, current_positions = reset(screenshotting)
         done = False
         while not done:
-            prediction, action, criticism = agent(state)
-            next_state, reward, done = step(action, screenshotting)
+            prediction, action, criticism = agent(current_positions, features)
+            next_positions, next_velocities, reward, done = step(action, screenshotting)
             event = AttrDict({
-                "current_state": current_state,
-                "next_state": next_state,
+                "current_positions": current_positions,
+                "next_velocities": next_velocities,
+                "next_positions": next_positions,
                 "prediction": prediction,
                 "criticism": criticism,
                 "action": action,
@@ -351,8 +352,9 @@ def train():
             current_observation = next_observation
         # optimize when done
         for event in memory:
-            actor.fit(event.current_positions, event.original_positions)
-            predictor.fit(event.prediction, event.next_state)
+            actor.fit(event.current_positions, event.initial_positions)
+            prediction_target = concat(next_positions, next_velocities)
+            predictor.fit(event.prediction, prediction_target)
             critic.fit(event.criticism, event.reward)
     return agent
 
