@@ -1,7 +1,9 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.layers import Input, Dense, add, concatenate
-from scipy.spatial.distance import cdist
+from tensorflow.keras.layers import Input, Dense, Add
 from tensorflow.keras.models import Model
+from scipy.spatial.distance import cdist
+from tf.keras.backend import stack
+import tensorflow as tf
 from pymol import cmd
 from PIL import Image
 import numpy as np
@@ -16,16 +18,60 @@ class AttrDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
 
+
 TIMESTAMP = str(time.time())
 ROOT = os.path.abspath(".")
+
+
+# globals
+current_positions = []
+initial_positions = []
+transpose_masses = []
+velocity_zero = []
+masses = []
+episode_stacks_path = ""
+episode_pngs_path = ""
+pdb_name = ""
+chains = []
+max_work = np.inf
+episode = 0
+step = 0
+
+
 # model
 BLOCKS_PER_RESNET = 2
-# predictor :: input => position+velocity prediction shape(num_atoms, 6)
-PREDICTOR_RECIPE = [(17, "tanh"), (6, "linear")]
-# actor     :: input, prediction => potentials shape(None, 3)
-ACTOR_RECIPE = [(17 + 6, "selu"), (3, "tanh")]
-# critic    :: state, prediction, action => reward prediction shape(1)
-CRITIC_RECIPE = [(17 + 6 + 3, "tanh"), (1, "tanh")]
+# predictor (N, 17) -> (N, 6) x y z vx vy vz
+PREDICTOR_RECIPE = [
+    AttrDict({
+        "type": Dense,
+        "units": 17,
+        "fn": "tanh"}),
+    AttrDict({
+        "type": Dense,
+        "units": 6,
+        "fn": "linear"})]
+# actor (N, 17 + 6 = 23) -> (N, 3) x y z
+ACTOR_RECIPE = [
+    AttrDict({
+        "type": Dense,
+        "units": 23,
+        "fn": "selu"}),
+    AttrDict({
+        "type": Dense,
+        "units": 3,
+        "fn": "tamh"})]
+# critic (N, 17 + 6 + 3 = 26) -> (1) reward
+CRITIC_RECIPE = [
+    AttrDict({
+        "type": Dense,
+        "units": 26,
+        "fn": "tanh"}),
+    AttrDict({
+        "type": Dense,
+        "units": 1,
+        "fn": "tanh"})]
+
+
 # task
 MAX_UNDOCK_DISTANCE = 100
 MIN_UNDOCK_DISTANCE = 10
@@ -33,8 +79,11 @@ MAX_STEPS_IN_UNDOCK = 3
 MIN_STEPS_IN_UNDOCK = 2
 STOP_LOSS_MULTIPLE = 10
 SCREENSHOT_EVERY = 20
+NUM_EPISODES = 10000
+NUM_FEATURES = 17
 IMAGE_SIZE = 256
 ATOM_JIGGLE = 1
+
 
 def load_pedagogy():
     csvpath = os.path.join(ROOT, "csvs/pedagogy.csv")
@@ -47,7 +96,9 @@ def load_pedagogy():
                 results.append(item)
     return results
 
+
 pedagogy = load_pedagogy()
+
 
 def prepare_pymol():
     cmd.remove("solvent")
@@ -60,14 +111,17 @@ def prepare_pymol():
     cmd.bg_color("black")
     cmd.deselect()
 
+
 def color_chainbow(chains):
     colors = pick_colors(len(chains))
     for i in range(len(chains)):
         cmd.color(colors[i], "chain " + chains[i])
 
+
 def pick_colors(number_of_colors):
     colors = ["red", "orange", "yellow", "green", "blue", "marine", "violet"]
     return random.sample(colors, number_of_colors)
+
 
 def make_gif():
     gif_name = "r-{}_e-{}_p-{}.gif".format(TIMESTAMP, episode, pdb_name)
@@ -86,37 +140,41 @@ def make_gif():
     imageio.mimsave(gif_path, images)
     return gif_path, gif_name
 
+
 def make_image():
-    step_indicator = "e-{}_p-{}_s-{}".format(episode, pdb_name, step_number)
+    step_indicator = "e-{}_p-{}_s-{}".format(episode, pdb_name, step)
     png_paths = take_pictures(step_indicator)
     images = [np.asarray(Image.open(png)) for png in png_paths]
     vstack = np.vstack(images)
-    image_path = os.path.join(
-        episode_images_path, "stacks", step_indicator + ".png")
+    image_path = os.path.join(episode_stacks_path, pdb_name + ".png")
     vstack_img = Image.fromarray(vstack)
     vstack_img.save(image_path)
 
+
 def take_pictures(step_indicator):
+    print("screenshot episode", episode, "pdb", pdb_name, "step", step)
+    global episode_pngs_path
     cmd.deselect()
-    print("screenshot episode", episode, "pdb", pdb_name, "step", step_number)
-    png_path_x = os.path.join(episode_images_path, step_indicator + "-X.png")
+    png_path_x = os.path.join(episode_pngs_path, step_indicator + "-X.png")
     cmd.png(png_path_x, width=IMAGE_SIZE, height=IMAGE_SIZE)
     time.sleep(0.02)
     cmd.rotate('y', 90)
-    png_path_y = os.path.join(episode_images_path, step_indicator + "-Y.png")
+    png_path_y = os.path.join(episode_pngs_path, step_indicator + "-Y.png")
     cmd.png(png_path_y, width=IMAGE_SIZE, height=IMAGE_SIZE)
     time.sleep(0.02)
     cmd.rotate('y', -90)
     cmd.rotate('z', 90)
-    png_path_z = os.path.join(episode_images_path, step_indicator + "-Z.png")
+    png_path_z = os.path.join(episode_pngs_path, step_indicator + "-Z.png")
     cmd.png(png_path_z, width=IMAGE_SIZE, height=IMAGE_SIZE)
     time.sleep(0.02)
     cmd.rotate('z', -90)
     return (png_path_x, png_path_y, png_path_z)
 
+
 def get_positions():
     model = cmd.get_model("current", 1)
     return np.array(model.get_coord_list())
+
 
 def get_atom_features(atom):
     return np.array([
@@ -133,6 +191,7 @@ def get_atom_features(atom):
         sum([ord(i) for i in atom.symbol])//len(atom.symbol)
     ])
 
+
 def calculate_work():
     distance = cdist(current_positions, initial_positions)
     # work to move atoms back to initial positions
@@ -147,6 +206,7 @@ def calculate_work():
         work += work_to_stop
     return work
 
+
 def undock(screenshotting):
     steps_in_undock = random.randint(MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK)
     print("undocking", pdb_name, steps_in_undock, "times")
@@ -158,9 +218,10 @@ def undock(screenshotting):
         for chain in chains:
             # x, y, z, rx, ry, rz
             vector = np.array([
-                random.randrange(MIN_UNDOCK, MAX_UNDOCK),
-                random.randrange(MIN_UNDOCK, MAX_UNDOCK),
-                random.randrange(MIN_UNDOCK, MAX_UNDOCK),
+                random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
+                random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
+                random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
+                random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
                 random.randrange(-360, 360),
                 random.randrange(-360, 360),
                 random.randrange(-360, 360)
@@ -198,7 +259,7 @@ def undock(screenshotting):
     # move through the list of steps, move the chains, take the screenshots
     if screenshotting:
         make_image()
-    step_number = 1
+    step = 1
     for step_vector in step_vector_array:
         for k in range(len(step_vector)):
             chain_vector = step_vector[k]
@@ -210,51 +271,74 @@ def undock(screenshotting):
             cmd.rotate("z", chain_vector[5], "current and chain " + chain)
         if screenshotting:
             make_image()
-        step_number += 1
+        step += 1
+
 
 def unfold(screenshotting, chains):
-    original_num_steps = num_steps
+    global step
     num_steps = random.randint(MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK)
     print("unfolding", pdb_name, num_steps, "times")
-    for step in range(num_steps):
+    for fold_step in range(num_steps):
         for chain in chains:
-            np_array = np.array([unfold_index(name, index) for name, index in cmd.index("byca (chain {})".format(chain))])
-        step = step + 1
+            np.array([
+                unfold_index(name, index) for name, index in
+                cmd.index("byca (chain {})".format(chain))])
         if screenshotting:
-            prepare_pymol() # set the zoom on the final destination
-            take_screenshot(params, pdb_name, num_proteins_seen, step)
-    return num_steps + original_num_steps
+            make_image()
+    step = step + num_steps
+
 
 def unfold_index(name, index):
     selection_string_array = [
-        'first (({}`{}) extend 2 and name C)'.format(name, index), # prev C
-        'first (({}`{}) extend 1 and name N)'.format(name, index), # this N
-        '({}`{})'.format(name, index),                             # this CA
-        'last (({}`{}) extend 1 and name C)'.format(name, index),  # this C
-        'last (({}`{}) extend 2 and name N)'.format(name, index),  # next N
+        'first (({}`{}) extend 2 and name C)'.format(name, index),  # prev C
+        'first (({}`{}) extend 1 and name N)'.format(name, index),  # this N
+        '({}`{})'.format(name, index),                              # this CA
+        'last (({}`{}) extend 1 and name C)'.format(name, index),   # this C
+        'last (({}`{}) extend 2 and name N)'.format(name, index),   # next N
     ]
     try:
         phi_random = random.randint(0, 360)
-        cmd.set_dihedral(selection_string_array[0], selection_string_array[1], selection_string_array[2], selection_string_array[3], phi_random)
+        cmd.set_dihedral(
+            selection_string_array[0],
+            selection_string_array[1],
+            selection_string_array[2],
+            selection_string_array[3],
+            phi_random)
         psi_random = random.randint(0, 360)
-        cmd.set_dihedral(selection_string_array[1], selection_string_array[2], selection_string_array[3], selection_string_array[4], psi_random)
+        cmd.set_dihedral(
+            selection_string_array[1],
+            selection_string_array[2],
+            selection_string_array[3],
+            selection_string_array[4],
+            psi_random)
     except:
         print("failed to set dihedral at ", name, index)
 
-def reset(screenshotting):
-    episode += 1
+
+def reset():
     cmd.delete("all")
     # make paths
+    global current_velocities
+    global current_positions
+    global initial_positions
+    global screenshotting
+    global pdb_name
+    global max_work
+    global episode
     if screenshotting:
-        episode_images_path = os.path.join(ROOT, "images", TIMESTAMP, str(episode))
+        global episode_stacks_path
+        global episode_pngs_path
+        episode_images_path = os.path.join(
+            ROOT, "images", TIMESTAMP, str(episode))
         os.makedirs(episode_images_path)
         episode_stacks_path = os.path.join(episode_images_path, "stacks")
         os.makedirs(episode_stacks_path)
         episode_pngs_path = os.path.join(episode_images_path, "pngs")
         os.makedirs(episode_pngs_path)
     # get pdb
-    pdb_name = random.choice(pedagogy) + ".pdb"
-    pdb_path = os.path.join(pdbs_path, pdb_name)
+    pdb_name = random.choice(pedagogy)
+    pdb_file_name = pdb_name + ".pdb"
+    pdb_path = os.path.join(ROOT, "pdbs", pdb_file_name)
     print("loading", pdb_path)
     if not os.path.exists(pdb_path):
         cmd.fetch(pdb_name, path=pdb_path, type="pdb")
@@ -264,26 +348,35 @@ def reset(screenshotting):
     cmd.remove("solvent")
     cmd.select(name="current", selection="all")
     initial_positions = get_positions()
-    velocities = np.random.normal(size=initial_positions.shape)
+    current_velocities = np.random.normal(size=initial_positions.shape)
     chains = cmd.get_chains("current")
-    step_number = 0
     model = cmd.get_model("current", 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
     masses = np.array([atom.get_mass() for atom in model.atom])
     masses = np.array([masses, masses, masses])
     transpose_masses = np.transpose(masses)
-    undock(screenshotting)
-    unfold(screenshotting)
+    undock()
+    unfold()
     current_positions = get_positions()
-    initial_work = calculate_reward()
+    initial_work = calculate_work()
     max_work = initial_work * STOP_LOSS_MULTIPLE
-    return initial_positions, features, masses, transpose_masses, current_positions, max_work
+    return (
+        initial_positions,
+        current_positions,
+        current_velocities,
+        transpose_masses,
+        features,
+        masses,
+        chains,
+        max_work)
+
 
 def move_atom(xyz, atom_index):
     xyz = list(xyz)
     atom_selection_string = "id " + str(atom_index)
     cmd.translate(xyz, atom_selection_string)
     atom_index += 1
+
 
 def step(potentials):
     force = -1 * potentials
@@ -292,25 +385,26 @@ def step(potentials):
     velocities += acceleration + noise
     atom_index = 0
     np.array([move_atom(xyz, atom_index) for xyz in velocities])
-    positions += velocities
-    reward = calculate_reward()
+    new_positions = current_positions + velocities
+    work = calculate_work()
     done = work > max_work
     positions = get_positions()
-    step_number += 1
-    if done:
-        make_gif()
-    return state, reward, done
+    state = stack(positions, velocities, features)
+    return state, work, done
+
 
 # BEGIN MODEL:
-def make_layer(tuple, tensor):
-    layer = Dense(units=tuple[0], activation=tuple[1])
+def make_layer(recipe, tensor):
+    layer = recipe.type(units=recipe.units, activation=recipe.activation)
     return layer(tensor)
+
 
 def make_block(array, prior):
     output = make_layer(array[0], prior)
     for i in range(1, len(array)):
         output = make_layer(array[i], output)
-    return concatenate([output, prior])
+    return Add([output, prior])
+
 
 def make_resnet(recipe, input):
     output = make_block(recipe, input)
@@ -319,49 +413,74 @@ def make_resnet(recipe, input):
     resnet = Model(input, output)
     return resnet, output
 
-def make_agent(num_features):
-    input = Input((num_features, ))
+
+def make_agent():
+    input = Input((NUM_FEATURES, ))
     predictor, prediction = make_resnet(PREDICTOR_RECIPE, input)
-    actor_input = concatenate([input, prediction])
+    actor_input = stack([input, prediction])
     actor, action = make_resnet(ACTOR_RECIPE, actor_input)
-    critic_input = concat([actor_input, action])
+    critic_input = stack([actor_input, action])
     critic, criticism = make_resnet(CRITIC_RECIPE, critic_input)
     agent = Model(input, [prediction, action, criticism])
-    plot_model(agent, show_shapes=True)
+    tf.keras.utils.plot_model(agent, show_shapes=True)
     return predictor, actor, critic, agent
 
+
 def train():
+    global initial_positions
+    global current_positions
+    global screenshotting
+    global current_velocities
+    global velocities
+    global features
+    global episode
+    global step
     predictor, actor, critic, agent = make_agent(17)
-    predictor.compile(optimizer="adam")
-    critic.compile(optimizer="adam")
-    actor.compile(optimizer="adam")
-    converged = false
+    predictor.compile(loss="mse", optimizer="nadam")
+    critic.compile(loss="mse", optimizer="nadam")
+    actor.compile(loss="mse", optimizer="nadam")
+    converged = False
+    episode = 0
     memory = []
-    while not converged:
+    for i in range(NUM_EPISODES):
         screenshotting = episode % SCREENSHOT_EVERY == 0
-        initial_positions, features, current_positions = reset(screenshotting)
+        initial_positions, current_positions, features = reset()
         done = False
+        step = 0
         while not done:
-            prediction, action, criticism = agent(current_positions, features)
-            next_positions, next_velocities, reward, done = step(action, screenshotting)
+            state = stack(current_positions, current_velocities, features)
+            prediction, action, criticism = agent(state)
+            new_positions, new_velocities, reward, done = step(action)
             event = AttrDict({
                 "current_positions": current_positions,
-                "next_velocities": next_velocities,
-                "next_positions": next_positions,
+                "new_positions": new_positions,
+                "current_velocities": current_velocities,
+                "new_velocities": new_velocities,
                 "prediction": prediction,
                 "criticism": criticism,
                 "action": action,
                 "reward": reward
             })
             memory.append(event)
-            current_observation = next_observation
+            current_velocities = new_velocities
+            current_positions = new_positions
+            step += 1
+        make_gif()
+        episode += 1
         # optimize when done
         for event in memory:
-            actor.fit(event.current_positions, event.initial_positions)
-            prediction_target = concat(next_positions, next_velocities)
+            action_result = stack(event.new_positions, event.new_velocities)
+            action_target = stack(
+                initial_positions,
+                np.zeros_like(initial_positions))
+            actor.fit(action_result, action_target)
+            prediction_target = stack(
+                event.new_positions,
+                event.new_velocities)
             predictor.fit(event.prediction, prediction_target)
             critic.fit(event.criticism, event.reward)
         agent.save_model()
+
 
 if __name__ == "__main__":
     train()
