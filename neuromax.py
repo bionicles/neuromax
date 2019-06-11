@@ -3,6 +3,7 @@ from tensorflow.keras.layers import Input, Dense, add, concatenate
 from scipy.spatial.distance import cdist
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import plot_model
+from tf.keras.backend import stack
 from pymol import cmd
 from PIL import Image
 import numpy as np
@@ -25,9 +26,9 @@ LAYERS_PER_BLOCK = 2
 # predictor :: input => position+velocity prediction shape(num_atoms, 6)
 PREDICTOR_INPUT_SHAPE = 17
 UNITS_PREDICTOR = 500
-PREDICTOR_RECIPE = [(UNITS_PREDICTOR, "tanh"), (17*2, "relu")]
+PREDICTOR_RECIPE = [(UNITS_PREDICTOR, "tanh"), (6, "relu")]
 # actor     :: input, prediction => potentials shape(None, 3)
-ACTOR_INPUT_SHAPE = 17*2
+ACTOR_INPUT_SHAPE = 17 + 6
 UNITS_ACTOR = 500
 ACTOR_RECIPE = [(UNITS_ACTOR, "selu"), (3, "tanh")]
 # critic    :: state, prediction, action => reward prediction shape(1)
@@ -346,9 +347,10 @@ def make_agent(num_features):
     critic, criticism = make_resnet(CRITIC_RECIPE, critic_first_layer,
                                                 name = 'critic.png',
                                                 initial_input =critic_input)
-    agent_input = predictor.input
+    predictor_to_actor = tf.keras.backend.stack([predictor_input, prediction])
+    actor_to_critic = tf.keras.backend.stack()
 
-    agent = Model([predictor_input, ], [prediction, action, criticism])
+    agent = Model(predictor.input, [prediction, action, criticism])
     plot_model(agent, "agent.png",show_shapes=True)
     return predictor, actor, critic, agent
 
