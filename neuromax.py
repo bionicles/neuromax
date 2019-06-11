@@ -37,8 +37,8 @@ IMAGE_SIZE = 256
 ATOM_JIGGLE = 1
 
 def load_pedagogy():
-    results = []
     csvpath = os.path.join(ROOT, "csvs/pedagogy.csv")
+    results = []
     with open(csvpath) as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
@@ -118,7 +118,7 @@ def get_positions():
     model = cmd.get_model("current", 1)
     return np.array(model.get_coord_list())
 
-def get_features(atom):
+def get_atom_features(atom):
     return np.array([
         ord(atom.chain.lower())/122,
         atom.get_mass(),
@@ -265,7 +265,12 @@ def reset(screenshotting):
     cmd.select(name="current", selection="all")
     initial_positions = get_positions()
     velocities = np.random.normal(size=initial_positions.shape)
-    features, masses = get_metadata()
+    chains = cmd.get_chains("current")
+    step_number = 0
+    model = cmd.get_model("current", 1)
+    features = np.array([get_atom_features(atom) for atom in model.atom])
+    masses = np.array([atom.get_mass() for atom in model.atom])
+    masses = np.array([masses, masses, masses])
     transpose_masses = np.transpose(masses)
     undock(screenshotting)
     unfold(screenshotting)
@@ -356,7 +361,7 @@ def train():
             prediction_target = concat(next_positions, next_velocities)
             predictor.fit(event.prediction, prediction_target)
             critic.fit(event.criticism, event.reward)
-    return agent
+        agent.save_model()
 
 if __name__ == "__main__":
     train()
