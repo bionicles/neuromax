@@ -21,14 +21,16 @@ TIMESTAMP = str(time.time())
 ROOT = os.path.abspath(".")
 # model
 BLOCKS_PER_RESNET = 4
-NUMBER_LAYERS = 3
+LAYERS_PER_BLOCK = 2
 # predictor :: input => position+velocity prediction shape(num_atoms, 6)
 UNITS_PREDICTOR = 500
-PREDICTOR_RECIPE = [(500, "tanh"), (6, "relu")]
+PREDICTOR_RECIPE = [(UNITS_PREDICTOR, "tanh"), (6, "relu")]
 # actor     :: input, prediction => potentials shape(None, 3)
-ACTOR_RECIPE = [(17 + 6, "selu"), (3, "tanh")]
+UNITS_ACTOR = 500
+ACTOR_RECIPE = [(UNITS_ACTOR, "selu"), (3, "tanh")]
 # critic    :: state, prediction, action => reward prediction shape(1)
-CRITIC_RECIPE = [(17 + 6 + 3, "tanh"), (1, "tanh")]
+UNITS_CRITIC = 500
+CRITIC_RECIPE = [(UNITS_CRITIC, "tanh"), (1, "tanh")]
 # task
 MAX_UNDOCK_DISTANCE = 100
 MIN_UNDOCK_DISTANCE = 10
@@ -311,7 +313,7 @@ def make_layer(tuple, tensor):
 
 def make_block(array, prior):
     output = make_layer(array[0], prior)
-    for i in range(1, NUMBER_LAYERS):
+    for i in range(1, LAYERS_PER_BLOCK):
         output = make_layer(array[0], output)
     return add([output, prior])
 
@@ -331,12 +333,18 @@ def make_agent(num_features):
     predictor, prediction = make_resnet(PREDICTOR_RECIPE, predictor_first_layer,
                                                         name = 'predictor.png',
                                                         initial_input = input)
-    actor_input = concatenate([input, prediction])
-    actor, action = make_resnet(ACTOR_RECIPE, prediction, name = 'actor.png')
-    critic_input = concat([actor_input, action])
-    critic, criticism = make_resnet(CRITIC_RECIPE, critic_input, name = 'critic.png')
+    actor_input = Input(num_features + 6)
+    actor_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(actor_input)
+    actor, action = make_resnet(ACTOR_RECIPE, actor_first_layer,
+                                            name = 'actor.png',
+                                            initial_input = actor_input)
+    critic_input = Input(num_features + 6 +3)
+    critic_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(critic_input)
+    critic, criticism = make_resnet(CRITIC_RECIPE, critic_first_layer,
+                                                name = 'critic.png',
+                                                initial_input =critic_input)
     agent = Model(input, [prediction, action, criticism])
-    plot_model(agent, show_shapes=True)
+    plot_model(agent, "agent.png",show_shapes=True)
     return predictor, actor, critic, agent
 
 def train():
