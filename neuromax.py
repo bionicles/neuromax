@@ -23,12 +23,15 @@ ROOT = os.path.abspath(".")
 BLOCKS_PER_RESNET = 4
 LAYERS_PER_BLOCK = 2
 # predictor :: input => position+velocity prediction shape(num_atoms, 6)
+PREDICTOR_INPUT_SHAPE = 17
 UNITS_PREDICTOR = 500
 PREDICTOR_RECIPE = [(UNITS_PREDICTOR, "tanh"), (6, "relu")]
 # actor     :: input, prediction => potentials shape(None, 3)
+ACTOR_INPUT_SHAPE = 17*2
 UNITS_ACTOR = 500
 ACTOR_RECIPE = [(UNITS_ACTOR, "selu"), (3, "tanh")]
 # critic    :: state, prediction, action => reward prediction shape(1)
+CRITIC_INPUT_SHAPE = 17*2 + 3
 UNITS_CRITIC = 500
 CRITIC_RECIPE = [(UNITS_CRITIC, "tanh"), (1, "tanh")]
 # task
@@ -328,17 +331,17 @@ def make_resnet(recipe, input, name, initial_input):
     return resnet, output
 
 def make_agent(num_features):
-    input = Input((num_features, ))
-    predictor_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(input)
+    predictor_input = Input((PREDICTOR_INPUT_SHAPE, ))
+    predictor_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(predictor_input)
     predictor, prediction = make_resnet(PREDICTOR_RECIPE, predictor_first_layer,
                                                         name = 'predictor.png',
                                                         initial_input = input)
-    actor_input = Input(num_features + 6)
+    actor_input = Input((ACTOR_INPUT_SHAPE, ))
     actor_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(actor_input)
     actor, action = make_resnet(ACTOR_RECIPE, actor_first_layer,
                                             name = 'actor.png',
                                             initial_input = actor_input)
-    critic_input = Input(num_features + 6 +3)
+    critic_input = Input((CRITIC_INPUT_SHAPE, ))
     critic_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(critic_input)
     critic, criticism = make_resnet(CRITIC_RECIPE, critic_first_layer,
                                                 name = 'critic.png',
