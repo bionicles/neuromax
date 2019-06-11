@@ -2,6 +2,7 @@
 from tensorflow.keras.layers import Input, Dense, add, concatenate
 from scipy.spatial.distance import cdist
 from tensorflow.keras.models import Model
+from tensorflow.keras.utils import plot_model
 from pymol import cmd
 from PIL import Image
 import numpy as np
@@ -19,9 +20,11 @@ class AttrDict(dict):
 TIMESTAMP = str(time.time())
 ROOT = os.path.abspath(".")
 # model
-BLOCKS_PER_RESNET = 2
+BLOCKS_PER_RESNET = 4
+NUMBER_LAYERS = 3
 # predictor :: input => position+velocity prediction shape(num_atoms, 6)
-PREDICTOR_RECIPE = [(17, "tanh"), (6, "linear")]
+UNITS_PREDICTOR = 500
+PREDICTOR_RECIPE = [(500, "tanh"), (6, "relu")]
 # actor     :: input, prediction => potentials shape(None, 3)
 ACTOR_RECIPE = [(17 + 6, "selu"), (3, "tanh")]
 # critic    :: state, prediction, action => reward prediction shape(1)
@@ -308,24 +311,30 @@ def make_layer(tuple, tensor):
 
 def make_block(array, prior):
     output = make_layer(array[0], prior)
-    for i in range(1, len(array)):
-        output = make_layer(array[i], output)
-    return concatenate([output, prior])
+    for i in range(1, NUMBER_LAYERS):
+        output = make_layer(array[0], output)
+    return add([output, prior])
 
-def make_resnet(recipe, input):
+def make_resnet(recipe, input, name, initial_input):
     output = make_block(recipe, input)
     for block in range(0, BLOCKS_PER_RESNET):
         output = make_block(recipe, output)
-    resnet = Model(input, output)
+    output_tuple = recipe[1]
+    output = Dense(units = output_tuple[0], activation = output_tuple[1])(output)
+    resnet = Model(initial_input, output)
+    plot_model(resnet, name, show_shapes = True)
     return resnet, output
 
 def make_agent(num_features):
     input = Input((num_features, ))
-    predictor, prediction = make_resnet(PREDICTOR_RECIPE, input)
+    predictor_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(input)
+    predictor, prediction = make_resnet(PREDICTOR_RECIPE, predictor_first_layer,
+                                                        name = 'predictor.png',
+                                                        initial_input = input)
     actor_input = concatenate([input, prediction])
-    actor, action = make_resnet(ACTOR_RECIPE, actor_input)
+    actor, action = make_resnet(ACTOR_RECIPE, prediction, name = 'actor.png')
     critic_input = concat([actor_input, action])
-    critic, criticism = make_resnet(CRITIC_RECIPE, critic_input)
+    critic, criticism = make_resnet(CRITIC_RECIPE, critic_input, name = 'critic.png')
     agent = Model(input, [prediction, action, criticism])
     plot_model(agent, show_shapes=True)
     return predictor, actor, critic, agent
