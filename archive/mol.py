@@ -17,7 +17,6 @@ cmd = pymol.cmd
 
 class PyMolEnv(gym.Env):
     def __init__(self, config):
-        # setup
         self.run_time_stamp = str(time.time())
         self.root = os.path.abspath(".")
         print(self.root)
@@ -60,6 +59,7 @@ class PyMolEnv(gym.Env):
         cmd.select(name="current", selection="all")
         self.get_metadata()
         self.undock()
+        # self.unfold()
         # update action space with the shape
         self.action_space = Array(
             shape=self.velocities.shape,
@@ -175,26 +175,23 @@ class PyMolEnv(gym.Env):
         self.atom_index += 1
 
     # we calculate reward
-    def calculate_reward(self):
-        print("self.positions.shape", self.positions.shape)
-        print("self.original_positions.shape", self.original_positions.shape)
+    def calculate_work(self):
         distance = scipy.spatial.distance.cdist(
-            self.positions,
-            self.original_positions
+            positions,
+            original_positions
             )
         # calculate work to move the atoms to the proper spot
-        mass = np.transpose(self.masses[0, :])
-        self.work = distance * mass
-        self.work = np.triu(self.work, 1)  # k=1 should zero main diagonal
-        self.work = np.sum(self.work)
+        work = distance * transpose_masses
+        work = np.triu(work, 1)  # k=1 should zero main diagonal
+        work = np.sum(work)
         # calculate work to slow the atoms to a stop
-        work_to_stop = np.transpose(self.velocities) * mass
+        work_to_stop = np.transpose(velocities) * mass
         work_to_stop = np.triu(work_to_stop, 1)
-        work_to_stop = np.sum(self.work)
+        work_to_stop = np.sum(work_to_stop)
         if work_to_stop > 0:
-            self.work += work_to_stop
+            work += work_to_stop
         # reward is the opposite of work
-        return -1 * self.work
+        return -1 * work
 
     def get_metadata(self):
         self.chains = cmd.get_chains("current")
@@ -217,17 +214,12 @@ class PyMolEnv(gym.Env):
             self.pdb,
             self.step_number)
         image_paths = self.take_pictures(step_indicator)
-        # [print(image_path, "\n") for image_path in image_paths]
         images = [np.asarray(Image.open(image)) for image in image_paths]
-        # [print(image.shape) for image in images]
         vstack = np.vstack(images)
-        # print("vstack shape", vstack.shape)
-        # save the picture
         image_path = os.path.join(
             self.episode_images_path, "stacks", step_indicator + ".png")
         vstack_img = Image.fromarray(vstack)
         vstack_img.save(image_path)
-        return vstack
 
     def take_pictures(self, step_indicator):
         cmd.deselect()

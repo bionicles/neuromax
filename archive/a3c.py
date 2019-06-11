@@ -1,8 +1,8 @@
 # agent.py why?: solve environments with rl
 from tensorflow.keras.layers import Dense
+from tensorflow.keras import Model
 import matplotlib.pyplot as plt
 from resnet import make_resnet
-from tensorflow.keras import Model
 import tensorflow as tf
 from queue import Queue
 import numpy as np
@@ -20,7 +20,6 @@ class ActorCritic(Model):
         self.values = Dense(1, activation='relu')
 
     def call(self, inputs):
-        # Forward pass
         before_logits = self.policy_resnet(inputs)
         policy = self.policy_logits(before_logits)
         before_critic = self.critic_resnet(inputs)
@@ -28,10 +27,10 @@ class ActorCritic(Model):
         return policy, critic
 
 
-class MasterAgent():
+class A3C:
     def __init__(self, config, env):
         self.env = env
-        self.config = config
+        self.config = env.config
         save_dir = self.config.SAVE_DIR
         self.save_dir = save_dir
         if not os.path.exists(save_dir):
@@ -68,9 +67,7 @@ class MasterAgent():
 
 class Memory():
     def __init__(self):
-        self.states = []
-        self.actions = []
-        self.rewards = []
+        self.clear()
 
     def store(self, state, action, reward):
         self.states.append(state)
@@ -78,7 +75,7 @@ class Memory():
         self.rewards.append(reward)
 
     def clear(self):
-        self.states = []
+        self.states =  []
         self.actions = []
         self.rewards = []
 
@@ -104,10 +101,10 @@ class Worker(threading.Thread):
 
     def run(self):
         total_step = 1
-        mem = Memory()
+        memory = Memory()
         while Worker.global_episode < self.config.NUM_EPISODES:
             current_state = self.env.reset()
-            mem.clear()
+            memory.clear()
             ep_reward = 0.
             ep_steps = 0
             time_count = 0
@@ -118,13 +115,12 @@ class Worker(threading.Thread):
             if done:
                 reward = -1
             ep_reward += reward
-            mem.store(current_state, action, reward)
+            memory.store(current_state, action, reward)
 
             if time_count == self.config.UPDATE_FREQ or done:
-                # Calculate gradient wrt to local model. We track the
-                # variables with tf.GradientTape
+                # Calculate local gradient
                 with tf.GradientTape() as tape:
-                    total_loss = self.compute_loss(done, new_state, mem)
+                    total_loss = self.compute_loss(done, new_state, memory)
                 self.ep_loss += total_loss
                 # Calculate local gradients
                 grads = tape.gradient(
@@ -135,7 +131,7 @@ class Worker(threading.Thread):
                 # Update local model with new weights
                 self.local_model.set_weights(self.global_model.get_weights())
 
-                mem.clear()
+                memory.clear()
                 time_count = 0
 
             if done:
