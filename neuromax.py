@@ -24,16 +24,16 @@ ROOT = os.path.abspath(".")
 
 
 # globals
+episode_stacks_path = ""
+episode_pngs_path = ""
 current_positions = []
 initial_positions = []
 transpose_masses = []
 velocity_zero = []
-masses = []
-episode_stacks_path = ""
-episode_pngs_path = ""
-pdb_name = ""
-chains = []
 max_work = np.inf
+pdb_name = ""
+masses = []
+chains = []
 episode = 0
 step = 0
 
@@ -59,7 +59,7 @@ ACTOR_RECIPE = [
     AttrDict({
         "type": Dense,
         "units": 3,
-        "fn": "tamh"})]
+        "fn": "tanh"})]
 # critic (N, 17 + 6 + 3 = 26) -> (1) reward
 CRITIC_RECIPE = [
     AttrDict({
@@ -94,9 +94,6 @@ def load_pedagogy():
                 item = item.strip()
                 results.append(item)
     return results
-
-
-pedagogy = load_pedagogy()
 
 
 def prepare_pymol():
@@ -404,38 +401,28 @@ def make_block(array, prior):
     return Add([output, prior])
 
 
-def make_resnet(recipe, input, name, initial_input):
+def make_resnet(input_shape, recipe, name):
+    input = Input(input_shape)
     output = make_block(recipe, input)
-    for block in range(0, BLOCKS_PER_RESNET):
+    for block in range(1, BLOCKS_PER_RESNET):
         output = make_block(recipe, output)
-    output_tuple = recipe[1]
-    output = Dense(units=output_tuple[0], activation = output_tuple[1])(output)
-    resnet = Model(initial_input, output)
-    plot_model(resnet, name, show_shapes = True)
+    resnet = Model(input, output)
+    plot_model(resnet, name, show_shapes=True)
     return resnet, output
 
 
-def make_agent(num_features):
-    predictor_input = Input((PREDICTOR_INPUT_SHAPE, ))
-    predictor_first_layer = Dense(units=UNITS_PREDICTOR, activation = 'tanh')(predictor_input)
-    predictor, prediction = make_resnet(PREDICTOR_RECIPE, predictor_first_layer,
-                                                        name = 'predictor.png',
-                                                        initial_input = input)
-    predictor_to_actor = stack([predictor_input, prediction])
-    actor_input = Input((ACTOR_INPUT_SHAPE, ))
-    actor_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(actor_input)
-    actor, action = make_resnet(ACTOR_RECIPE, actor_first_layer,
-                                            name = 'actor.png',
-                                            initial_input = actor_input)
-    critic_input = Input((CRITIC_INPUT_SHAPE, ))
-    critic_first_layer = Dense(units = UNITS_PREDICTOR, activation = 'tanh')(critic_input)
-    critic, criticism = make_resnet(CRITIC_RECIPE, critic_first_layer,
-                                                name = 'critic.png',
-                                                initial_input =critic_input)
-    actor_to_critic = stack()
-
+def make_agent():
+    predictor_input_shape = (None, 17)
+    predictor, prediction = make_resnet(
+                                predictor_input_shape,
+                                PREDICTOR_RECIPE,
+                                'predictor')
+    actor_input = stack([predictor.input, prediction])
+    actor, action = make_resnet(actor_input, ACTOR_RECIPE, 'actor')
+    critic_input = stack([actor.input, prediction])
+    critic, criticism = make_resnet(critic_input, CRITIC_RECIPE, 'critic')
     agent = Model(predictor.input, [prediction, action, criticism])
-    plot_model(agent, "agent.png",show_shapes=True)
+    plot_model(agent, "agent.png", show_shapes=True)
     return predictor, actor, critic, agent
 
 
@@ -446,9 +433,11 @@ def train():
     global current_velocities
     global velocities
     global features
+    global pedagogy
     global episode
     global step
-    predictor, actor, critic, agent = make_agent(17)
+    pedagogy = load_pedagogy()
+    predictor, actor, critic, agent = make_agent()
     predictor.compile(loss="mse", optimizer="nadam")
     critic.compile(loss="mse", optimizer="nadam")
     actor.compile(loss="mse", optimizer="nadam")
