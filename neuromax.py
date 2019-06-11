@@ -20,66 +20,23 @@ class AttrDict(dict):
     __setattr__ = dict.__setitem__
 
 
-# globals
-TIMESTAMP = str(time.time())
-ROOT = os.path.abspath('.')
-episode_stacks_path = ''
-episode_pngs_path = ''
-current_positions = []
-initial_positions = []
-transpose_masses = []
-velocity_zero = []
-max_work = np.inf
-pdb_name = ''
-masses = []
-chains = []
-episode = 0
-step = 0
-
-
-# model
+# model blocks
 BLOCKS_PER_RESNET = 2
 # predictor (N, 17) -> (N, 6) x y z vx vy vz
-PREDICT_PLAN = [
-    AttrDict({
-        'type': Dense,
-        'units': 17,
-        'fn': 'tanh'}),
-    AttrDict({
-        'type': Dense,
-        'units': 6,
-        'fn': 'tanh'})]
+PREDICT_PLAN = [Dense(units=17, activation='tanh'),
+                Dense(units=6, activation='tanh')]
 # actor (N, 17 + 6 = 23) -> (N, 3) x y z
-ACTOR_PLAN = [
-    AttrDict({
-        'type': Dense,
-        'units': 23,
-        'fn': 'selu'}),
-    AttrDict({
-        'type': Dense,
-        'units': 3,
-        'fn': 'tanh'})]
+ACTOR_PLAN = [Dense(units=23, activation='selu'),
+              Dense(units=3, activation='tanh')]
 # critic (N, 17 + 6 + 3 = 26) -> (1) reward
-CRITIC_PLAN = [
-    AttrDict({
-        'type': Dense,
-        'units': 26,
-        'fn': 'tanh'}),
-    AttrDict({
-        'type': Dense,
-        'units': 1,
-        'fn': 'tanh'})]
+CRITIC_PLAN = [Dense(units=26, activation='selu'),
+               Dense(units=1, activation='tanh')]
 
 
-def make_layer(recipe, tensor):
-    layer = recipe.type(units=recipe.units, activation=recipe.activation)
-    return layer(tensor)
-
-
-def make_block(array, prior):
-    output = make_layer(array[0], prior)
-    for i in range(1, len(array)):
-        output = make_layer(array[i], output)
+def make_block(layers, prior):
+    output = layers[0](prior)
+    for layer in layers[1:]:
+        output = layer(output)
     return Add([output, prior])
 
 
@@ -104,6 +61,21 @@ def make_agent():
     return predictor, actor, critic, agent
 
 
+# globals
+TIMESTAMP = str(time.time())
+ROOT = os.path.abspath('.')
+episode_stacks_path = ''
+episode_pngs_path = ''
+initial_positions = []
+transpose_masses = []
+velocity_zero = []
+max_work = np.inf
+velocities = []
+positions = []
+pdb_name = ''
+chains = []
+episode = 0
+step = 0
 # task
 MAX_UNDOCK_DISTANCE = 100
 MIN_UNDOCK_DISTANCE = 10
@@ -140,15 +112,15 @@ def prepare_pymol():
     cmd.deselect()
 
 
+def pick_colors(number_of_colors):
+    colors = ['red', 'orange', 'yellow', 'green', 'blue', 'marine', 'violet']
+    return random.sample(colors, number_of_colors)
+
+
 def color_chainbow(chains):
     colors = pick_colors(len(chains))
     for i in range(len(chains)):
         cmd.color(colors[i], 'chain ' + chains[i])
-
-
-def pick_colors(number_of_colors):
-    colors = ['red', 'orange', 'yellow', 'green', 'blue', 'marine', 'violet']
-    return random.sample(colors, number_of_colors)
 
 
 def make_gif():
@@ -170,8 +142,8 @@ def make_gif():
 
 
 def make_image():
-    step_indicator = 'e-{}_p-{}_s-{}'.format(episode, pdb_name, step)
-    png_paths = take_pictures(step_indicator)
+    step_string = 'e-{}_p-{}_s-{}'.format(episode, pdb_name, step)
+    png_paths = take_pictures(step_string)
     images = [np.asarray(Image.open(png)) for png in png_paths]
     vstack = np.vstack(images)
     image_path = os.path.join(episode_stacks_path, pdb_name + '.png')
@@ -179,20 +151,19 @@ def make_image():
     vstack_img.save(image_path)
 
 
-def take_pictures(step_indicator):
+def take_pictures(step_string):
     print('screenshot episode', episode, 'pdb', pdb_name, 'step', step)
-    global episode_pngs_path
     cmd.deselect()
-    png_path_x = os.path.join(episode_pngs_path, step_indicator + '-X.png')
+    png_path_x = os.path.join(episode_pngs_path, step_string + '-X.png')
     cmd.png(png_path_x, width=IMAGE_SIZE, height=IMAGE_SIZE)
     time.sleep(0.02)
     cmd.rotate('y', 90)
-    png_path_y = os.path.join(episode_pngs_path, step_indicator + '-Y.png')
+    png_path_y = os.path.join(episode_pngs_path, step_string + '-Y.png')
     cmd.png(png_path_y, width=IMAGE_SIZE, height=IMAGE_SIZE)
     time.sleep(0.02)
     cmd.rotate('y', -90)
     cmd.rotate('z', 90)
-    png_path_z = os.path.join(episode_pngs_path, step_indicator + '-Z.png')
+    png_path_z = os.path.join(episode_pngs_path, step_string + '-Z.png')
     cmd.png(png_path_z, width=IMAGE_SIZE, height=IMAGE_SIZE)
     time.sleep(0.02)
     cmd.rotate('z', -90)
@@ -216,13 +187,12 @@ def get_atom_features(atom):
         atom.get_free_valence(0),
         sum([ord(i) for i in atom.resi])//len(atom.resi),
         sum([ord(i) for i in atom.resn])//len(atom.resn),
-        sum([ord(i) for i in atom.symbol])//len(atom.symbol)
-    ])
+        sum([ord(i) for i in atom.symbol])//len(atom.symbol)])
 
 
 def calculate_work():
-    distance = cdist(current_positions, initial_positions)
     # work to move atoms back to initial positions
+    distance = cdist(positions, initial_positions)
     work = distance * transpose_masses
     work = np.triu(work, 1)  # k=1 should zero main diagonal
     work = np.sum(work)
@@ -235,12 +205,12 @@ def calculate_work():
     return work
 
 
-def undock(screenshotting):
+def undock(screenshotting, chains):
+    global step
     steps_in_undock = random.randint(MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK)
     print('undocking', pdb_name, steps_in_undock, 'times')
     step_vector_array = []
     sum_vector = {}
-    # make a list of steps
     for step in range(steps_in_undock):
         current_step_vectors = []
         for chain in chains:
@@ -249,11 +219,9 @@ def undock(screenshotting):
                 random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
                 random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
                 random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
-                random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
                 random.randrange(-360, 360),
                 random.randrange(-360, 360),
-                random.randrange(-360, 360)
-                ])
+                random.randrange(-360, 360)])
             # save the sum (final destination)
             if chain not in sum_vector.keys():
                 sum_vector[chain] = vector
@@ -313,7 +281,7 @@ def unfold(screenshotting, chains):
                 cmd.index('byca (chain {})'.format(chain))])
         if screenshotting:
             make_image()
-    step = step + num_steps
+    step += num_steps
 
 
 def unfold_index(name, index):
@@ -322,8 +290,7 @@ def unfold_index(name, index):
         'first (({}`{}) extend 1 and name N)'.format(name, index),  # this N
         '({}`{})'.format(name, index),                              # this CA
         'last (({}`{}) extend 1 and name C)'.format(name, index),   # this C
-        'last (({}`{}) extend 2 and name N)'.format(name, index),   # next N
-    ]
+        'last (({}`{}) extend 2 and name N)'.format(name, index)]   # next N
     try:
         phi_random = random.randint(0, 360)
         cmd.set_dihedral(
@@ -345,14 +312,12 @@ def unfold_index(name, index):
 
 def reset():
     cmd.delete('all')
-    # make paths
-    global current_velocities
-    global current_positions
     global initial_positions
-    global screenshotting
+    global transpose_masses
     global pdb_name
     global max_work
     global episode
+    global chains
     if screenshotting:
         global episode_stacks_path
         global episode_pngs_path
@@ -376,27 +341,19 @@ def reset():
     cmd.remove('solvent')
     cmd.select(name='current', selection='all')
     initial_positions = get_positions()
-    current_velocities = np.random.normal(size=initial_positions.shape)
+    velocities = np.random.normal(size=initial_positions.shape)
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
-    masses = np.array([atom.get_mass() for atom in model.atom])
-    masses = np.array([masses, masses, masses])
+    mass = np.array([atom.get_mass() for atom in model.atom])
+    masses = np.array([mass, mass, mass])
     transpose_masses = np.transpose(masses)
-    undock()
-    unfold()
-    current_positions = get_positions()
+    undock(screenshotting, chains)
+    unfold(screenshotting, chains)
+    positions = get_positions()
     initial_work = calculate_work()
     max_work = initial_work * STOP_LOSS_MULTIPLE
-    return (
-        initial_positions,
-        current_positions,
-        current_velocities,
-        transpose_masses,
-        features,
-        masses,
-        chains,
-        max_work)
+    return (positions, velocities, mass, features)
 
 
 def move_atom(xyz, atom_index):
@@ -409,23 +366,20 @@ def move_atom(xyz, atom_index):
 def step(potentials):
     force = -1 * potentials
     acceleration = force / transpose_masses
-    noise = np.random.normal(loc=0.0, scale=ATOM_JIGGLE, size=velocities.shape)
-    velocities += acceleration + noise
+    noise = np.random.normal(loc=0.0, scale=ATOM_JIGGLE, size=potentials.shape)
+    new_velocities = velocities + acceleration + noise
     atom_index = 0
-    np.array([move_atom(xyz, atom_index) for xyz in velocities])
-    new_positions = current_positions + velocities
+    np.array([move_atom(xyz, atom_index) for xyz in new_velocities])
+    new_positions = positions + new_velocities
     work = calculate_work()
     done = work > max_work
-    state = stack(new_positions, velocities, features)
-    return state, work, done
+    return new_positions, new_velocities, work, done
 
 
 def train():
-    global initial_positions
-    global current_positions
     global screenshotting
-    global current_velocities
     global velocities
+    global positions
     global features
     global pedagogy
     global episode
@@ -440,36 +394,35 @@ def train():
     memory = []
     for i in range(NUM_EPISODES):
         screenshotting = episode % SCREENSHOT_EVERY == 0
-        initial_positions, current_positions, features = reset()
+        positions, velocities, features = reset()
         zero_velocities = np.zeros_like(initial_positions)
         done = False
         step = 0
         while not done:
-            state = stack(current_positions, current_velocities, features)
+            state = stack(positions, velocities, features)
             prediction, action, criticism = agent(state)
-            new_positions, new_velocities, reward, done = step(action)
+            new_positions, new_velocities, work, done = step(action)
             memory.append(AttrDict({
-                'current_positions': current_positions,
-                'new_positions': new_positions,
-                'current_velocities': current_velocities,
                 'new_velocities': new_velocities,
+                'new_positions': new_positions,
+                'velocities': velocities,
                 'prediction': prediction,
+                'positions': positions,
                 'criticism': criticism,
                 'action': action,
-                'reward': reward
-            }))
-            current_velocities = new_velocities
-            current_positions = new_positions
+                'work': work}))
+            velocities = new_velocities
+            positions = new_positions
             step += 1
         make_gif()
-        # optimize when done
+        # optimize
         for event in memory:
             action_result = stack(event.new_positions, event.new_velocities)
             action_target = stack(initial_positions, zero_velocities)
-            actor.fit(action_result, action_target, callbacks=callbacks)
             future = stack(event.new_positions, event.new_velocities)
+            actor.fit(action_result, action_target, callbacks=callbacks)
             predictor.fit(event.prediction, future, callbacks=callbacks)
-            critic.fit(event.criticism, event.reward, callback=callbacks)
+            critic.fit(event.criticism, event.work, callback=callbacks)
         agent.save_model()
         episode += 1
 
