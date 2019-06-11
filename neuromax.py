@@ -1,7 +1,7 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.layers import Input, Dense, Add
+from tensorflow.keras.layers import Input, Dense, add, concatenate
 from scipy.spatial.distance import cdist
-from tensorflow.keras import Model
+from tensorflow.keras.models import Model
 from pymol import cmd
 from PIL import Image
 import numpy as np
@@ -277,7 +277,7 @@ def reset(screenshotting):
     current_positions = get_positions()
     initial_work = calculate_reward()
     max_work = initial_work * STOP_LOSS_MULTIPLE
-    return initial_positions, features, masses, transpose_masses current_positions, max_work
+    return initial_positions, features, masses, transpose_masses, current_positions, max_work
 
 def move_atom(xyz, atom_index):
     xyz = list(xyz)
@@ -310,28 +310,28 @@ def make_block(array, prior):
     output = make_layer(array[0], prior)
     for i in range(1, len(array)):
         output = make_layer(array[i], output)
-    return Add()([output, prior])
+    return concatenate([output, prior])
 
 def make_resnet(recipe, input):
     output = make_block(recipe, input)
-    for block in range(1, BLOCKS_PER_RESNET):
+    for block in range(0, BLOCKS_PER_RESNET):
         output = make_block(recipe, output)
     resnet = Model(input, output)
     return resnet, output
 
 def make_agent(num_features):
-    input = Input((None, num_features))
-    predictor, prediction = make_resnet(predictor_recipe, input)
-    actor_input = concat([input, prediction])
-    actor, action = make_resnet(actor_recipe, actor_input)
+    input = Input((num_features, ))
+    predictor, prediction = make_resnet(PREDICTOR_RECIPE, input)
+    actor_input = concatenate([input, prediction])
+    actor, action = make_resnet(ACTOR_RECIPE, actor_input)
     critic_input = concat([actor_input, action])
-    critic, criticism = make_resnet(critic_recipe, critic_input)
+    critic, criticism = make_resnet(CRITIC_RECIPE, critic_input)
     agent = Model(input, [prediction, action, criticism])
     plot_model(agent, show_shapes=True)
     return predictor, actor, critic, agent
 
 def train():
-    predictor, actor, critic, agent = make_agent()
+    predictor, actor, critic, agent = make_agent(17)
     predictor.compile(optimizer="adam")
     critic.compile(optimizer="adam")
     actor.compile(optimizer="adam")
