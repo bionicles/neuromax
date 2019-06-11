@@ -25,13 +25,13 @@ LAYERS_PER_BLOCK = 2
 # predictor :: input => position+velocity prediction shape(num_atoms, 6)
 PREDICTOR_INPUT_SHAPE = 17
 UNITS_PREDICTOR = 500
-PREDICTOR_RECIPE = [(UNITS_PREDICTOR, "tanh"), (6, "relu")]
+PREDICTOR_RECIPE = [(UNITS_PREDICTOR, "tanh"), (17*2, "relu")]
 # actor     :: input, prediction => potentials shape(None, 3)
 ACTOR_INPUT_SHAPE = 17*2
 UNITS_ACTOR = 500
 ACTOR_RECIPE = [(UNITS_ACTOR, "selu"), (3, "tanh")]
 # critic    :: state, prediction, action => reward prediction shape(1)
-CRITIC_INPUT_SHAPE = 17*2 + 3
+CRITIC_INPUT_SHAPE = 17 + 6 + 3
 UNITS_CRITIC = 500
 CRITIC_RECIPE = [(UNITS_CRITIC, "tanh"), (1, "tanh")]
 # task
@@ -346,7 +346,9 @@ def make_agent(num_features):
     critic, criticism = make_resnet(CRITIC_RECIPE, critic_first_layer,
                                                 name = 'critic.png',
                                                 initial_input =critic_input)
-    agent = Model(input, [prediction, action, criticism])
+    agent_input = predictor.input
+
+    agent = Model([predictor_input, ], [prediction, action, criticism])
     plot_model(agent, "agent.png",show_shapes=True)
     return predictor, actor, critic, agent
 
