@@ -439,7 +439,6 @@ def train():
     predictor.compile(loss="mse", optimizer="nadam")
     critic.compile(loss="mse", optimizer="nadam")
     actor.compile(loss="mse", optimizer="nadam")
-    converged = False
     episode = 0
     memory = []
     for i in range(NUM_EPISODES):
