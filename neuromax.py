@@ -14,12 +14,6 @@ import time
 import csv
 import os
 
-
-class AttrDict(dict):
-    __getattr__ = dict.__getitem__
-    __setattr__ = dict.__setitem__
-
-
 # model blocks
 BLOCKS_PER_RESNET = 2
 # predictor (N, 17) -> (N, 6) x y z vx vy vz
@@ -374,6 +368,11 @@ def step(potentials):
     work = calculate_work()
     done = work > max_work
     return new_positions, new_velocities, work, done
+
+
+class AttrDict(dict):
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
 
 
 def train():
