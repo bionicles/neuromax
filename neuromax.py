@@ -34,7 +34,7 @@ def make_block(layers, prior):
     return Add([output, prior])
 
 
-def make_resnet(input, recipe, name):
+def make_resnet(input, recipe, name):  # we might need to check input type
     output = make_block(recipe, input)
     for block in range(1, BLOCKS_PER_RESNET):
         output = make_block(recipe, output)
