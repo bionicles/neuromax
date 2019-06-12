@@ -280,7 +280,7 @@ def unfold_index(name, index):
                          selection_string_array[2],
                          selection_string_array[3],
                          selection_string_array[4], random.randint(0, 360))
-    except:
+    except Exception:
         print('failed to set dihedral at ', name, index)
 
 
