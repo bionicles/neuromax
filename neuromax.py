@@ -59,7 +59,7 @@ def make_agent():
 initial_positions, velocity_zero, transpose_masses = [], [], []
 episode_stacks_path, episode_pngs_path = '', ''
 velocities, positions, chains = [], [], []
-TIMESTAMP = str(time.time())
+TIME = str(time.time())
 ROOT = os.path.abspath('.')
 episode, step = 0, 0
 max_work = np.inf
@@ -113,7 +113,7 @@ def color_chainbow(chains):
 
 
 def make_gif():
-    gif_name = 'r-{}_e-{}_p-{}.gif'.format(TIMESTAMP, episode, pdb_name)
+    gif_name = 'r-{}_e-{}_p-{}.gif'.format(TIME, episode, pdb_name)
     gif_path = os.path.join(ROOT, 'gifs', gif_name)
     imagepaths = []
     images = []
@@ -196,8 +196,7 @@ def undock(screenshotting, chains):
     global step
     steps_in_undock = random.randint(MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK)
     print('undocking', pdb_name, steps_in_undock, 'times')
-    step_vector_array = []
-    sum_vector = {}
+    step_vector_array, sum_vector = [], {}
     for step in range(steps_in_undock):
         current_step_vectors = []
         for chain in chains:  # x, y, z, rx, ry, rz
@@ -295,8 +294,7 @@ def reset():
     global initial_positions, transpose_masses, pdb_name, max_work, chains
     if screenshotting:
         global episode_stacks_path, episode_pngs_path
-        episode_images_path = os.path.join(
-            ROOT, 'images', TIMESTAMP, str(episode))
+        episode_images_path = os.path.join(ROOT, 'images', TIME, str(episode))
         os.makedirs(episode_images_path)
         episode_stacks_path = os.path.join(episode_images_path, 'stacks')
         os.makedirs(episode_stacks_path)
