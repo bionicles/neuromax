@@ -55,21 +55,16 @@ def make_agent():
     return predictor, actor, critic, agent
 
 
-# globals + task
+# globals
+initial_positions, velocity_zero, transpose_masses = [], [], []
+episode_stacks_path, episode_pngs_path = '', ''
+velocities, positions, chains = [], [], []
 TIMESTAMP = str(time.time())
 ROOT = os.path.abspath('.')
-episode_stacks_path = ''
-episode_pngs_path = ''
-initial_positions = []
-transpose_masses = []
-velocity_zero = []
+episode, step = 0, 0
 max_work = np.inf
-velocities = []
-positions = []
 pdb_name = ''
-chains = []
-episode = 0
-step = 0
+# task
 MAX_UNDOCK_DISTANCE = 100
 MIN_UNDOCK_DISTANCE = 10
 MAX_STEPS_IN_UNDOCK = 3
@@ -297,14 +292,9 @@ def unfold_index(name, index):
 
 def reset():
     cmd.delete('all')
-    global initial_positions
-    global transpose_masses
-    global pdb_name
-    global max_work
-    global chains
+    global initial_positions, transpose_masses, pdb_name, max_work, chains
     if screenshotting:
-        global episode_stacks_path
-        global episode_pngs_path
+        global episode_stacks_path, episode_pngs_path
         episode_images_path = os.path.join(
             ROOT, 'images', TIMESTAMP, str(episode))
         os.makedirs(episode_images_path)
@@ -341,9 +331,8 @@ def reset():
 
 
 def move_atom(xyz, atom_index):
-    xyz = list(xyz)
     atom_selection_string = 'id ' + str(atom_index)
-    cmd.translate(xyz, atom_selection_string)
+    cmd.translate(list(xyz), atom_selection_string)
     atom_index += 1
 
 
@@ -366,41 +355,32 @@ class AttrDict(dict):
 
 
 def train():
-    global screenshotting
-    global velocities
-    global positions
-    global features
-    global episode
-    global step
+    global screenshotting, velocities, positions, features, episode, step
     callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss')]
     predictor, actor, critic, agent = make_agent()
     predictor.compile(loss='mse', optimizer='nadam')
     critic.compile(loss='mse', optimizer='nadam')
     actor.compile(loss='mse', optimizer='nadam')
+    episode, memory = 0, []
     load_pedagogy()
-    episode = 0
-    memory = []
     for i in range(NUM_EPISODES):
         screenshotting = episode % SCREENSHOT_EVERY == 0
         positions, velocities, features = reset()
         zero_velocities = np.zeros_like(initial_positions)
-        done = False
-        step = 0
+        done, step = False, 0
         while not done:
             state = stack(positions, velocities, features)
             prediction, action, criticism = agent(state)
             new_positions, new_velocities, work, done = step(action)
-            memory.append(AttrDict({
-                'new_velocities': new_velocities,
-                'new_positions': new_positions,
-                'prediction': prediction,
-                'velocities': velocities,
-                'positions': positions,
-                'criticism': criticism,
-                'action': action,
-                'work': work}))
-            velocities = new_velocities
-            positions = new_positions
+            memory.append(AttrDict({'new_velocities': new_velocities,
+                                    'new_positions': new_positions,
+                                    'prediction': prediction,
+                                    'velocities': velocities,
+                                    'positions': positions,
+                                    'criticism': criticism,
+                                    'action': action,
+                                    'work': work}))
+            velocities, positions = new_velocities, new_positions
             step += 1
         make_gif()
         for event in memory:  # optimize
