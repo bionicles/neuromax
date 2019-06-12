@@ -132,7 +132,6 @@ def make_gif():
         images.append(image)
     print('saving gif to', gif_path)
     imageio.mimsave(gif_path, images)
-    return gif_path, gif_name
 
 
 def make_image():
@@ -310,7 +309,6 @@ def reset():
     global transpose_masses
     global pdb_name
     global max_work
-    global episode
     global chains
     if screenshotting:
         global episode_stacks_path
