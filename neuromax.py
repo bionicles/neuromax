@@ -1,12 +1,12 @@
 # neuromax.py - why?: 1 simple file with functions over classes
 from tensorflow.keras.callbacks import TensorBoard, ReduceLROnPlateau
-from tensorflow.keras.layers import Input, BatchNormalization, Dense, Add
-from tensorflow.keras.backend import random_normal, stack
-from tensorflow.keras.activations import tanh
+from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation
+from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
 from scipy.spatial.distance import cdist
-from pymol import cmd
+import tensorflow as tf
+from pymol import cmd  # 2.1.1 conda
 from PIL import Image
 import numpy as np
 import imageio
@@ -15,56 +15,51 @@ import time
 import csv
 import os
 
-N_BLOCKS = 3
+N_BLOCKS = 1
 
 
-def make_block(atoms, noise):
-    output_shape = noise.shape[1]
-    output = stack(atoms, noise)
-    output = BatchNormalization(output)
-    output = tanh(output)
-    output = Dense(output_shape, 'tanh')(output)
-    output = Dense(output_shape, 'tanh')(output)
-    output = Add(output, noise)
-    return Model([atoms, noise], output)
+def make_block(block_inputs, MaybeNoiseOrOutput):
+    block_output = Concatenate(2)([block_inputs, MaybeNoiseOrOutput])
+    block_output = Activation("tanh")(block_output)
+    block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
+    block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
+    block_output = Add()([block_output, MaybeNoiseOrOutput])
+    return block_output
 
 
-def make_resnet(name, atoms, noise, num_blocks):
-    output = make_block(atoms, noise)
-    for i in range(1, num_blocks):
-        output = make_block(atoms, output)
-    resnet = Model([atoms, noise], output)
-    plot_model(resnet, name, show_shapes=True)
-    return resnet, output
+def make_resnet(name, in1, in2):
+    print("MAKE RESNET", name)
+    features = Input((None, in1))
+    noise = Input((None, in2))
+    output = make_block(features, noise)
+    for i in range(1, N_BLOCKS):
+        output = make_block(features, output)
+    resnet = Model([features, noise], output)
+    plot_model(resnet, name + '.png', show_shapes=True)
+    return resnet
 
 
 def make_agent():
-    atoms = Input((None, 17))
-    p = Input((None, 6))
-    a = Input((None, 3))
-    c = Input((None, 1))
-    predictor, prediction = make_resnet('predictor', atoms, p, N_BLOCKS)
-    actor, action = make_resnet('actor', atoms, a, N_BLOCKS)
-    critic, criticism = make_resnet('critic', atoms, c, N_BLOCKS)
-    agent = Model([atoms, p, a, c], [prediction, action, criticism])
-    plot_model(agent, 'agent', show_shapes=True)
-    return predictor, actor, critic, agent
+    predictor = make_resnet('predictor', 17, 6)
+    actor = make_resnet('actor', 23, 3)
+    critic = make_resnet('critic', 26, 1)
+    return predictor, actor, critic
 
 
 # globals
-initial_positions, velocity_zero, transpose_masses = [], [], []
+initial_positions, velocity_zero, transpose_mass, masses = [], [], [], []
+velocities, positions, chains, model = [], [], [], []
 episode_stacks_path, episode_pngs_path = '', ''
-velocities, positions, chains = [], [], []
 TIME = str(time.time())
 ROOT = os.path.abspath('.')
-episode, step = 0, 0
+episode, step, num_atoms = 0, 0, 0
 max_work = np.inf
 pdb_name = ''
 # task
 MAX_UNDOCK_DISTANCE = 100
 MIN_UNDOCK_DISTANCE = 10
-MAX_STEPS_IN_UNDOCK = 3
-MIN_STEPS_IN_UNDOCK = 2
+MAX_STEPS_IN_UNDOCK = 1
+MIN_STEPS_IN_UNDOCK = 1
 STOP_LOSS_MULTIPLE = 10
 SCREENSHOT_EVERY = 20
 NUM_EPISODES = 10000
@@ -102,7 +97,7 @@ def pick_colors(number_of_colors):
     return random.sample(colors, number_of_colors)
 
 
-def color_chainbow(chains):
+def color_chainbow():
     colors = pick_colors(len(chains))
     for i in range(len(chains)):
         cmd.color(colors[i], 'chain ' + chains[i])
@@ -129,13 +124,13 @@ def make_image():
     png_paths = take_pictures(step_string)
     images = [np.asarray(Image.open(png)) for png in png_paths]
     vstack = np.vstack(images)
-    image_path = os.path.join(episode_stacks_path, pdb_name + '.png')
+    image_path = os.path.join(episode_stacks_path, step_string + '.png')
     vstack_img = Image.fromarray(vstack)
     vstack_img.save(image_path)
 
 
 def take_pictures(step_string):
-    print('screenshot episode', episode, 'pdb', pdb_name, 'step', step)
+    print('PNGS', TIME, 'episode', episode, 'pdb', pdb_name, 'step', step)
     cmd.deselect()
     png_path_x = os.path.join(episode_pngs_path, step_string + '-X.png')
     cmd.png(png_path_x, width=IMAGE_SIZE, height=IMAGE_SIZE)
@@ -154,8 +149,10 @@ def take_pictures(step_string):
 
 
 def get_positions():
-    model = cmd.get_model('current', 1)
-    return np.array(model.get_coord_list())
+    model = cmd.get_model('all', 1)
+    positions = np.array(model.get_coord_list())
+    print(type(positions), positions)
+    return positions
 
 
 def get_atom_features(atom):
@@ -173,13 +170,17 @@ def get_atom_features(atom):
 
 
 def calculate_work():
+    print("positions.size")
+    print(type(positions), positions)
+    print("initial_positions.size")
+    print(type(initial_positions), initial_positions, initial_positions.size)
     # work to move atoms back to initial positions
     distance = cdist(positions, initial_positions)
-    work = distance * transpose_masses
+    work = distance * transpose_mass
     work = np.triu(work, 1)  # k=1 should zero main diagonal
     work = np.sum(work)
     # work to slow atoms to a stop
-    work_to_stop = np.transpose(velocities) * transpose_masses
+    work_to_stop = np.transpose(velocities) * transpose_mass
     work_to_stop = np.triu(work_to_stop, 1)
     work_to_stop = np.sum(work_to_stop)
     if work_to_stop > 0:
@@ -259,6 +260,7 @@ def unfold(screenshot, chains):
             np.array([
                 unfold_index(name, index) for name, index in
                 cmd.index('byca (chain {})'.format(chain))])
+        cmd.deselect()
         if screenshot:
             make_image()
     step += num_steps
@@ -286,7 +288,8 @@ def unfold_index(name, index):
 
 def reset():
     cmd.delete('all')
-    global initial_positions, transpose_masses, pdb_name, max_work, chains
+    global initial_positions, positions, velocities, features, transpose_mass
+    global max_work, chains, model, pdb_name, masses, num_atoms
     if screenshot:
         global episode_stacks_path, episode_pngs_path
         episode_images_path = os.path.join(ROOT, 'images', TIME, str(episode))
@@ -296,12 +299,13 @@ def reset():
         episode_pngs_path = os.path.join(episode_images_path, 'pngs')
         os.makedirs(episode_pngs_path)
     # get pdb
-    pdb_name = random.choice(pedagogy)
+    # pdb_name = random.choice(pedagogy)
+    pdb_name = pedagogy[episode] if episode < len(pedagogy) else random.choice(pedagogy)
     pdb_file_name = pdb_name + '.pdb'
     pdb_path = os.path.join(ROOT, 'pdbs', pdb_file_name)
     print('loading', pdb_path)
     if not os.path.exists(pdb_path):
-        cmd.fetch(pdb_name, path=pdb_path, type='pdb')
+        cmd.fetch(pdb_name, path="./pdbs", type='pdb')
     elif os.path.exists(pdb_path):
         cmd.load(pdb_path)
     # setup task
@@ -309,12 +313,15 @@ def reset():
     cmd.select(name='current', selection='all')
     initial_positions = get_positions()
     velocities = np.random.normal(size=initial_positions.shape)
+    num_atoms = initial_positions.shape[0]
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
     mass = np.array([atom.get_mass() for atom in model.atom])
-    masses = np.array([mass, mass, mass])
-    transpose_masses = np.transpose(masses)
+    masses = tf.cast(tf.stack([mass, mass, mass], 1), tf.float32)
+    print("masses", masses)
+    transpose_mass = tf.cast(tf.transpose(mass), tf.float32)
+    print("transpose_mass", transpose_mass)
     undock(screenshot, chains)
     unfold(screenshot, chains)
     positions = get_positions()
@@ -329,9 +336,9 @@ def move_atom(xyz, atom_index):
     atom_index += 1
 
 
-def step(potentials):
+def move_atoms(potentials):
     force = -1 * potentials
-    acceleration = force / transpose_masses
+    acceleration = force / masses
     noise = np.random.normal(loc=0.0, scale=ATOM_JIGGLE, size=potentials.shape)
     new_velocities = velocities + acceleration + noise
     atom_index = 0
@@ -348,9 +355,9 @@ class AttrDict(dict):
 
 
 def train():
-    global screenshot, velocities, positions, features, episode, step
+    global screenshot, positions, velocities, features, episode, step
     callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss')]
-    predictor, actor, critic, agent = make_agent()
+    predictor, actor, critic = make_agent()
     predictor.compile(loss='mse', optimizer='nadam')
     critic.compile(loss='mse', optimizer='nadam')
     actor.compile(loss='mse', optimizer='nadam')
@@ -358,17 +365,25 @@ def train():
     load_pedagogy()
     for i in range(NUM_EPISODES):
         screenshot = episode % SCREENSHOT_EVERY == 0
-        positions, velocities, features = reset()
-        zero_velocities = np.zeros_like(velocities)
-        num_atoms = positions.shape[0]
+        reset()
+        positions = np.expand_dims(np.float32(positions), 0)
+        velocities = np.expand_dims(np.float32(velocities), 0)
+        features = np.expand_dims(np.float32(features), 0)
         done, step = False, 0
         while not done:
-            state = stack(positions, velocities, features)
-            p = random_normal(shape=(num_atoms, 6))
-            a = random_normal(shape=(num_atoms, 3))
-            c = random_normal(shape=(num_atoms, 1))
-            prediction, action, criticism = agent(state, p, a, c)
-            new_positions, new_velocities, work, done = step(action)
+            print("predictor call")
+            atoms = tf.concat([positions, velocities, features], 2)
+            p = random_normal(shape=(1, num_atoms, 6))
+            prediction = predictor([atoms, p])
+            print("actor call")
+            a_in = tf.concat([atoms, prediction], 2)
+            a = random_normal(shape=(1, num_atoms, 3))
+            action = actor([a_in, a])
+            print("critic call")
+            c_in = tf.concat([atoms, prediction, action], 2)
+            c = random_normal(shape=(1, num_atoms, 1))
+            criticism = critic([c_in, c])
+            new_positions, new_velocities, work, done = move_atoms(action)
             memory.append(AttrDict({'new_velocities': new_velocities,
                                     'new_positions': new_positions,
                                     'prediction': prediction,
@@ -380,14 +395,18 @@ def train():
             velocities, positions = new_velocities, new_positions
             step += 1
         make_gif()
+        zero_velocities = np.zeros_like(velocities)
+        action_target = tf.concat([initial_positions, zero_velocities], 2)
         for event in memory:  # optimize
-            action_result = stack(event.new_positions, event.new_velocities)
-            action_target = stack(initial_positions, zero_velocities)
-            future = stack(event.new_positions, event.new_velocities)
+            action_result = tf.concat(
+                                [event.new_positions, event.new_velocities], 2)
+            future = tf.concat([event.new_positions, event.new_velocities], 2)
             actor.fit(action_result, action_target, callbacks=callbacks)
             predictor.fit(event.prediction, future, callbacks=callbacks)
             critic.fit(event.criticism, event.work, callback=callbacks)
-        agent.save_model()
+        predictor.save_model()
+        critic.save_model()
+        actor.save_model()
         episode += 1
 
 
