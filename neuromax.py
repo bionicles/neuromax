@@ -34,8 +34,7 @@ def make_block(layers, prior):
     return Add([output, prior])
 
 
-def make_resnet(input_shape, recipe, name):
-    input = Input(input_shape)
+def make_resnet(input, recipe, name):
     output = make_block(recipe, input)
     for block in range(1, BLOCKS_PER_RESNET):
         output = make_block(recipe, output)
@@ -45,12 +44,13 @@ def make_resnet(input_shape, recipe, name):
 
 
 def make_agent():
-    predictor, prediction = make_resnet((None, 17), PREDICT_PLAN, 'predictor')
-    actor_input = stack([predictor.input, prediction])
+    input = Input((None, 17))
+    predictor, prediction = make_resnet(input, PREDICT_PLAN, 'predictor')
+    actor_input = stack([input, prediction])
     actor, action = make_resnet(actor_input, ACTOR_PLAN, 'actor')
-    critic_input = stack([actor.input, prediction])
+    critic_input = stack([actor_input, prediction])
     critic, criticism = make_resnet(critic_input, CRITIC_PLAN, 'critic')
-    agent = Model(predictor.input, [prediction, action, criticism])
+    agent = Model(input, [prediction, action, criticism])
     plot_model(agent, 'agent.png', show_shapes=True)
     return predictor, actor, critic, agent
 
@@ -115,8 +115,7 @@ def color_chainbow(chains):
 def make_gif():
     gif_name = 'r-{}_e-{}_p-{}.gif'.format(TIME, episode, pdb_name)
     gif_path = os.path.join(ROOT, 'gifs', gif_name)
-    imagepaths = []
-    images = []
+    imagepaths, images = [], []
     for stackname in os.listdir(episode_stacks_path):
         filepath = os.path.join(episode_stacks_path, stackname)
         imagepaths.append(filepath)
