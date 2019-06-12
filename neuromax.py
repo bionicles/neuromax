@@ -1,7 +1,7 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tf.keras.callbacks import TensorBoard, ReduceLROnPlateau
-from tensorflow.keras.layers import Input, BatchNorm, Dense, Add
-from tf.keras.backend import random_normal, stack
+from tensorflow.keras.callbacks import TensorBoard, ReduceLROnPlateau
+from tensorflow.keras.layers import Input, BatchNormalization, Dense, Add
+from tensorflow.keras.backend import random_normal, stack
 from tensorflow.keras.activations import tanh
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
@@ -21,7 +21,7 @@ N_BLOCKS = 3
 def make_block(atoms, noise):
     output_shape = noise.shape[1]
     output = stack(atoms, noise)
-    output = BatchNorm(output)
+    output = BatchNormalization(output)
     output = tanh(output)
     output = Dense(output_shape, 'tanh')(output)
     output = Dense(output_shape, 'tanh')(output)
@@ -39,10 +39,10 @@ def make_resnet(name, atoms, noise, num_blocks):
 
 
 def make_agent():
-    atoms = Input(None, 17)
-    p = Input(None, 6)
-    a = Input(None, 3)
-    c = Input(None, 1)
+    atoms = Input((None, 17))
+    p = Input((None, 6))
+    a = Input((None, 3))
+    c = Input((None, 1))
     predictor, prediction = make_resnet('predictor', atoms, p, N_BLOCKS)
     actor, action = make_resnet('actor', atoms, a, N_BLOCKS)
     critic, criticism = make_resnet('critic', atoms, c, N_BLOCKS)
