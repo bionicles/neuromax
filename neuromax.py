@@ -15,7 +15,7 @@ import csv
 import os
 
 # model blocks
-BLOCKS_PER_RESNET = 2
+BLOCKS_PER_RESNET = 3
 # predictor (N, 17) -> (N, 6) x y z vx vy vz
 PREDICT_PLAN = [Dense(units=17, activation='tanh'),
                 Dense(units=6, activation='tanh')]
@@ -55,7 +55,7 @@ def make_agent():
     return predictor, actor, critic, agent
 
 
-# globals
+# globals + task
 TIMESTAMP = str(time.time())
 ROOT = os.path.abspath('.')
 episode_stacks_path = ''
@@ -70,7 +70,6 @@ pdb_name = ''
 chains = []
 episode = 0
 step = 0
-# task
 MAX_UNDOCK_DISTANCE = 100
 MIN_UNDOCK_DISTANCE = 10
 MAX_STEPS_IN_UNDOCK = 3
@@ -84,6 +83,7 @@ ATOM_JIGGLE = 1
 
 
 def load_pedagogy():
+    global pedagogy
     with open('./csvs/pedagogy.csv') as csvfile:
         reader = csv.reader(csvfile)
         results = []
@@ -91,7 +91,7 @@ def load_pedagogy():
             for item in row:
                 item = item.strip()
                 results.append(item)
-        return results
+        pedagogy = results
 
 
 def prepare_pymol():
@@ -169,18 +169,17 @@ def get_positions():
 
 
 def get_atom_features(atom):
-    return np.array([
-        ord(atom.chain.lower())/122,
-        atom.get_mass(),
-        atom.formal_charge,
-        atom.partial_charge,
-        atom.vdw,
-        atom.q,
-        atom.b,
-        atom.get_free_valence(0),
-        sum([ord(i) for i in atom.resi])//len(atom.resi),
-        sum([ord(i) for i in atom.resn])//len(atom.resn),
-        sum([ord(i) for i in atom.symbol])//len(atom.symbol)])
+    return np.array([ord(atom.chain.lower())/122,
+                     atom.get_mass(),
+                     atom.formal_charge,
+                     atom.partial_charge,
+                     atom.vdw,
+                     atom.q,
+                     atom.b,
+                     atom.get_free_valence(0),
+                     sum([ord(i) for i in atom.resi])//len(atom.resi),
+                     sum([ord(i) for i in atom.resn])//len(atom.resn),
+                     sum([ord(i) for i in atom.symbol])//len(atom.symbol)])
 
 
 def calculate_work():
@@ -206,8 +205,7 @@ def undock(screenshotting, chains):
     sum_vector = {}
     for step in range(steps_in_undock):
         current_step_vectors = []
-        for chain in chains:
-            # x, y, z, rx, ry, rz
+        for chain in chains:  # x, y, z, rx, ry, rz
             vector = np.array([
                 random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
                 random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
@@ -285,20 +283,14 @@ def unfold_index(name, index):
         'last (({}`{}) extend 1 and name C)'.format(name, index),   # this C
         'last (({}`{}) extend 2 and name N)'.format(name, index)]   # next N
     try:
-        phi_random = random.randint(0, 360)
-        cmd.set_dihedral(
-            selection_string_array[0],
-            selection_string_array[1],
-            selection_string_array[2],
-            selection_string_array[3],
-            phi_random)
-        psi_random = random.randint(0, 360)
-        cmd.set_dihedral(
-            selection_string_array[1],
-            selection_string_array[2],
-            selection_string_array[3],
-            selection_string_array[4],
-            psi_random)
+        cmd.set_dihedral(selection_string_array[0],
+                         selection_string_array[1],
+                         selection_string_array[2],
+                         selection_string_array[3], random.randint(0, 360))
+        cmd.set_dihedral(selection_string_array[1],
+                         selection_string_array[2],
+                         selection_string_array[3],
+                         selection_string_array[4], random.randint(0, 360))
     except:
         print('failed to set dihedral at ', name, index)
 
@@ -345,7 +337,7 @@ def reset():
     positions = get_positions()
     initial_work = calculate_work()
     max_work = initial_work * STOP_LOSS_MULTIPLE
-    return (positions, velocities, mass, features)
+    return (positions, velocities, features)
 
 
 def move_atom(xyz, atom_index):
@@ -378,7 +370,6 @@ def train():
     global velocities
     global positions
     global features
-    global pedagogy
     global episode
     global step
     callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss')]
@@ -386,7 +377,7 @@ def train():
     predictor.compile(loss='mse', optimizer='nadam')
     critic.compile(loss='mse', optimizer='nadam')
     actor.compile(loss='mse', optimizer='nadam')
-    pedagogy = load_pedagogy()
+    load_pedagogy()
     episode = 0
     memory = []
     for i in range(NUM_EPISODES):
@@ -402,8 +393,8 @@ def train():
             memory.append(AttrDict({
                 'new_velocities': new_velocities,
                 'new_positions': new_positions,
-                'velocities': velocities,
                 'prediction': prediction,
+                'velocities': velocities,
                 'positions': positions,
                 'criticism': criticism,
                 'action': action,
@@ -412,8 +403,7 @@ def train():
             positions = new_positions
             step += 1
         make_gif()
-        # optimize
-        for event in memory:
+        for event in memory:  # optimize
             action_result = stack(event.new_positions, event.new_velocities)
             action_target = stack(initial_positions, zero_velocities)
             future = stack(event.new_positions, event.new_velocities)
