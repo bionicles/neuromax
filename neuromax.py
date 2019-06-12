@@ -1,10 +1,11 @@
 # neuromax.py - why?: 1 simple file with functions over classes
 from tf.keras.callbacks import TensorBoard, ReduceLROnPlateau
-from tensorflow.keras.layers import Input, Dense, Add
+from tensorflow.keras.layers import Input, BatchNorm, Dense, Add
+from tf.keras.backend import random_normal, stack
+from tensorflow.keras.activations import tanh
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
 from scipy.spatial.distance import cdist
-from tf.keras.backend import stack
 from pymol import cmd
 from PIL import Image
 import numpy as np
@@ -14,44 +15,39 @@ import time
 import csv
 import os
 
-# model blocks
-BLOCKS_PER_RESNET = 3
-# predictor (N, 17) -> (N, 6) x y z vx vy vz
-PREDICT_PLAN = [Dense(units=17, activation='tanh'),
-                Dense(units=6, activation='tanh')]
-# actor (N, 17 + 6 = 23) -> (N, 3) x y z
-ACTOR_PLAN = [Dense(units=23, activation='selu'),
-              Dense(units=3, activation='tanh')]
-# critic (N, 17 + 6 + 3 = 26) -> (1) reward
-CRITIC_PLAN = [Dense(units=26, activation='selu'),
-               Dense(units=1, activation='tanh')]
+N_BLOCKS = 3
 
 
-def make_block(layers, prior):
-    output = layers[0](prior)
-    for layer in layers[1:]:
-        output = layer(output)
-    return Add([output, prior])
+def make_block(atoms, noise):
+    output_shape = noise.shape[1]
+    output = stack(atoms, noise)
+    output = BatchNorm(output)
+    output = tanh(output)
+    output = Dense(output_shape, 'tanh')(output)
+    output = Dense(output_shape, 'tanh')(output)
+    output = Add(output, noise)
+    return Model([atoms, noise], output)
 
 
-def make_resnet(input, recipe, name):  # we might need to check input type
-    output = make_block(recipe, input)
-    for block in range(1, BLOCKS_PER_RESNET):
-        output = make_block(recipe, output)
-    resnet = Model(input, output)
+def make_resnet(name, atoms, noise, num_blocks):
+    output = make_block(atoms, noise)
+    for i in range(1, num_blocks):
+        output = make_block(atoms, output)
+    resnet = Model([atoms, noise], output)
     plot_model(resnet, name, show_shapes=True)
     return resnet, output
 
 
 def make_agent():
-    input = Input((None, 17))
-    predictor, prediction = make_resnet(input, PREDICT_PLAN, 'predictor')
-    actor_input = stack([input, prediction])
-    actor, action = make_resnet(actor_input, ACTOR_PLAN, 'actor')
-    critic_input = stack([actor_input, prediction])
-    critic, criticism = make_resnet(critic_input, CRITIC_PLAN, 'critic')
-    agent = Model(input, [prediction, action, criticism])
-    plot_model(agent, 'agent.png', show_shapes=True)
+    atoms = Input(None, 17)
+    p = Input(None, 6)
+    a = Input(None, 3)
+    c = Input(None, 1)
+    predictor, prediction = make_resnet('predictor', atoms, p, N_BLOCKS)
+    actor, action = make_resnet('actor', atoms, a, N_BLOCKS)
+    critic, criticism = make_resnet('critic', atoms, c, N_BLOCKS)
+    agent = Model([atoms, p, a, c], [prediction, action, criticism])
+    plot_model(agent, 'agent', show_shapes=True)
     return predictor, actor, critic, agent
 
 
@@ -191,7 +187,7 @@ def calculate_work():
     return work
 
 
-def undock(screenshotting, chains):
+def undock(screenshot, chains):
     global step
     steps_in_undock = random.randint(MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK)
     print('undocking', pdb_name, steps_in_undock, 'times')
@@ -225,7 +221,7 @@ def undock(screenshotting, chains):
             cmd.rotate('y', vector[4], selection_string)
             cmd.rotate('z', vector[5], selection_string)
     # set the zoom on the final destination
-    if screenshotting:
+    if screenshot:
         prepare_pymol()
     # prepare to animate undock by moving back to original position
     for chain in chains:
@@ -237,7 +233,7 @@ def undock(screenshotting, chains):
             cmd.rotate('y', vector[4], 'current and chain ' + chain)
             cmd.rotate('z', vector[5], 'current and chain ' + chain)
     # move through the list of steps, move the chains, take the screenshots
-    if screenshotting:
+    if screenshot:
         make_image()
     step = 1
     for step_vector in step_vector_array:
@@ -249,12 +245,12 @@ def undock(screenshotting, chains):
             cmd.rotate('x', chain_vector[3], 'current and chain ' + chain)
             cmd.rotate('y', chain_vector[4], 'current and chain ' + chain)
             cmd.rotate('z', chain_vector[5], 'current and chain ' + chain)
-        if screenshotting:
+        if screenshot:
             make_image()
         step += 1
 
 
-def unfold(screenshotting, chains):
+def unfold(screenshot, chains):
     global step
     num_steps = random.randint(MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK)
     print('unfolding', pdb_name, num_steps, 'times')
@@ -263,7 +259,7 @@ def unfold(screenshotting, chains):
             np.array([
                 unfold_index(name, index) for name, index in
                 cmd.index('byca (chain {})'.format(chain))])
-        if screenshotting:
+        if screenshot:
             make_image()
     step += num_steps
 
@@ -291,7 +287,7 @@ def unfold_index(name, index):
 def reset():
     cmd.delete('all')
     global initial_positions, transpose_masses, pdb_name, max_work, chains
-    if screenshotting:
+    if screenshot:
         global episode_stacks_path, episode_pngs_path
         episode_images_path = os.path.join(ROOT, 'images', TIME, str(episode))
         os.makedirs(episode_images_path)
@@ -319,12 +315,12 @@ def reset():
     mass = np.array([atom.get_mass() for atom in model.atom])
     masses = np.array([mass, mass, mass])
     transpose_masses = np.transpose(masses)
-    undock(screenshotting, chains)
-    unfold(screenshotting, chains)
+    undock(screenshot, chains)
+    unfold(screenshot, chains)
     positions = get_positions()
     initial_work = calculate_work()
     max_work = initial_work * STOP_LOSS_MULTIPLE
-    return (positions, velocities, features)
+    return positions, velocities, features
 
 
 def move_atom(xyz, atom_index):
@@ -352,7 +348,7 @@ class AttrDict(dict):
 
 
 def train():
-    global screenshotting, velocities, positions, features, episode, step
+    global screenshot, velocities, positions, features, episode, step
     callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss')]
     predictor, actor, critic, agent = make_agent()
     predictor.compile(loss='mse', optimizer='nadam')
@@ -361,13 +357,17 @@ def train():
     episode, memory = 0, []
     load_pedagogy()
     for i in range(NUM_EPISODES):
-        screenshotting = episode % SCREENSHOT_EVERY == 0
+        screenshot = episode % SCREENSHOT_EVERY == 0
         positions, velocities, features = reset()
-        zero_velocities = np.zeros_like(initial_positions)
+        zero_velocities = np.zeros_like(velocities)
+        num_atoms = positions.shape[0]
         done, step = False, 0
         while not done:
             state = stack(positions, velocities, features)
-            prediction, action, criticism = agent(state)
+            p = random_normal(shape=(num_atoms, 6))
+            a = random_normal(shape=(num_atoms, 3))
+            c = random_normal(shape=(num_atoms, 1))
+            prediction, action, criticism = agent(state, p, a, c)
             new_positions, new_velocities, work, done = step(action)
             memory.append(AttrDict({'new_velocities': new_velocities,
                                     'new_positions': new_positions,
