@@ -399,16 +399,19 @@ def train():
             step += 1
         if screenshot:
             make_gif()
-        # zero_velocities = np.zeros_like(velocities)
-        # action_target = tf.concat([initial_positions, zero_velocities], 2)
-        # for event in memory:  # optimize
-        #     future = tf.concat([event.new_p, event.new_v], 2)
-        #     predictor.fit(event.prediction, future, callbacks=callbacks)
-        #     actor.fit(future, action_target, callbacks=callbacks)
-        #     critic.fit(event.criticism, event.work, callback=callbacks)
-        # predictor.save_model()
-        # critic.save_model()
-        # actor.save_model()
+        zero_velocities = np.zeros_like(velocities)
+        zero_velocities = np.squeeze(zero_velocities, axis = 0)
+        print("initial_positions shape: ", initial_positions.shape)
+        print("zero_velocities shape: ", zero_velocities.shape)
+        action_target = tf.concat([initial_positions, zero_velocities], -1)
+        for event in memory:  # optimize
+            future = tf.concat([event.new_p, event.new_v], 2)
+            predictor.fit(event.prediction, future)
+            actor.fit(future, action_target)
+            critic.fit(event.criticism, event.work)
+        predictor.save_model()
+        critic.save_model()
+        actor.save_model()
         episode += 1
 
 
