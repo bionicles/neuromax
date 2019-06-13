@@ -88,9 +88,9 @@ def prepare_pymol():
 
 
 def pick_colors(number_of_colors):
-    colors = ['red', 'orange', 'yellow', 'green', 'blue', 'marine', 'violet']
+    colors = ['red', 'orange', 'yellow', 'green', 'blue',
+              'marine', 'violet', 'magenta', 'cyan', 'brown', 'silver']
     return random.sample(colors, number_of_colors)
-
 
 def color_chainbow():
     colors = pick_colors(len(chains))
