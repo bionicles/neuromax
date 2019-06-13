@@ -6,7 +6,7 @@ from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
 import tensorflow as tf
 from pymol import cmd  # 2.1.1 conda
-from PIL import Image
+from PIL import Image, ImageDraw
 import numpy as np
 import imageio
 import random
@@ -37,7 +37,7 @@ BUFFER = 64
 N_BLOCKS = 0
 # training
 PATIENCE = 9
-
+EPOCHS = 10
 
 def make_block(block_inputs, MaybeNoiseOrOutput):
     block_output = Concatenate(2)([block_inputs, MaybeNoiseOrOutput])
@@ -119,6 +119,11 @@ def make_image():
     vstack = np.vstack(images)
     image_path = os.path.join(episode_stacks_path, step_string + '.png')
     vstack_img = Image.fromarray(vstack)
+    x,y = vstack_img.size
+    draw = ImageDraw.Draw(vstack_img)
+    model_id_string = "Bit Pharma Neuromax: " + TIME
+    x3, y3 = draw.textsize(model_id_string)
+    draw.text(((x-x3)/2, y-42),model_id_string,(255,255,255))
     print('screenshot', image_path)
     vstack_img.save(image_path)
 
@@ -342,7 +347,8 @@ def train():
         reset()
         while not done:
             atoms = tf.concat([positions, velocities, features], 2)
-            actor.fit(x=atoms, y=initial, callbacks=callbacks)
+            actor.fit(x=atoms, y=initial, epochs=EPOCHS, batch_size=num_atoms,
+                      callbacks=callbacks, verbose=1)
             if screenshot:
                 make_image()
             step += 1
