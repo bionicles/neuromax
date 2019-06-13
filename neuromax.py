@@ -25,19 +25,19 @@ atom_index = 0
 pdb_name = ''
 # task
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 8
-MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 3, 3
+MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 3
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-SCREENSHOT_EVERY = 2
-WARMUP = 100
+SCREENSHOT_EVERY = 20
+WARMUP = 200
 IMAGE_SIZE = 256
 NOISE = 0.2
 BUFFER = 42
 # model
-N_BLOCKS = 3
+N_BLOCKS = 2
 # training
 STOP_LOSS_MULTIPLIER = 1.618
 NUM_EPISODES = 1000
-NUM_STEPS = 100
+NUM_STEPS = 10
 PATIENCE = 9
 EPOCHS = 10
 
@@ -100,7 +100,8 @@ def color_chainbow():
 
 def make_gif():
     gif_name = '{}-{}-{}.gif'.format(episode, pdb_name, TIME)
-    gif_path = os.path.join(ROOT, 'runs', TIME, 'episode', gif_name)
+    gif_path = os.path.join(episode_path, gif_name)
+    print("episode path", episode_path)
     imagepaths, images = [], []
     for stackname in os.listdir(episode_stacks_path):
         print('processing', stackname)
@@ -269,8 +270,8 @@ def reset():
     cmd.delete('all')
     global positions, velocities, chains, model, pdb_name, masses, num_atoms
     if screenshot:
-        global episode_images_path, episode_stacks_path, episode_pngs_path
-        episode_path = os.path.join(run_path, episode)
+        global episode_path, episode_images_path, episode_stacks_path, episode_pngs_path
+        episode_path = os.path.join(run_path, str(episode))
         episode_images_path = os.path.join(episode_path, 'images')
         episode_stacks_path = os.path.join(episode_path, 'stacks')
         episode_pngs_path = os.path.join(episode_images_path, 'pngs')
