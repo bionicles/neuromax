@@ -1,10 +1,9 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.callbacks import TensorBoard, ReduceLROnPlateau
+from tensorflow.keras.callbacks import TensorBoard, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
-from scipy.spatial.distance import cdist
 import tensorflow as tf
 from pymol import cmd  # 2.1.1 conda
 from PIL import Image
@@ -25,12 +24,9 @@ ROOT = os.path.abspath('.')
 TIME = str(time.time())
 pdb_name = ''
 # task
-MAX_UNDOCK_DISTANCE = 8
-MIN_UNDOCK_DISTANCE = 4
-MAX_STEPS_IN_UNDOCK = 5
-MIN_STEPS_IN_UNDOCK = 5
-MAX_STEPS_IN_UNFOLD = 0
-MIN_STEPS_IN_UNFOLD = 0
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 8
+MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 3, 4
+MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
 STOP_LOSS_MULTIPLE = 10
 SCREENSHOT_EVERY = 2
 IMAGE_SIZE = 256
@@ -39,6 +35,8 @@ NUM_STEPS = 10
 BUFFER = 64
 # model
 N_BLOCKS = 0
+# training
+PATIENCE = 9
 
 
 def make_block(block_inputs, MaybeNoiseOrOutput):
@@ -190,7 +188,6 @@ def undock():
         if chain in sum_vector.keys():
             selection_string = 'chain ' + chain
             vector = sum_vector[chain]
-            print("moving chains out!", chain, vector, type(vector))
             final_translation_vector = list(vector[:3])
             cmd.translate(final_translation_vector, selection_string)
             cmd.rotate('x', vector[3], selection_string)
@@ -204,7 +201,6 @@ def undock():
             selection_string = 'chain ' + chain
             vector = sum_vector[chain] * -1  # move back
             inverse_translation_vector = list(vector[:3])
-            print("moving chains back!", chain, inverse_translation_vector, type(inverse_translation_vector))
             cmd.translate(inverse_translation_vector, selection_string)
             cmd.rotate('x', vector[3], selection_string)
             cmd.rotate('y', vector[4], selection_string)
@@ -218,7 +214,6 @@ def undock():
             chain_vector = step_vector[k]
             chain = chains[k]
             current_vector = list(chain_vector[:3])
-            print("moving chains out!", chain, current_vector, type(current_vector))
             cmd.translate(current_vector, 'current and chain ' + chain)
             cmd.rotate('x', chain_vector[3], 'current and chain ' + chain)
             cmd.rotate('y', chain_vector[4], 'current and chain ' + chain)
@@ -334,11 +329,12 @@ def loss(action, perfection):
 
 def train():
     global screenshot, positions, velocities, features, episode, step, work
-    callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss')]
+    callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss'),
+                 EarlyStopping(monitor="loss", patience=PATIENCE)]
     actor = make_resnet('actor', 17, 3)
     adam = tf.train.AdamOptimizer()
     actor.compile(loss=loss, optimizer=adam)
-    episode, memory = 0, []
+    episode = 0
     load_pedagogy()
     for i in range(NUM_EPISODES):
         screenshot = episode % SCREENSHOT_EVERY == 0
