@@ -1,5 +1,5 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.callbacks import TensorBoard, ReduceLROnPlateau, EarlyStopping
+# from tensorflow.keras.callbacks import TensorBoard, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
@@ -14,34 +14,36 @@ import time
 import csv
 import os
 
-tf.enable_eager_execution()
 # globals
-initial, current, positions, velocities, features = [], [], [], [], []
-masses, chains, model = [], [], []
+velocities, masses, chains, model = [], [], [], []
 episode_stacks_path, episode_pngs_path = '', ''
 episode, step, num_atoms = 0, 0, 0
 ROOT = os.path.abspath('.')
 TIME = str(time.time())
+atom_index = 0
 pdb_name = ''
 # task
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 8
-MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 3, 4
+MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 3, 3
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-STOP_LOSS_MULTIPLE = 10
+NOISE = 0.382
+STOP_LOSS_MULTIPLIER = 1.618
 SCREENSHOT_EVERY = 2
+WARMUP = 100
 IMAGE_SIZE = 256
-NUM_EPISODES = 1
-NUM_STEPS = 10
-BUFFER = 64
+NUM_EPISODES = 1000
+NUM_STEPS = 100
+BUFFER = 42
 # model
-N_BLOCKS = 0
+N_BLOCKS = 3
 # training
 PATIENCE = 9
 EPOCHS = 10
 
+
 def make_block(block_inputs, MaybeNoiseOrOutput):
     block_output = Concatenate(2)([block_inputs, MaybeNoiseOrOutput])
-    block_output = Activation("tanh")(block_output)
+    block_output = Activation('tanh')(block_output)
     block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
     block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
     block_output = Add()([block_output, MaybeNoiseOrOutput])
@@ -49,7 +51,6 @@ def make_block(block_inputs, MaybeNoiseOrOutput):
 
 
 def make_resnet(name, in1, in2):
-    print("MAKE RESNET", name)
     features = Input((None, in1))
     noise = Input((None, in2))
     output = make_block(features, noise)
@@ -59,7 +60,7 @@ def make_resnet(name, in1, in2):
     try:
         plot_model(resnet, name + '.png', show_shapes=True)
     except Exception:
-        print("Failed to plot the model architecture")  # windows issue
+        print('Failed to plot the model architecture')  # windows issue
     return resnet
 
 
@@ -79,7 +80,7 @@ def prepare_pymol():
     cmd.remove('solvent')
     color_chainbow()
     cmd.set('depth_cue', 0)
-    cmd.show('surface')
+    cmd.show('spheres')
     cmd.zoom('all', buffer=BUFFER, state=-1)
     cmd.center('all')
     cmd.bg_color('black')
@@ -101,7 +102,7 @@ def make_gif():
     gif_path = os.path.join(ROOT, 'gifs', gif_name)
     imagepaths, images = [], []
     for stackname in os.listdir(episode_stacks_path):
-        print("processing", stackname)
+        print('processing', stackname)
         filepath = os.path.join(episode_stacks_path, stackname)
         imagepaths.append(filepath)
     imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
@@ -119,11 +120,11 @@ def make_image():
     vstack = np.vstack(images)
     image_path = os.path.join(episode_stacks_path, step_string + '.png')
     vstack_img = Image.fromarray(vstack)
-    x,y = vstack_img.size
+    x, y = vstack_img.size
     draw = ImageDraw.Draw(vstack_img)
-    model_id_string = "Bit Pharma Neuromax: " + TIME
+    model_id_string = 'Bit Pharma NEUROMAX: ' + TIME
     x3, y3 = draw.textsize(model_id_string)
-    draw.text(((x-x3)/2, y-42),model_id_string,(255,255,255))
+    draw.text(((x-x3)/2, y-42), model_id_string, (255, 255, 255))
     print('screenshot', image_path)
     vstack_img.save(image_path)
 
@@ -149,7 +150,7 @@ def take_pictures(step_string):
 def get_positions():
     model = cmd.get_model('all', 1)
     positions = np.array(model.get_coord_list())
-    return positions
+    return tf.convert_to_tensor(positions, preferred_dtype=tf.float32)
 
 
 def get_atom_features(atom):
@@ -166,7 +167,7 @@ def get_atom_features(atom):
                      sum([ord(i) for i in atom.symbol])//len(atom.symbol)])
 
 
-def undock():
+def undock(chains):
     global step
     steps_in_undock = random.randint(MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK)
     print('undocking', pdb_name, steps_in_undock, 'times')
@@ -228,7 +229,7 @@ def undock():
         step += 1
 
 
-def unfold():
+def unfold(chains):
     global step
     num_steps = random.randint(MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD)
     print('unfolding', pdb_name, num_steps, 'times')
@@ -264,100 +265,117 @@ def unfold_index(name, index):
 
 def reset():
     cmd.delete('all')
-    global chains, model, pdb_name, masses, num_atoms, initial
-    global initial, current, positions, velocities, features
+    global positions, velocities, chains, model, pdb_name, masses, num_atoms
     if screenshot:
         global episode_stacks_path, episode_pngs_path
         episode_images_path = os.path.join(ROOT, 'images', TIME, str(episode))
-        os.makedirs(episode_images_path)
         episode_stacks_path = os.path.join(episode_images_path, 'stacks')
-        os.makedirs(episode_stacks_path)
         episode_pngs_path = os.path.join(episode_images_path, 'pngs')
-        os.makedirs(episode_pngs_path)
+        for p in [episode_images_path, episode_stacks_path, episode_pngs_path]:
+            os.makedirs(p)
     # get pdb
     pdb_name = pedagogy[episode] if episode < len(pedagogy) else random.choice(pedagogy)
     pdb_file_name = pdb_name + '.pdb'
     pdb_path = os.path.join(ROOT, 'pdbs', pdb_file_name)
     print('loading', pdb_path)
     if not os.path.exists(pdb_path):
-        cmd.fetch(pdb_name, path="./pdbs", type='pdb')
+        cmd.fetch(pdb_name, path='./pdbs', type='pdb')
     elif os.path.exists(pdb_path):
         cmd.load(pdb_path)
     # setup task
     cmd.remove('solvent')
     cmd.select(name='current', selection='all')
     initial_positions = get_positions()
-    velocities = np.random.normal(size=initial_positions.shape)
-    initial = np.stack([initial_positions, np.zeros_like(velocities)], 1)
-    print("INITIAL SHAPE", initial.size)
+    zeroes = tf.zeros_like(initial_positions)
+    initial = tf.concat([initial_positions, zeroes], 1)
     num_atoms = initial_positions.shape[0]
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
+    features = tf.convert_to_tensor(features, preferred_dtype=tf.float32)
     mass = np.array([atom.get_mass() for atom in model.atom])
-    masses = np.float32(np.stack([mass, mass, mass], 1))
-    undock()
-    unfold()
+    mass = tf.convert_to_tensor(mass, preferred_dtype=tf.float32)
+    masses = tf.stack([mass, mass, mass], 1)
+    undock(chains)
+    unfold(chains)
     positions = get_positions()
-    initial = np.stack([positions, velocities], 1)
-    initial = np.expand_dims(np.float_32(initial), 0)
-    current = np.expand_dims(np.float_32(current), 0)
-    features = np.expand_dims(np.float32(features), 0)
+    velocities = random_normal(positions.shape, 0, NOISE, 'float')
+    print('POSITIONS SHAPE', positions.shape)
+    print('VELOCITIES SHAPE', velocities.shape)
+    current = tf.concat([positions, velocities], 1)
+    print('INITIAL SHAPE', initial.shape)
+    print('CURRENT SHAPE', current.shape)
+    print('FEATURES SHAPE', features.shape)
+    return initial, current, features
 
 
-def move_atom(xyz, atom_index):
+def move_atom(xyz):
+    global atom_index
     atom_selection_string = 'id ' + str(atom_index)
-    xyz = list(xyz)
+    xyz = xyz.numpy().tolist()
     cmd.translate(xyz, atom_selection_string)
     atom_index += 1
 
 
-def move_atoms(potentials):
-    global positions, velocities
-    force = -1 * potentials
-    acceleration = force / masses
-    noise = random_normal(potentials.shape)
-    new_velocities = tf.add_n([velocities, acceleration, noise])
-    new_velocities = tf.squeeze(new_velocities)
+def move_atoms(force_field):
+    global positions, velocities, current, atom_index
+    acceleration = force_field / masses
+    try:
+        noise = random_normal(0, NOISE, force_field.shape)
+        velocities += acceleration + noise
+    except Exception:
+        velocities += acceleration
     atom_index = 0
-    np.array([move_atom(xyz, atom_index) for xyz in new_velocities])
-    positions = positions + new_velocities
-    velocities = tf.expand_dims(new_velocities, 0)
-    return positions, velocities
+    iter_velocity = tf.squeeze(velocities)
+    np.array([move_atom(xyz) for xyz in iter_velocity])
+    positions = tf.math.add(positions, velocities)
+    current = tf.concat([positions, velocities], 1)
+    return current
 
 
-def loss(action, perfection):
-    global current
-    positions, velocities = move_atoms(action)
-    current = tf.concat(2, [positions, velocities])
-    return tf.losses.mean_squared_error(current, initial)
+def loss(action, initial):
+    current = move_atoms(action)
+    loss_value = tf.losses.mean_squared_error(current, initial)
+    print('STEP', step, 'LOSS_VALUE', loss_value)
+    return loss_value
 
 
 def train():
     global screenshot, positions, velocities, features, episode, step, work
-    callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss'),
-                 EarlyStopping(monitor="loss", patience=PATIENCE)]
+    # callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss'),
+    #              EarlyStopping(monitor='loss', patience=PATIENCE)]
     actor = make_resnet('actor', 17, 3)
     adam = tf.train.AdamOptimizer()
     episode = 0
     load_pedagogy()
-    actor.compile(loss=loss, optimizer=adam)
     for i in range(NUM_EPISODES):
-        screenshot = episode % SCREENSHOT_EVERY == 0
+        screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0
         done, step = False, 0
-        reset()
+        initial, current, features = reset()
+        initial_loss = tf.losses.mean_squared_error(current, initial)
+        stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         while not done:
-            atoms = tf.concat([positions, velocities, features], 2)
-            actor.fit(x=atoms, y=initial, epochs=EPOCHS, batch_size=num_atoms,
-                      callbacks=callbacks, verbose=1)
+            with tf.GradientTape() as tape:
+                atoms = tf.expand_dims(tf.concat([current, features], 1), 0)
+                force_field = tf.expand_dims(random_normal((num_atoms, 3)), 0)
+                force_field = tf.squeeze(actor([atoms, force_field]) * -1, 0)
+                loss_value = loss(force_field, initial)
+            gradients = tape.gradient(loss_value, actor.trainable_weights)
+            adam.apply_gradients(zip(gradients, actor.trainable_weights))
             if screenshot:
                 make_image()
             step += 1
+            done_because_step = step > NUM_STEPS
+            done_because_loss = loss_value > stop_loss
+            done = done_because_step or done_because_loss
+        reason = 'STEP' if done_because_step else 'STOP LOSS'
+        print('done because of', reason)
         if screenshot:
             make_gif()
-        actor.save_model()
         episode += 1
+    actor.save('./models/'+TIME+'.h5')
 
 
 if __name__ == '__main__':
+    tf.enable_eager_execution()
     train()
