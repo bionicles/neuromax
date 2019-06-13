@@ -313,20 +313,21 @@ def move_atom(xyz, atom_index):
 
 
 def move_atoms(potentials):
+    global positions, velocities
     force = -1 * potentials
     acceleration = force / masses
     noise = random_normal(potentials.shape)
     new_velocities = tf.add_n([velocities, acceleration, noise])
     new_velocities = tf.squeeze(new_velocities)
-    print("new_velocities size", new_velocities.shape)
     atom_index = 0
     np.array([move_atom(xyz, atom_index) for xyz in new_velocities])
-    new_positions = positions + new_velocities
-    return new_positions, tf.expand_dims(new_velocities, 0)
+    positions = positions + new_velocities
+    velocities = tf.expand_dims(new_velocities, 0)
+    return positions, velocities
 
 
 def loss(action, perfection):
-    global positions, velocities, current
+    global current
     positions, velocities = move_atoms(action)
     current = tf.concat(2, [positions, velocities])
     return tf.losses.mean_squared_error(current, initial)
@@ -338,9 +339,9 @@ def train():
                  EarlyStopping(monitor="loss", patience=PATIENCE)]
     actor = make_resnet('actor', 17, 3)
     adam = tf.train.AdamOptimizer()
-    actor.compile(loss=loss, optimizer=adam)
     episode = 0
     load_pedagogy()
+    actor.compile(loss=loss, optimizer=adam)
     for i in range(NUM_EPISODES):
         screenshot = episode % SCREENSHOT_EVERY == 0
         done, step = False, 0
