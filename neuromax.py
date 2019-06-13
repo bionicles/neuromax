@@ -401,12 +401,12 @@ def train():
             make_gif()
         zero_velocities = np.zeros_like(velocities)
         zero_velocities = np.squeeze(zero_velocities, axis = 0)
-        print("initial_positions shape: ", initial_positions.shape)
-        print("zero_velocities shape: ", zero_velocities.shape)
         action_target = tf.concat([initial_positions, zero_velocities], -1)
         for event in memory:  # optimize
-            future = tf.concat([event.new_p, event.new_v], 2)
-            predictor.fit(event.prediction, future)
+            present = tf.concat([event.positions, event.velocities, features], -1)
+            future = tf.concat([event.new_p, event.new_v], -1)
+            batch_size = future.shape[1] # fit all atoms at the same time
+            predictor.fit([present, event.prediction], future, batch_size = int(batch_size))
             actor.fit(future, action_target)
             critic.fit(event.criticism, event.work)
         predictor.save_model()
