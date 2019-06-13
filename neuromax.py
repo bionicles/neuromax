@@ -36,7 +36,10 @@ def make_resnet(name, in1, in2):
     for i in range(1, N_BLOCKS):
         output = make_block(features, output)
     resnet = Model([features, noise], output)
-    plot_model(resnet, name + '.png', show_shapes=True)
+    try:
+        plot_model(resnet, name + '.png', show_shapes=True)
+    except:
+        print("Failed to plot the model architecture") # windows issue
     return resnet
 
 
@@ -45,7 +48,6 @@ def make_agent():
     actor = make_resnet('actor', 23, 3)
     critic = make_resnet('critic', 26, 1)
     return predictor, actor, critic
-
 
 # globals
 initial_positions, velocity_zero, transpose_mass, masses = [], [], [], []
@@ -69,7 +71,8 @@ IMAGE_SIZE = 256
 NUM_EPISODES = 1
 NUM_STEPS = 10
 BUFFER = 64
-
+#model
+adam = tf.train.AdamOptimizer()
 
 def load_pedagogy():
     global pedagogy
@@ -356,9 +359,9 @@ def train():
     global screenshot, positions, velocities, features, episode, step, work
     # callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss')]
     predictor, actor, critic = make_agent()
-    predictor.compile(loss='mse', optimizer='nadam')
-    critic.compile(loss='mse', optimizer='nadam')
-    actor.compile(loss='mse', optimizer='nadam')
+    predictor.compile(loss='mse', optimizer= adam)
+    critic.compile(loss='mse', optimizer= adam)
+    actor.compile(loss='mse', optimizer= adam)
     episode, memory = 0, []
     load_pedagogy()
     for i in range(NUM_EPISODES):
