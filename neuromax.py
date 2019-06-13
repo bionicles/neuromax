@@ -1,5 +1,4 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-# from tensorflow.keras.callbacks import TensorBoard, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
@@ -10,13 +9,15 @@ from PIL import Image, ImageDraw
 import numpy as np
 import imageio
 import random
+import shutil
 import time
 import csv
 import os
 
 # globals
 velocities, masses, chains, model = [], [], [], []
-episode_stacks_path, episode_pngs_path = '', ''
+episode_images_path, episode_stacks_path = '', ''
+episode_path, run_path = '', ''
 episode, step, num_atoms = 0, 0, 0
 ROOT = os.path.abspath('.')
 TIME = str(time.time())
@@ -26,17 +27,17 @@ pdb_name = ''
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 8
 MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 3, 3
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-NOISE = 0.382
-STOP_LOSS_MULTIPLIER = 1.618
 SCREENSHOT_EVERY = 2
 WARMUP = 100
 IMAGE_SIZE = 256
-NUM_EPISODES = 1000
-NUM_STEPS = 100
+NOISE = 0.2
 BUFFER = 42
 # model
 N_BLOCKS = 3
 # training
+STOP_LOSS_MULTIPLIER = 1.618
+NUM_EPISODES = 1000
+NUM_STEPS = 100
 PATIENCE = 9
 EPOCHS = 10
 
@@ -66,7 +67,7 @@ def make_resnet(name, in1, in2):
 
 def load_pedagogy():
     global pedagogy
-    with open('./csvs/pedagogy.csv') as csvfile:
+    with open(os.path.join('.', 'pedagogy.csv')) as csvfile:
         reader = csv.reader(csvfile)
         results = []
         for row in reader:
@@ -98,8 +99,8 @@ def color_chainbow():
 
 
 def make_gif():
-    gif_name = 'r-{}_e-{}_p-{}.gif'.format(TIME, episode, pdb_name)
-    gif_path = os.path.join(ROOT, 'gifs', gif_name)
+    gif_name = '{}-{}-{}.gif'.format(episode, pdb_name, TIME)
+    gif_path = os.path.join(ROOT, 'runs', TIME, 'episode', gif_name)
     imagepaths, images = [], []
     for stackname in os.listdir(episode_stacks_path):
         print('processing', stackname)
@@ -111,6 +112,7 @@ def make_gif():
         images.append(image)
     print('saving gif to', gif_path)
     imageio.mimsave(gif_path, images)
+    shutil.rmtree(episode_images_path)
 
 
 def make_image():
@@ -267,9 +269,10 @@ def reset():
     cmd.delete('all')
     global positions, velocities, chains, model, pdb_name, masses, num_atoms
     if screenshot:
-        global episode_stacks_path, episode_pngs_path
-        episode_images_path = os.path.join(ROOT, 'images', TIME, str(episode))
-        episode_stacks_path = os.path.join(episode_images_path, 'stacks')
+        global episode_images_path, episode_stacks_path, episode_pngs_path
+        episode_path = os.path.join(run_path, episode)
+        episode_images_path = os.path.join(episode_path, 'images')
+        episode_stacks_path = os.path.join(episode_path, 'stacks')
         episode_pngs_path = os.path.join(episode_images_path, 'pngs')
         for p in [episode_images_path, episode_stacks_path, episode_pngs_path]:
             os.makedirs(p)
@@ -300,12 +303,10 @@ def reset():
     unfold(chains)
     positions = get_positions()
     velocities = random_normal(positions.shape, 0, NOISE, 'float')
-    print('POSITIONS SHAPE', positions.shape)
-    print('VELOCITIES SHAPE', velocities.shape)
     current = tf.concat([positions, velocities], 1)
-    print('INITIAL SHAPE', initial.shape)
-    print('CURRENT SHAPE', current.shape)
-    print('FEATURES SHAPE', features.shape)
+    print("")
+    print("loaded", pdb_name, "with", num_atoms, "atoms")
+    print("")
     return initial, current, features
 
 
@@ -320,13 +321,10 @@ def move_atom(xyz):
 def move_atoms(force_field):
     global positions, velocities, current, atom_index
     acceleration = force_field / masses
-    try:
-        noise = random_normal(0, NOISE, force_field.shape)
-        velocities += acceleration + noise
-    except Exception:
-        velocities += acceleration
-    atom_index = 0
+    noise = random_normal((num_atoms, 3), 0, NOISE, dtype="float32")
+    velocities += acceleration + noise
     iter_velocity = tf.squeeze(velocities)
+    atom_index = 0
     np.array([move_atom(xyz) for xyz in iter_velocity])
     positions = tf.math.add(positions, velocities)
     current = tf.concat([positions, velocities], 1)
@@ -336,19 +334,25 @@ def move_atoms(force_field):
 def loss(action, initial):
     current = move_atoms(action)
     loss_value = tf.losses.mean_squared_error(current, initial)
-    print('STEP', step, 'LOSS_VALUE', loss_value)
+    print("")
+    print('episode', episode, 'step', step, 'loss', loss_value.numpy().tolist())
+    print("")
     return loss_value
 
 
 def train():
-    global screenshot, positions, velocities, features, episode, step, work
-    # callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss'),
-    #              EarlyStopping(monitor='loss', patience=PATIENCE)]
+    global run_path, screenshot, positions, velocities, features, episode, step
+    run_path = os.path.join(ROOT, 'runs', TIME)
+    os.makedirs(run_path)
+    save_path = os.path.join(run_path, 'model.h5')
     actor = make_resnet('actor', 17, 3)
     adam = tf.train.AdamOptimizer()
     episode = 0
     load_pedagogy()
     for i in range(NUM_EPISODES):
+        print("")
+        print("BEGIN EPISODE", episode)
+        print("")
         screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0
         done, step = False, 0
         initial, current, features = reset()
@@ -373,9 +377,10 @@ def train():
         if screenshot:
             make_gif()
         episode += 1
-    actor.save('./models/'+TIME+'.h5')
+        actor.save(save_path)
 
 
 if __name__ == '__main__':
     tf.enable_eager_execution()
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     train()
