@@ -16,6 +16,28 @@ import csv
 import os
 
 tf.enable_eager_execution()
+# globals
+initial, current, positions, velocities, features = [], [], [], [], []
+masses, chains, model = [], [], []
+episode_stacks_path, episode_pngs_path = '', ''
+episode, step, num_atoms = 0, 0, 0
+ROOT = os.path.abspath('.')
+TIME = str(time.time())
+pdb_name = ''
+# task
+MAX_UNDOCK_DISTANCE = 8
+MIN_UNDOCK_DISTANCE = 4
+MAX_STEPS_IN_UNDOCK = 5
+MIN_STEPS_IN_UNDOCK = 5
+MAX_STEPS_IN_UNFOLD = 0
+MIN_STEPS_IN_UNFOLD = 0
+STOP_LOSS_MULTIPLE = 10
+SCREENSHOT_EVERY = 2
+IMAGE_SIZE = 256
+NUM_EPISODES = 1
+NUM_STEPS = 10
+BUFFER = 64
+# model
 N_BLOCKS = 0
 
 
@@ -36,39 +58,11 @@ def make_resnet(name, in1, in2):
     for i in range(1, N_BLOCKS):
         output = make_block(features, output)
     resnet = Model([features, noise], output)
-    plot_model(resnet, name + '.png', show_shapes=True)
+    try:
+        plot_model(resnet, name + '.png', show_shapes=True)
+    except Exception:
+        print("Failed to plot the model architecture")  # windows issue
     return resnet
-
-
-def make_agent():
-    predictor = make_resnet('predictor', 17, 6)
-    actor = make_resnet('actor', 23, 3)
-    critic = make_resnet('critic', 26, 1)
-    return predictor, actor, critic
-
-
-# globals
-initial_positions, velocity_zero, transpose_mass, masses = [], [], [], []
-velocities, positions, chains, model = [], [], [], []
-episode_stacks_path, episode_pngs_path = '', ''
-episode, step, num_atoms = 0, 0, 0
-ROOT = os.path.abspath('.')
-TIME = str(time.time())
-max_work = np.inf
-pdb_name = ''
-# task
-MAX_UNDOCK_DISTANCE = 8
-MIN_UNDOCK_DISTANCE = 4
-MAX_STEPS_IN_UNDOCK = 5
-MIN_STEPS_IN_UNDOCK = 5
-MAX_STEPS_IN_UNFOLD = 0
-MIN_STEPS_IN_UNFOLD = 0
-STOP_LOSS_MULTIPLE = 10
-SCREENSHOT_EVERY = 2
-IMAGE_SIZE = 256
-NUM_EPISODES = 1
-NUM_STEPS = 10
-BUFFER = 64
 
 
 def load_pedagogy():
@@ -91,7 +85,6 @@ def prepare_pymol():
     cmd.zoom('all', buffer=BUFFER, state=-1)
     cmd.center('all')
     cmd.bg_color('black')
-    # cmd.deselect()
 
 
 def pick_colors(number_of_colors):
@@ -168,22 +161,6 @@ def get_atom_features(atom):
                      sum([ord(i) for i in atom.resi])//len(atom.resi),
                      sum([ord(i) for i in atom.resn])//len(atom.resn),
                      sum([ord(i) for i in atom.symbol])//len(atom.symbol)])
-
-
-def calculate_work(p, v):
-    p = tf.squeeze(p).numpy()
-    # work to move atoms back to initial positions
-    distance = cdist(p, initial_positions)
-    work = distance * transpose_mass
-    work = np.tril(work, -1)  # k=1 should zero main diagonal
-    work = np.sum(work)
-    # work to slow atoms to a stop
-    work_to_stop = np.transpose(v) * transpose_mass
-    work_to_stop = np.triu(work_to_stop, 1)
-    work_to_stop = np.sum(work_to_stop)
-    if work_to_stop > 0:
-        work += work_to_stop
-    return work
 
 
 def undock():
@@ -287,8 +264,8 @@ def unfold_index(name, index):
 
 def reset():
     cmd.delete('all')
-    global initial_positions, positions, velocities, features, transpose_mass
-    global max_work, chains, model, pdb_name, masses, num_atoms
+    global chains, model, pdb_name, masses, num_atoms, initial
+    global initial, current, positions, velocities, features
     if screenshot:
         global episode_stacks_path, episode_pngs_path
         episode_images_path = os.path.join(ROOT, 'images', TIME, str(episode))
@@ -298,7 +275,6 @@ def reset():
         episode_pngs_path = os.path.join(episode_images_path, 'pngs')
         os.makedirs(episode_pngs_path)
     # get pdb
-    # pdb_name = random.choice(pedagogy)
     pdb_name = pedagogy[episode] if episode < len(pedagogy) else random.choice(pedagogy)
     pdb_file_name = pdb_name + '.pdb'
     pdb_path = os.path.join(ROOT, 'pdbs', pdb_file_name)
@@ -312,19 +288,21 @@ def reset():
     cmd.select(name='current', selection='all')
     initial_positions = get_positions()
     velocities = np.random.normal(size=initial_positions.shape)
+    initial = np.stack([initial_positions, np.zeros_like(velocities)], 1)
+    print("INITIAL SHAPE", initial.size)
     num_atoms = initial_positions.shape[0]
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
     mass = np.array([atom.get_mass() for atom in model.atom])
     masses = np.float32(np.stack([mass, mass, mass], 1))
-    transpose_mass = np.float32(np.transpose(mass))
     undock()
     unfold()
     positions = get_positions()
-    initial_work = calculate_work(positions, velocities)
-    max_work = initial_work * STOP_LOSS_MULTIPLE
-    return positions, velocities, features
+    initial = np.stack([positions, velocities], 1)
+    initial = np.expand_dims(np.float_32(initial), 0)
+    current = np.expand_dims(np.float_32(current), 0)
+    features = np.expand_dims(np.float32(features), 0)
 
 
 def move_atom(xyz, atom_index):
@@ -347,64 +325,33 @@ def move_atoms(potentials):
     return new_positions, tf.expand_dims(new_velocities, 0)
 
 
-class AttrDict(dict):
-    __getattr__ = dict.__getitem__
-    __setattr__ = dict.__setitem__
+def loss(action, perfection):
+    global positions, velocities, current
+    positions, velocities = move_atoms(action)
+    current = tf.concat(2, [positions, velocities])
+    return tf.losses.mean_squared_error(current, initial)
 
 
 def train():
     global screenshot, positions, velocities, features, episode, step, work
     callbacks = [TensorBoard(), ReduceLROnPlateau(monitor='loss')]
-    predictor, actor, critic = make_agent()
-    predictor.compile(loss='mse', optimizer='nadam')
-    critic.compile(loss='mse', optimizer='nadam')
-    actor.compile(loss='mse', optimizer='nadam')
+    actor = make_resnet('actor', 17, 3)
+    adam = tf.train.AdamOptimizer()
+    actor.compile(loss=loss, optimizer=adam)
     episode, memory = 0, []
     load_pedagogy()
     for i in range(NUM_EPISODES):
         screenshot = episode % SCREENSHOT_EVERY == 0
         done, step = False, 0
         reset()
-        positions = np.expand_dims(np.float32(positions), 0)
-        velocities = np.expand_dims(np.float32(velocities), 0)
-        features = np.expand_dims(np.float32(features), 0)
         while not done:
             atoms = tf.concat([positions, velocities, features], 2)
-            p = random_normal(shape=(1, num_atoms, 6))
-            prediction = predictor([atoms, p])
-            a_in = tf.concat([atoms, prediction], 2)
-            a = random_normal(shape=(1, num_atoms, 3))
-            action = actor([a_in, a])
-            c_in = tf.concat([atoms, prediction, action], 2)
-            c = random_normal(shape=(1, num_atoms, 1))
-            criticism = critic([c_in, c])
-            new_positions, new_velocities = move_atoms(action)
-            work = calculate_work(new_positions, new_velocities)
-            too_much_work = work > max_work
-            too_many_steps = step > NUM_STEPS
-            done = too_much_work or too_many_steps
-            make_image()
-            memory.append(AttrDict({'new_v': new_velocities,
-                                    'new_p': new_positions,
-                                    'prediction': prediction,
-                                    'velocities': velocities,
-                                    'positions': positions,
-                                    'criticism': criticism,
-                                    'action': action,
-                                    'work': work}))
-            velocities, positions = new_velocities, new_positions
+            actor.fit(x=atoms, y=initial, callbacks=callbacks)
+            if screenshot:
+                make_image()
             step += 1
         if screenshot:
             make_gif()
-        zero_velocities = np.zeros_like(velocities)
-        action_target = tf.concat([initial_positions, zero_velocities], 2)
-        for event in memory:  # optimize
-            future = tf.concat([event.new_p, event.new_v], 2)
-            predictor.fit(event.prediction, future, callbacks=callbacks)
-            actor.fit(future, action_target, callbacks=callbacks)
-            critic.fit(event.criticism, event.work, callback=callbacks)
-        predictor.save_model()
-        critic.save_model()
         actor.save_model()
         episode += 1
 
