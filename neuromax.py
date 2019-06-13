@@ -336,7 +336,7 @@ def loss(action, initial):
     current = move_atoms(action)
     loss_value = tf.losses.mean_squared_error(current, initial)
     print("")
-    print('episode', episode, 'step', step, 'loss', loss_value.numpy().tolist())
+    print('model', TIME, 'episode', episode, 'step', step, 'loss', loss_value.numpy().tolist())
     print("")
     return loss_value
 
