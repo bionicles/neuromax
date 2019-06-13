@@ -4,7 +4,7 @@ from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
 import tensorflow as tf
-from pymol import cmd  # 2.1.1 conda
+from pymol import cmd, util  # 2.1.1 conda
 from PIL import Image, ImageDraw
 import numpy as np
 import imageio
@@ -24,13 +24,13 @@ TIME = str(time.time())
 atom_index = 0
 pdb_name = ''
 # task
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 8
-MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 3
-MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-SCREENSHOT_EVERY = 20
-WARMUP = 200
 IMAGE_SIZE = 256
-NOISE = 0.2
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 8, 16
+MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
+MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
+SCREENSHOT_EVERY = 1
+WARMUP = 1
+NOISE = 0.002
 BUFFER = 42
 # model
 N_BLOCKS = 2
@@ -88,14 +88,13 @@ def prepare_pymol():
 
 
 def pick_colors(number_of_colors):
-    colors = ['red', 'orange', 'yellow', 'green', 'blue',
-              'marine', 'violet', 'magenta', 'cyan', 'brown', 'silver']
+    colors = ['red', 'orange', 'yellow', 'green', 'forest', 'blue',
+              'marine', 'magenta', 'deeppurple', 'cyan', 'brown', 'silver']
     return random.sample(colors, number_of_colors)
 
 def color_chainbow():
-    colors = pick_colors(len(chains))
     for i in range(len(chains)):
-        cmd.color(colors[i], 'chain ' + chains[i])
+        cmd.color(pick_colors(1)[0], 'chain ' + chains[i])
 
 
 def make_gif():
