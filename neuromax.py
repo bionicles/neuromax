@@ -92,6 +92,7 @@ def pick_colors(number_of_colors):
               'marine', 'magenta', 'deeppurple', 'cyan', 'brown', 'silver']
     return random.sample(colors, number_of_colors)
 
+
 def color_chainbow():
     for i in range(len(chains)):
         cmd.color(pick_colors(1)[0], 'chain ' + chains[i])
