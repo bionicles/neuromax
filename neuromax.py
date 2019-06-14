@@ -1,11 +1,17 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation, Attention
+from tensorflow.keras.layers import Input, Attention, Concatenate, Activation, Dense, Dropout, Add
+from tensorflow.keras.initializers import Orthogonal
 from tensorflow.keras.backend import random_normal
-from tensorflow.keras.utils import plot_model
+from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras.models import Model
+from bayes_opt import BayesianOptimization
+from bayes_opt.observer import JSONLogger
+from bayes_opt.util import load_logs
+from bayes_opt.event import Events
+from PIL import Image, ImageDraw
+from functools import partial
 import tensorflow as tf
 from pymol import cmd, util  # 2.1.1 conda
-from PIL import Image, ImageDraw
 import numpy as np
 import imageio
 import random
@@ -18,52 +24,68 @@ import os
 velocities, masses, chains, model = [], [], [], []
 episode_images_path, episode_stacks_path = '', ''
 episode_path, run_path = '', ''
-episode, step, num_atoms = 0, 0, 0
+episode, step, num_atoms, num_atoms_squared = 0, 0, 0, 0
 ROOT = os.path.abspath('.')
-TIME = str(time.time())
 atom_index = 0
 pdb_name = ''
+TIME = ''
 # task
 IMAGE_SIZE = 256
-POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 200, .01
+POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 10, 1
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 16
 MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
 SCREENSHOT_EVERY = 10
-WARMUP = 420
 NOISE = 0.002
+WARMUP = 420
 BUFFER = 42
-# model
-N_BLOCKS = 9
-UNITS = 1000
 # training
 STOP_LOSS_MULTIPLIER = 1.04
-NUM_EPISODES = 10000
+NUM_RANDOM_TRIALS, NUM_TRIALS = 20, 100
+NUM_EPISODES = 5
 NUM_STEPS = 100
+# model
+pbounds = {
+    'GAIN': (1e-5, 0.1),
+    'UNITS': (17, 2000),
+    'LR': (1e-4, 1e-2),
+    'BLOCKS': (1, 50),
+    'L1': (0, 0.1),
+    'L2': (0, 0.1),
+}
 
 
-def make_block(features, MaybeNoiseOrOutput):
+def make_block(features, MaybeNoiseOrOutput, units, gain, l1, l2):
     Attention_layer = Attention()([features, features])
     block_output = Concatenate(2)([Attention_layer, MaybeNoiseOrOutput])
     block_output = Activation('tanh')(block_output)
-    block_output = Dense(UNITS, 'tanh')(block_output)
-    block_output = Dense(UNITS, 'tanh')(block_output)
+    block_output = Dense(units,
+                         kernel_initializer=Orthogonal(gain),
+                         kernel_regularizer=L1L2(l1, l2),
+                         bias_regularizer=L1L2(l1, l2),
+                         activation='tanh'
+                         )(block_output)
+    block_output = Dropout(0.5)(block_output)
+    block_output = Dense(units,
+                         kernel_initializer=Orthogonal(gain),
+                         kernel_regularizer=L1L2(l1, l2),
+                         bias_regularizer=L1L2(l1, l2),
+                         activation='tanh'
+                         )(block_output)
+    block_output = Dropout(0.5)(block_output)
     block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
     block_output = Add()([block_output, MaybeNoiseOrOutput])
     return block_output
 
 
-def make_resnet(name, in1, in2):
+def make_resnet(name, in1, in2, units, blocks, gain, l1, l2):
     features = Input((None, in1))
     noise = Input((None, in2))
-    output = make_block(features, noise)
-    for i in range(1, N_BLOCKS):
-        output = make_block(features, output)
+    output = make_block(features, noise, units, gain, l1, l2)
+    for i in range(1, round(blocks.item())):
+        output = make_block(features, output, units, gain, l1, l2)
+    output *= -1
     resnet = Model([features, noise], output)
-    try:
-        plot_model(resnet, name + '.png', show_shapes=True)
-    except Exception:
-        print('Failed to plot the model architecture')  # windows issue
     return resnet
 
 
@@ -260,7 +282,7 @@ def unfold_index(name, index):
 def reset():
     cmd.delete('all')
     global positions, initial_distances, velocities, chains, model, pdb_name
-    global masses, num_atoms
+    global masses, num_atoms, num_atoms_squared
     if screenshot:
         global episode_path, episode_images_path
         global episode_stacks_path, episode_pngs_path
@@ -271,10 +293,8 @@ def reset():
         for p in [episode_images_path, episode_stacks_path, episode_pngs_path]:
             os.makedirs(p)
     # get pdb
-    if episode == 0:
-        pdb_name = pedagogy[-1]
-    elif episode < len(pedagogy):
-        pdb_name = pedagogy[episode - 1]
+    if episode < len(pedagogy):
+        pdb_name = pedagogy[(episode + 1) * -1]
     else:
         pdb_name = random.choice(pedagogy)
     pdb_file_name = pdb_name + '.pdb'
@@ -291,7 +311,8 @@ def reset():
     initial_distances = calculate_distances(initial_positions)
     zeroes = tf.zeros_like(initial_positions)
     initial = tf.concat([initial_positions, zeroes], 1)
-    num_atoms = initial_positions.shape[0]
+    num_atoms = int(initial_positions.shape[0])
+    num_atoms_squared = num_atoms ** 2
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
@@ -345,29 +366,33 @@ def loss(action, initial):
     # meta distance (shape loss)
     current_distances = calculate_distances(position)
     shape_loss = tf.losses.mean_squared_error(current_distances, initial_distances)
+    shape_loss /= num_atoms_squared
     shape_loss *= SHAPE_LOSS_WEIGHT
     # normal distance (position + velocity loss)
     current = tf.concat([positions, velocities], 1)
-    position_velocity_loss = tf.losses.mean_squared_error(current, initial)
-    position_velocity_loss *= POSITION_VELOCITY_LOSS_WEIGHT
+    pv_loss = tf.losses.mean_squared_error(current, initial)
+    pv_loss /= num_atoms
+    pv_loss *= POSITION_VELOCITY_LOSS_WEIGHT
     # loss value (sum)
-    loss_value = shape_loss + position_velocity_loss
+    loss_value = shape_loss + pv_loss
     print("")
     print('model', TIME, 'episode', episode, 'step', step, num_atoms, 'atoms')
     print('shape loss', shape_loss.numpy().tolist())
-    print('position velocity loss', position_velocity_loss.numpy().tolist())
+    print('p v   loss', pv_loss.numpy().tolist())
     print('total loss', loss_value.numpy().tolist())
     return loss_value
 
 
-def train():
-    global run_path, screenshot, positions, velocities, features, episode, step
+def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
+    global TIME, run_path, screenshot, positions, velocities, features, episode, step
+    TIME = str(time.time())
     run_path = os.path.join(ROOT, 'runs', TIME)
     os.makedirs(run_path)
-    save_path = os.path.join(run_path, 'model.h5')
-    actor = make_resnet('actor', 17, 3)
-    adam = tf.train.AdamOptimizer()
-    episode = 0
+    # save_path = os.path.join(run_path, 'model.h5')
+    agent = make_resnet('agent', 17, 3, units=UNITS, blocks=BLOCKS,
+                        gain=GAIN, l1=L1, l2=L2)
+    adam = tf.keras.optimizers.Nadam(learning_rate=LR, epsilon=0.1)
+    cumulative_improvement, episode = 0, 0
     load_pedagogy()
     for i in range(NUM_EPISODES):
         print("")
@@ -380,13 +405,17 @@ def train():
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         step += 1
         while not done:
+            print("")
+            print('model', TIME, 'episode', episode)
+            print("BLOCKS", round(BLOCKS), 'UNITS', round(UNITS), "LR", LR, "L1", L1, "L2", L2)
+            print("")
             with tf.GradientTape() as tape:
                 atoms = tf.expand_dims(tf.concat([current, features], 1), 0)
-                force_field = tf.expand_dims(random_normal((num_atoms, 3)), 0)
-                force_field = tf.squeeze(actor([atoms, force_field]) * -1, 0)
+                noise = tf.expand_dims(random_normal((num_atoms, 3)), 0)
+                force_field = tf.squeeze(agent([atoms, noise]), 0)
                 loss_value = loss(force_field, initial)
-            gradients = tape.gradient(loss_value, actor.trainable_weights)
-            adam.apply_gradients(zip(gradients, actor.trainable_weights))
+            gradients = tape.gradient(loss_value, agent.trainable_weights)
+            adam.apply_gradients(zip(gradients, agent.trainable_weights))
             if screenshot:
                 make_image()
             step += 1
@@ -398,13 +427,26 @@ def train():
                 stop_loss = current_stop_loss if current_stop_loss < stop_loss else stop_loss
         reason = 'STEP' if done_because_step else 'STOP LOSS'
         print('done because of', reason)
+        percent_improvement = (initial_loss - loss_value) / 100
+        cumulative_improvement += percent_improvement
         if screenshot:
             make_gif()
         episode += 1
-        actor.save(save_path)
+        # tf.saved_model.save(agent, save_path)
+    return cumulative_improvement
 
 
 if __name__ == '__main__':
     tf.enable_eager_execution()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    train()
+    logger = JSONLogger(path="./runs/logs.json")
+    optimizer = BayesianOptimization(f=partial(train), pbounds=pbounds,
+                                     verbose=2, random_state=1)
+    optimizer.subscribe(Events.OPTMIZATION_STEP, logger)
+    try:
+        load_logs(optimizer, logs=["./runs/logs.json"])
+    except Exception:
+        print("failed to load bayesian optimization logs")
+    optimizer.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
+    for i, res in enumerate(optimizer.res):
+        print("Iteration {}: \n\t{}".format(i, res))
