@@ -25,7 +25,7 @@ atom_index = 0
 pdb_name = ''
 # task
 IMAGE_SIZE = 256
-POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 1, 1
+POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 100, .01
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 16
 MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
@@ -36,7 +36,7 @@ BUFFER = 42
 # model
 N_BLOCKS = 6
 # training
-STOP_LOSS_MULTIPLIER = 1.618
+STOP_LOSS_MULTIPLIER = 1.1
 NUM_EPISODES = 1000
 NUM_STEPS = 100
 
@@ -354,16 +354,17 @@ def loss(action, initial):
     # meta distance (shape loss)
     current_distances = calculate_distances(position)
     shape_loss = tf.losses.mean_squared_error(current_distances, initial_distances)
+    shape_loss *= SHAPE_LOSS_WEIGHT
     # normal distance (position + velocity loss)
     current = tf.concat([positions, velocities], 1)
     position_velocity_loss = tf.losses.mean_squared_error(current, initial)
+    position_velocity_loss *= POSITION_VELOCITY_LOSS_WEIGHT
     # loss value (sum)
-    loss_value = shape_loss * SHAPE_LOSS_WEIGHT
-    loss_value += position_velocity_loss * POSITION_VELOCITY_LOSS_WEIGHT
+    loss_value = shape_loss + position_velocity_loss
     print("")
     print('model', TIME, 'episode', episode, 'step', step)
     print('shape loss', shape_loss.numpy().tolist())
-    print('loss', position_velocity_loss.numpy().tolist())
+    print('position velocity loss', position_velocity_loss.numpy().tolist())
     print('total loss', loss_value.numpy().tolist())
     return loss_value
 
