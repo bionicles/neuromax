@@ -404,7 +404,8 @@ def train():
             done_because_loss = loss_value > stop_loss
             done = done_because_step or done_because_loss
             if not done:
-                stop_loss = loss_value * STOP_LOSS_MULTIPLIER
+                current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
+                stop_loss = current_stop_loss if current_stop_loss < stop_loss else stop_loss
         reason = 'STEP' if done_because_step else 'STOP LOSS'
         print('done because of', reason)
         if screenshot:
