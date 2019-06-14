@@ -453,12 +453,12 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
 if __name__ == '__main__':
     tf.enable_eager_execution()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    logger = JSONLogger(path="./logs.json")
+    logger = JSONLogger(path="./runs/logs.json")
     optimizer = BayesianOptimization(f=partial(train), pbounds=pbounds,
                                      verbose=2, random_state=1)
     optimizer.subscribe(Events.OPTMIZATION_STEP, logger)
     try:
-        load_logs(optimizer, logs=["./logs.json"])
+        load_logs(optimizer, logs=["./runs/logs.json"])
     except:
         print("failed to load bayesian optimization logs")
     optimizer.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
