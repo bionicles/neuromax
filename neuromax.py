@@ -4,7 +4,7 @@ from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
 import tensorflow as tf
-from pymol import cmd  # 2.1.1 conda
+from pymol import cmd, util  # 2.1.1 conda
 from PIL import Image, ImageDraw
 import numpy as np
 import imageio
@@ -81,23 +81,12 @@ def load_pedagogy():
 
 def prepare_pymol():
     cmd.remove('solvent')
-    color_chainbow()
+    util.cbc()
     cmd.set('depth_cue', 0)
     cmd.show('spheres')
     cmd.zoom('all', buffer=BUFFER, state=-1)
     cmd.center('all')
     cmd.bg_color('black')
-
-
-def pick_colors(number_of_colors):
-    colors = ['red', 'orange', 'yellow', 'green', 'forest', 'blue',
-              'marine', 'magenta', 'deeppurple', 'cyan', 'brown', 'silver']
-    return random.sample(colors, number_of_colors)
-
-
-def color_chainbow():
-    for i in range(len(chains)):
-        cmd.color(pick_colors(1)[0], 'chain ' + chains[i])
 
 
 def make_gif():
@@ -364,7 +353,7 @@ def loss(action, initial):
     # loss value (sum)
     loss_value = shape_loss + position_velocity_loss
     print("")
-    print('model', TIME, 'episode', episode, 'step', step)
+    print('model', TIME, 'episode', episode, 'step', step, num_atoms, 'atoms')
     print('shape loss', shape_loss.numpy().tolist())
     print('position velocity loss', position_velocity_loss.numpy().tolist())
     print('total loss', loss_value.numpy().tolist())
@@ -389,6 +378,7 @@ def train():
         initial, current, features = reset()
         initial_loss = loss(tf.zeros_like(positions), initial)
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
+        step += 1
         while not done:
             with tf.GradientTape() as tape:
                 atoms = tf.expand_dims(tf.concat([current, features], 1), 0)
