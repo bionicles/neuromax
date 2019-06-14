@@ -1,5 +1,5 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation
+from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation, Attention
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
@@ -25,25 +25,27 @@ atom_index = 0
 pdb_name = ''
 # task
 IMAGE_SIZE = 256
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 8, 16
+POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 100, .01
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 16
 MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-SCREENSHOT_EVERY = 1
-WARMUP = 1
+SCREENSHOT_EVERY = 100
+WARMUP = 1000
 NOISE = 0.002
 BUFFER = 42
 # model
-N_BLOCKS = 2
+N_BLOCKS = 6
 # training
-STOP_LOSS_MULTIPLIER = 1.618
+STOP_LOSS_MULTIPLIER = 1.1
 NUM_EPISODES = 1000
 NUM_STEPS = 100
 
 
-def make_block(block_inputs, MaybeNoiseOrOutput):
-    block_output = Concatenate(2)([block_inputs, MaybeNoiseOrOutput])
+def make_block(units, features, MaybeNoiseOrOutput):
+    Attention_layer = Attention()([features, features])
+    block_output = Concatenate(2)([Attention_layer, MaybeNoiseOrOutput])
     block_output = Activation('tanh')(block_output)
-    block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
+    block_output = Dense(units, 'tanh')(block_output)
     block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
     block_output = Add()([block_output, MaybeNoiseOrOutput])
     return block_output
@@ -52,9 +54,10 @@ def make_block(block_inputs, MaybeNoiseOrOutput):
 def make_resnet(name, in1, in2):
     features = Input((None, in1))
     noise = Input((None, in2))
-    output = make_block(features, noise)
+    units = 1 + (in1 + in2) ** 2
+    output = make_block(units, features, noise)
     for i in range(1, N_BLOCKS):
-        output = make_block(features, output)
+        output = make_block(units, features, output)
     resnet = Model([features, noise], output)
     try:
         plot_model(resnet, name + '.png', show_shapes=True)
@@ -266,9 +269,11 @@ def unfold_index(name, index):
 
 def reset():
     cmd.delete('all')
-    global positions, velocities, chains, model, pdb_name, masses, num_atoms
+    global positions, initial_distances, velocities, chains, model, pdb_name
+    global masses, num_atoms
     if screenshot:
-        global episode_path, episode_images_path, episode_stacks_path, episode_pngs_path
+        global episode_path, episode_images_path
+        global episode_stacks_path, episode_pngs_path
         episode_path = os.path.join(run_path, str(episode))
         episode_images_path = os.path.join(episode_path, 'images')
         episode_stacks_path = os.path.join(episode_path, 'stacks')
@@ -276,7 +281,12 @@ def reset():
         for p in [episode_images_path, episode_stacks_path, episode_pngs_path]:
             os.makedirs(p)
     # get pdb
-    pdb_name = pedagogy[episode] if episode < len(pedagogy) else random.choice(pedagogy)
+    if episode == 0:
+        pdb_name = pedagogy[-1]
+    elif episode < len(pedagogy):
+        pdb_name = pedagogy[episode - 1]
+    else:
+        pdb_name = random.choice(pedagogy)
     pdb_file_name = pdb_name + '.pdb'
     pdb_path = os.path.join(ROOT, 'pdbs', pdb_file_name)
     print('loading', pdb_path)
@@ -288,6 +298,7 @@ def reset():
     cmd.remove('solvent')
     cmd.select(name='current', selection='all')
     initial_positions = get_positions()
+    initial_distances = calculate_distances(initial_positions)
     zeroes = tf.zeros_like(initial_positions)
     initial = tf.concat([initial_positions, zeroes], 1)
     num_atoms = initial_positions.shape[0]
@@ -318,7 +329,7 @@ def move_atom(xyz):
 
 
 def move_atoms(force_field):
-    global positions, velocities, current, atom_index
+    global positions, velocities, atom_index
     acceleration = force_field / masses
     noise = random_normal((num_atoms, 3), 0, NOISE, dtype="float32")
     velocities += acceleration + noise
@@ -326,17 +337,36 @@ def move_atoms(force_field):
     atom_index = 0
     np.array([move_atom(xyz) for xyz in iter_velocity])
     positions = tf.math.add(positions, velocities)
-    current = tf.concat([positions, velocities], 1)
-    return current
+    return positions, velocities
+
+
+def calculate_distances(position_tensor):
+    distances = tf.reduce_sum(position_tensor * position_tensor, 1)
+    distances = tf.reshape(distances, [-1, 1])
+    distances = distances - 2 * tf.matmul(
+        position_tensor,
+        tf.transpose(position_tensor)) + tf.transpose(distances)
+    return distances
 
 
 def loss(action, initial):
-    current = move_atoms(action)
-    loss_value = tf.losses.mean_squared_error(current, initial)
+    global current
+    position, velocities = move_atoms(action)
+    # meta distance (shape loss)
+    current_distances = calculate_distances(position)
+    shape_loss = tf.losses.mean_squared_error(current_distances, initial_distances)
+    shape_loss *= SHAPE_LOSS_WEIGHT
+    # normal distance (position + velocity loss)
+    current = tf.concat([positions, velocities], 1)
+    position_velocity_loss = tf.losses.mean_squared_error(current, initial)
+    position_velocity_loss *= POSITION_VELOCITY_LOSS_WEIGHT
+    # loss value (sum)
+    loss_value = shape_loss + position_velocity_loss
     print("")
-    print('model', TIME, 'episode', episode, 'step', step,
-          'loss', loss_value.numpy().tolist())
-    print("")
+    print('model', TIME, 'episode', episode, 'step', step)
+    print('shape loss', shape_loss.numpy().tolist())
+    print('position velocity loss', position_velocity_loss.numpy().tolist())
+    print('total loss', loss_value.numpy().tolist())
     return loss_value
 
 
@@ -356,7 +386,7 @@ def train():
         screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0
         done, step = False, 0
         initial, current, features = reset()
-        initial_loss = tf.losses.mean_squared_error(current, initial)
+        initial_loss = loss(tf.zeros_like(positions), initial)
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         while not done:
             with tf.GradientTape() as tape:
