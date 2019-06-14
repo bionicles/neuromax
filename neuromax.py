@@ -1,5 +1,5 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation
+from tensorflow.keras.layers import Input, Dense, Add, Concatenate, Activation, multiply
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
@@ -52,11 +52,13 @@ def make_block(units, features, MaybeNoiseOrOutput):
 
 def make_resnet(name, in1, in2):
     features = Input((None, in1))
+    attention_prob = Dense(units = in1, activation = "softmax", name = "Att_prob")(features)
+    attention_layer = multiply([features, attention_prob], name = "Att_layer")
     noise = Input((None, in2))
     units = 1 + (in1 + in2) ** 2
-    output = make_block(units, features, noise)
+    output = make_block(units, attention_layer, noise)
     for i in range(1, N_BLOCKS):
-        output = make_block(units, features, output)
+        output = make_block(units, attention_layer, output)
     resnet = Model([features, noise], output)
     try:
         plot_model(resnet, name + '.png', show_shapes=True)
