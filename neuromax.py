@@ -365,7 +365,6 @@ def loss(action, initial):
     print('shape loss', shape_loss.numpy().tolist())
     print('loss', position_velocity_loss.numpy().tolist())
     print('total loss', loss_value.numpy().tolist())
-    print('initial loss', )
     return loss_value
 
 
