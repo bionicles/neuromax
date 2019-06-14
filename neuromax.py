@@ -4,7 +4,7 @@ from tensorflow.keras.backend import random_normal
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Model
 import tensorflow as tf
-from pymol import cmd, util  # 2.1.1 conda
+from pymol import cmd  # 2.1.1 conda
 from PIL import Image, ImageDraw
 import numpy as np
 import imageio
@@ -37,9 +37,7 @@ N_BLOCKS = 2
 # training
 STOP_LOSS_MULTIPLIER = 1.618
 NUM_EPISODES = 1000
-NUM_STEPS = 10
-PATIENCE = 9
-EPOCHS = 10
+NUM_STEPS = 100
 
 
 def make_block(block_inputs, MaybeNoiseOrOutput):
@@ -336,7 +334,8 @@ def loss(action, initial):
     current = move_atoms(action)
     loss_value = tf.losses.mean_squared_error(current, initial)
     print("")
-    print('model', TIME, 'episode', episode, 'step', step, 'loss', loss_value.numpy().tolist())
+    print('model', TIME, 'episode', episode, 'step', step,
+          'loss', loss_value.numpy().tolist())
     print("")
     return loss_value
 
