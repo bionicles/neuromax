@@ -13,6 +13,8 @@ import shutil
 import time
 import csv
 import os
+from bayes_opt import BayesianOptimization
+from functools import partial
 
 # globals
 velocities, masses, chains, model = [], [], [], []
@@ -36,29 +38,30 @@ BUFFER = 42
 # model
 N_BLOCKS = 9
 UNITS = 1000
+learning_rate = 0.01
 # training
 STOP_LOSS_MULTIPLIER = 1.04
 NUM_EPISODES = 10000
 NUM_STEPS = 100
 
 
-def make_block(features, MaybeNoiseOrOutput):
+def make_block(features, MaybeNoiseOrOutput, n_units):
     Attention_layer = Attention()([features, features])
     block_output = Concatenate(2)([Attention_layer, MaybeNoiseOrOutput])
     block_output = Activation('tanh')(block_output)
-    block_output = Dense(UNITS, 'tanh')(block_output)
-    block_output = Dense(UNITS, 'tanh')(block_output)
+    block_output = Dense(units = n_units, activation = 'tanh')(block_output)
+    block_output = Dense(units = n_units, activation = 'tanh')(block_output)
     block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
     block_output = Add()([block_output, MaybeNoiseOrOutput])
     return block_output
 
 
-def make_resnet(name, in1, in2):
+def make_resnet(name, in1, in2, units):
     features = Input((None, in1))
     noise = Input((None, in2))
-    output = make_block(features, noise)
+    output = make_block(features, noise, units)
     for i in range(1, N_BLOCKS):
-        output = make_block(features, output)
+        output = make_block(features, output, units)
     resnet = Model([features, noise], output)
     try:
         plot_model(resnet, name + '.png', show_shapes=True)
@@ -371,13 +374,13 @@ def loss(action, initial):
     return loss_value
 
 
-def train():
+def train(lr, units):
     global run_path, screenshot, positions, velocities, features, episode, step
     run_path = os.path.join(ROOT, 'runs', TIME)
     os.makedirs(run_path)
     save_path = os.path.join(run_path, 'model.h5')
-    actor = make_resnet('actor', 17, 3)
-    adam = tf.train.AdamOptimizer()
+    actor = make_resnet('actor', 17, 3, units = units)
+    adam = tf.train.AdamOptimizer(learning_rate = lr)
     episode = 0
     load_pedagogy()
     for i in range(NUM_EPISODES):
@@ -417,4 +420,9 @@ def train():
 if __name__ == '__main__':
     tf.enable_eager_execution()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    train()
+    train_with_partial = partial(train)
+    pbounds = {'lr': (1e-4, 1e-2), 'units' : (500, 1000)}
+    optimizer = BayesianOptimization( f=train_with_partial, pbounds=pbounds, verbose=2, random_state=1,)
+    optimizer.maximize(init_points=10, n_iter=10)
+    for i, res in enumerate(optimizer.res):
+        print("Iteration {}: \n\t{}".format(i, res))
