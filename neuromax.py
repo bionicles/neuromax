@@ -280,7 +280,12 @@ def reset():
         for p in [episode_images_path, episode_stacks_path, episode_pngs_path]:
             os.makedirs(p)
     # get pdb
-    pdb_name = pedagogy[episode] if episode < len(pedagogy) else random.choice(pedagogy)
+    if episode == 0:
+        pdb_name = pedagogy[-1]
+    elif episode < len(pedagogy):
+        pdb_name = pedagogy[episode - 1]
+    else:
+        pdb_name = random.choice(pedagogy)
     pdb_file_name = pdb_name + '.pdb'
     pdb_path = os.path.join(ROOT, 'pdbs', pdb_file_name)
     print('loading', pdb_path)
@@ -359,7 +364,8 @@ def loss(action, initial):
     print('model', TIME, 'episode', episode, 'step', step)
     print('shape loss', shape_loss.numpy().tolist())
     print('loss', position_velocity_loss.numpy().tolist())
-    print('total loss', loss_value)
+    print('total loss', loss_value.numpy().tolist())
+    print('initial loss', )
     return loss_value
 
 
@@ -379,7 +385,7 @@ def train():
         screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0
         done, step = False, 0
         initial, current, features = reset()
-        initial_loss = tf.losses.mean_squared_error(current, initial)
+        initial_loss = loss(tf.zeros_like(positions), initial)
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         while not done:
             with tf.GradientTape() as tape:
