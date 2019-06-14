@@ -24,26 +24,27 @@ TIME = str(time.time())
 atom_index = 0
 pdb_name = ''
 # task
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 8
-MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 3
-MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-SCREENSHOT_EVERY = 10
-WARMUP = 1000
 IMAGE_SIZE = 256
+POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 1, 1
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 16
+MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
+MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
+SCREENSHOT_EVERY = 100
+WARMUP = 1000
 NOISE = 0.002
 BUFFER = 42
 # model
-N_BLOCKS = 2
+N_BLOCKS = 6
 # training
 STOP_LOSS_MULTIPLIER = 1.618
 NUM_EPISODES = 1000
 NUM_STEPS = 100
 
 
-def make_block(block_inputs, MaybeNoiseOrOutput):
-    block_output = Concatenate(2)([block_inputs, MaybeNoiseOrOutput])
+def make_block(units, features, MaybeNoiseOrOutput):
+    block_output = Concatenate(2)([features, MaybeNoiseOrOutput])
     block_output = Activation('tanh')(block_output)
-    block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
+    block_output = Dense(units, 'tanh')(block_output)
     block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
     block_output = Add()([block_output, MaybeNoiseOrOutput])
     return block_output
@@ -52,9 +53,10 @@ def make_block(block_inputs, MaybeNoiseOrOutput):
 def make_resnet(name, in1, in2):
     features = Input((None, in1))
     noise = Input((None, in2))
-    output = make_block(features, noise)
+    units = 1 + (in1 + in2) ** 2
+    output = make_block(units, features, noise)
     for i in range(1, N_BLOCKS):
-        output = make_block(features, output)
+        output = make_block(units, features, output)
     resnet = Model([features, noise], output)
     try:
         plot_model(resnet, name + '.png', show_shapes=True)
@@ -86,14 +88,14 @@ def prepare_pymol():
 
 
 def pick_colors(number_of_colors):
-    colors = ['red', 'orange', 'yellow', 'green', 'blue', 'marine', 'violet']
+    colors = ['red', 'orange', 'yellow', 'green', 'forest', 'blue',
+              'marine', 'magenta', 'deeppurple', 'cyan', 'brown', 'silver']
     return random.sample(colors, number_of_colors)
 
 
 def color_chainbow():
-    colors = pick_colors(len(chains))
     for i in range(len(chains)):
-        cmd.color(colors[i], 'chain ' + chains[i])
+        cmd.color(pick_colors(1)[0], 'chain ' + chains[i])
 
 
 def make_gif():
@@ -266,9 +268,11 @@ def unfold_index(name, index):
 
 def reset():
     cmd.delete('all')
-    global positions, velocities, chains, model, pdb_name, masses, num_atoms
+    global positions, initial_distances, velocities, chains, model, pdb_name
+    global masses, num_atoms
     if screenshot:
-        global episode_path, episode_images_path, episode_stacks_path, episode_pngs_path
+        global episode_path, episode_images_path
+        global episode_stacks_path, episode_pngs_path
         episode_path = os.path.join(run_path, str(episode))
         episode_images_path = os.path.join(episode_path, 'images')
         episode_stacks_path = os.path.join(episode_path, 'stacks')
@@ -288,6 +292,7 @@ def reset():
     cmd.remove('solvent')
     cmd.select(name='current', selection='all')
     initial_positions = get_positions()
+    initial_distances = calculate_distances(initial_positions)
     zeroes = tf.zeros_like(initial_positions)
     initial = tf.concat([initial_positions, zeroes], 1)
     num_atoms = initial_positions.shape[0]
@@ -318,7 +323,7 @@ def move_atom(xyz):
 
 
 def move_atoms(force_field):
-    global positions, velocities, current, atom_index
+    global positions, velocities, atom_index
     acceleration = force_field / masses
     noise = random_normal((num_atoms, 3), 0, NOISE, dtype="float32")
     velocities += acceleration + noise
@@ -326,16 +331,35 @@ def move_atoms(force_field):
     atom_index = 0
     np.array([move_atom(xyz) for xyz in iter_velocity])
     positions = tf.math.add(positions, velocities)
-    current = tf.concat([positions, velocities], 1)
-    return current
+    return positions, velocities
+
+
+def calculate_distances(position_tensor):
+    distances = tf.reduce_sum(position_tensor * position_tensor, 1)
+    distances = tf.reshape(distances, [-1, 1])
+    distances = distances - 2 * tf.matmul(
+        position_tensor,
+        tf.transpose(position_tensor)) + tf.transpose(distances)
+    return distances
 
 
 def loss(action, initial):
-    current = move_atoms(action)
-    loss_value = tf.losses.mean_squared_error(current, initial)
+    global current
+    position, velocities = move_atoms(action)
+    # meta distance (shape loss)
+    current_distances = calculate_distances(position)
+    shape_loss = tf.losses.mean_squared_error(current_distances, initial_distances)
+    # normal distance (position + velocity loss)
+    current = tf.concat([positions, velocities], 1)
+    position_velocity_loss = tf.losses.mean_squared_error(current, initial)
+    # loss value (sum)
+    loss_value = shape_loss * SHAPE_LOSS_WEIGHT
+    loss_value += position_velocity_loss * POSITION_VELOCITY_LOSS_WEIGHT
     print("")
-    print('model', TIME, 'episode', episode, 'step', step, 'loss', loss_value.numpy().tolist())
-    print("")
+    print('model', TIME, 'episode', episode, 'step', step)
+    print('shape loss', shape_loss.numpy().tolist())
+    print('loss', position_velocity_loss.numpy().tolist())
+    print('total loss', loss_value)
     return loss_value
 
 
