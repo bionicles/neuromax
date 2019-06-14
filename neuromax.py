@@ -29,8 +29,8 @@ POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 100, .01
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 16
 MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-SCREENSHOT_EVERY = 100
-WARMUP = 1000
+SCREENSHOT_EVERY = 1
+WARMUP = 42
 NOISE = 0.002
 BUFFER = 42
 # model
@@ -42,7 +42,7 @@ NUM_STEPS = 100
 
 
 def make_block(units, features, MaybeNoiseOrOutput):
-    Attention_layer = Attention([features, features])
+    Attention_layer = Attention()([features, features])
     block_output = Concatenate(2)([Attention_layer, MaybeNoiseOrOutput])
     block_output = Activation('tanh')(block_output)
     block_output = Dense(units, 'tanh')(block_output)
