@@ -25,27 +25,29 @@ atom_index = 0
 pdb_name = ''
 # task
 IMAGE_SIZE = 256
-POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 100, .01
+POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 200, .01
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 16
 MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-SCREENSHOT_EVERY = 1
-WARMUP = 42
+SCREENSHOT_EVERY = 10
+WARMUP = 420
 NOISE = 0.002
 BUFFER = 42
 # model
-N_BLOCKS = 6
+N_BLOCKS = 9
+UNITS = 1000
 # training
-STOP_LOSS_MULTIPLIER = 1.1
-NUM_EPISODES = 1000
+STOP_LOSS_MULTIPLIER = 1.04
+NUM_EPISODES = 10000
 NUM_STEPS = 100
 
 
-def make_block(units, features, MaybeNoiseOrOutput):
+def make_block(features, MaybeNoiseOrOutput):
     Attention_layer = Attention()([features, features])
     block_output = Concatenate(2)([Attention_layer, MaybeNoiseOrOutput])
     block_output = Activation('tanh')(block_output)
-    block_output = Dense(units, 'tanh')(block_output)
+    block_output = Dense(UNITS, 'tanh')(block_output)
+    block_output = Dense(UNITS, 'tanh')(block_output)
     block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
     block_output = Add()([block_output, MaybeNoiseOrOutput])
     return block_output
@@ -54,10 +56,9 @@ def make_block(units, features, MaybeNoiseOrOutput):
 def make_resnet(name, in1, in2):
     features = Input((None, in1))
     noise = Input((None, in2))
-    units = 1 + (in1 + in2) ** 2
-    output = make_block(units, features, noise)
+    output = make_block(features, noise)
     for i in range(1, N_BLOCKS):
-        output = make_block(units, features, output)
+        output = make_block(features, output)
     resnet = Model([features, noise], output)
     try:
         plot_model(resnet, name + '.png', show_shapes=True)
@@ -402,6 +403,8 @@ def train():
             done_because_step = step > NUM_STEPS
             done_because_loss = loss_value > stop_loss
             done = done_because_step or done_because_loss
+            if not done:
+                stop_loss = loss_value * STOP_LOSS_MULTIPLIER
         reason = 'STEP' if done_because_step else 'STOP LOSS'
         print('done because of', reason)
         if screenshot:
