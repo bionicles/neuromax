@@ -1,4 +1,5 @@
 from PIL import Image
+import array
 import numpy as np
 import imageio
 import random
@@ -8,8 +9,6 @@ import time
 import gym
 import csv
 import os
-
-from array import Array
 import pymol
 
 cmd = pymol.cmd
@@ -29,8 +28,8 @@ class PyMolEnv(gym.Env):
         self.config = config
         self.episode = 0
         # define spaces
-        self.observation_space = Array(shape=(None, 17))
-        self.action_space = Array(shape=(None, 3), high=(6,), low=(-6,))
+        self.observation_space = array.Array(shape=(None, 17))
+        self.action_space = array.Array(shape=(None, 3), high=(6,), low=(-6,))
 
     def reset(self):
         self.episode += 1
@@ -61,7 +60,7 @@ class PyMolEnv(gym.Env):
         self.undock()
         # self.unfold()
         # update action space with the shape
-        self.action_space = Array(
+        self.action_space = array.Array(
             shape=self.velocities.shape,
             high=(6,),
             low=(-6,)
@@ -80,7 +79,7 @@ class PyMolEnv(gym.Env):
             )
         print("undocking", self.pdb, steps_in_undock, "times")
         sum_vector = {}
-        step_vector_array = []
+        step_vector_ = []
         min_undock = self.config.MIN_UNDOCK_DISTANCE
         max_undock = self.config.MAX_UNDOCK_DISTANCE
         # make a list of steps
