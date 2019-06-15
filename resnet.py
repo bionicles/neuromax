@@ -3,10 +3,10 @@ from tensorflow.keras.initializers import Orthogonal
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras import Model
-
+#https://ray.readthedocs.io/en/latest/rllib-models.html
 
 class ResNet(Model):
-    def __init__( self, name, in1, in2, layers, units, blocks, gain, l1, l2):
+    def __init__(self, name, in1, in2, layers, units, blocks, gain, l1, l2):
         self.name = name
         self.in1 = in1
         self.in2 = in2
@@ -31,7 +31,7 @@ class ResNet(Model):
         block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
         block_output = Add()([block_output, MaybeNoiseOrOutput])
         return block_output
-    def make_resnet(self, name, in1, in2, layers, units, blocks, gain, l1, l2):
+    def make_resnet(self,  input_dict, num_outputs, options)):
         features = Input((None, self.in1))
         noise = Input((None, self.in2))
         output = make_block(features, noise, self.layers, self.units, self.gain, self.l1, self.l2)

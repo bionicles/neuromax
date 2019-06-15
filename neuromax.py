@@ -1,6 +1,7 @@
 #NeuroImpala, why? use neuromax with IMPALA
 from mol import PyMolEnv
 import ray
+from resnet import ResNet
 from ray.tune.registry import register_env
 from ray.rllib.agents import impala # https://github.com/ray-project/ray/blob/master/python/ray/rllib/agents/impala/impala.py
 
