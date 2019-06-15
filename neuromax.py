@@ -19,13 +19,14 @@ import shutil
 import time
 import csv
 import os
-
 # globals
+episode, step, num_atoms, num_atoms_squared = 0, 0, 0, 0
 velocities, masses, chains, model = [], [], [], []
 episode_images_path, episode_stacks_path = '', ''
 episode_path, run_path = '', ''
-episode, step, num_atoms, num_atoms_squared = 0, 0, 0, 0
 ROOT = os.path.abspath('.')
+bayesopt = object
+SAVE_MODEL = False
 atom_index = 0
 pdb_name = ''
 TIME = ''
@@ -35,20 +36,22 @@ POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 10, 1
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 16
 MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-SCREENSHOT_EVERY = 10
+SCREENSHOT_EVERY = 5
 NOISE = 0.002
-WARMUP = 420
+WARMUP = 1000
 BUFFER = 42
 # training
 STOP_LOSS_MULTIPLIER = 1.04
-NUM_RANDOM_TRIALS, NUM_TRIALS = 20, 100
-NUM_EPISODES = 5
+NUM_RANDOM_TRIALS, NUM_TRIALS = 2, 8
+NUM_EXPERIMENTS = 1000
+NUM_EPISODES = 20
 NUM_STEPS = 100
+VERBOSE = False
 # model
 pbounds = {
     'GAIN': (1e-5, 0.1),
     'UNITS': (17, 2000),
-    'LR': (1e-4, 1e-2),
+    'LR': (1e-4, 1e-1),
     'BLOCKS': (1, 50),
     'L1': (0, 0.1),
     'L2': (0, 0.1),
@@ -375,11 +378,11 @@ def loss(action, initial):
     pv_loss *= POSITION_VELOCITY_LOSS_WEIGHT
     # loss value (sum)
     loss_value = shape_loss + pv_loss
-    print("")
-    print('model', TIME, 'episode', episode, 'step', step, num_atoms, 'atoms')
-    print('shape loss', shape_loss.numpy().tolist())
-    print('p v   loss', pv_loss.numpy().tolist())
-    print('total loss', loss_value.numpy().tolist())
+    if VERBOSE:
+        print('model', TIME, 'episode', episode, 'step', step, num_atoms, 'atoms')
+        print('shape loss', shape_loss.numpy().tolist())
+        print('p v   loss', pv_loss.numpy().tolist())
+        print('total loss', loss_value.numpy().tolist())
     return loss_value
 
 
@@ -388,10 +391,13 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
     TIME = str(time.time())
     run_path = os.path.join(ROOT, 'runs', TIME)
     os.makedirs(run_path)
-    # save_path = os.path.join(run_path, 'model.h5')
+    if SAVE_MODEL:
+        save_path = os.path.join(run_path, 'model.h5')
+    done, step = False, 0
     agent = make_resnet('agent', 17, 3, units=UNITS, blocks=BLOCKS,
                         gain=GAIN, l1=L1, l2=L2)
-    adam = tf.keras.optimizers.Nadam(learning_rate=LR, epsilon=0.1)
+    decayed_lr = tf.train.exponential_decay(LR, step, 10000, 0.95, staircase=True)
+    adam = tf.train.AdamOptimizer(decayed_lr, epsilon=0.1)
     cumulative_improvement, episode = 0, 0
     load_pedagogy()
     for i in range(NUM_EPISODES):
@@ -399,7 +405,7 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
         print("BEGIN EPISODE", episode)
         print("")
         screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0
-        done, step = False, 0
+
         initial, current, features = reset()
         initial_loss = loss(tf.zeros_like(positions), initial)
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
@@ -432,21 +438,40 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
         if screenshot:
             make_gif()
         episode += 1
-        # tf.saved_model.save(agent, save_path)
+        if SAVE_MODEL:
+            tf.saved_model.save(agent, save_path)
     return cumulative_improvement
 
 
-if __name__ == '__main__':
+def trial(GAIN, UNITS, LR, BLOCKS, L1, L2):
+    try:
+        return train(GAIN, UNITS, LR, BLOCKS, L1, L2)
+    except Exception:
+        print("EXPERIMENT FAILED!!!")
+        return -100000000000000000000000
+
+
+def main():
+    global NUM_RANDOM_TRIALS, NUM_TRIALS, NUM_EPISODES, SAVE_MODEL, optimizer
     tf.enable_eager_execution()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     logger = JSONLogger(path="./runs/logs.json")
-    optimizer = BayesianOptimization(f=partial(train), pbounds=pbounds,
-                                     verbose=2, random_state=1)
-    optimizer.subscribe(Events.OPTMIZATION_STEP, logger)
+    bayesopt = BayesianOptimization(f=partial(train), pbounds=pbounds,
+                                    verbose=2, random_state=1)
+    bayesopt.subscribe(Events.OPTMIZATION_STEP, logger)
     try:
-        load_logs(optimizer, logs=["./runs/logs.json"])
+        load_logs(bayesopt, logs=["./runs/logs.json"])
     except Exception:
         print("failed to load bayesian optimization logs")
-    optimizer.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
-    for i, res in enumerate(optimizer.res):
-        print("Iteration {}: \n\t{}".format(i, res))
+    for experiment in range(NUM_EXPERIMENTS):
+        bayesopt.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
+        for i, res in enumerate(bayesopt.res):
+            print("iteration: {}, results: {}".format(i, res))
+    NUM_RANDOM_TRIALS, NUM_TRIALS, NUM_EPISODES, SAVE_MODEL = 0, 1, 10000, True
+    bayesopt.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
+    for i, res in enumerate(bayesopt.res):
+        print("iteration: {}, results: {}".format(i, res))
+
+
+if __name__ == '__main__':
+    main()
