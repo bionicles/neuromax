@@ -33,20 +33,22 @@ TIME = ''
 # task
 IMAGE_SIZE = 256
 POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 10, 1
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 16
-MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 0, 5
-MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 8, 9
+MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 5, 5
+MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 1, 1
 SCREENSHOT_EVERY = 5
 NOISE = 0.002
 WARMUP = 1000
 BUFFER = 42
+BIGGEST_FIRST_IF_NEG = 1
+RANDOM_PROTEINS = False
 # training
 STOP_LOSS_MULTIPLIER = 1.04
-NUM_RANDOM_TRIALS, NUM_TRIALS = 2, 8
+NUM_RANDOM_TRIALS, NUM_TRIALS = 1, 4
 NUM_EXPERIMENTS = 1000
 NUM_EPISODES = 20
 NUM_STEPS = 100
-VERBOSE = False
+VERBOSE = True
 # model
 pbounds = {
     'GAIN': (1e-5, 0.1),
@@ -296,9 +298,9 @@ def reset():
         for p in [episode_images_path, episode_stacks_path, episode_pngs_path]:
             os.makedirs(p)
     # get pdb
-    if episode < len(pedagogy):
+    if episode < len(pedagogy) and RANDOM_PROTEINS is False:
         try:
-            pdb_name = pedagogy[(episode + 2) * -1]
+            pdb_name = pedagogy[(episode + 1) * BIGGEST_FIRST_IF_NEG]
         except Exception as e:
             print("error loading protein", e)
             pdb_name = random.choice(pedagogy)
@@ -397,10 +399,10 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
     if SAVE_MODEL:
         os.makedirs(run_path)
         save_path = os.path.join(run_path, 'model.h5')
-    done, step = False, 0
+    global_step = 0
     agent = make_resnet('agent', 17, 3, units=UNITS, blocks=BLOCKS,
                         gain=GAIN, l1=L1, l2=L2)
-    decayed_lr = tf.train.exponential_decay(LR, step, 10000, 0.95, staircase=True)
+    decayed_lr = tf.train.exponential_decay(LR, global_step, 10000, 0.96, staircase=True)
     adam = tf.train.AdamOptimizer(decayed_lr, epsilon=0.1)
     cumulative_improvement, episode = 0, 0
     load_pedagogy()
@@ -408,6 +410,7 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
         print("")
         print("BEGIN EPISODE", episode)
         print("")
+        done, step = False, 0
         screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0 and SAVE_MODEL
         initial, current, features = reset()
         initial_loss = loss(tf.zeros_like(positions), initial)
@@ -438,6 +441,7 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
         print('done because of', reason)
         percent_improvement = (initial_loss - loss_value) / 100
         cumulative_improvement += percent_improvement
+        global_step += step
         if screenshot:
             make_gif()
         episode += 1
@@ -471,6 +475,7 @@ def main():
         for i, res in enumerate(bayesopt.res):
             print("iteration: {}, results: {}".format(i, res))
     NUM_RANDOM_TRIALS, NUM_TRIALS, NUM_EPISODES, SAVE_MODEL = 0, 1, 10000, True
+    RANDOM_PROTEINS = True
     bayesopt.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
     for i, res in enumerate(bayesopt.res):
         print("iteration: {}, results: {}".format(i, res))
