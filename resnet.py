@@ -3,7 +3,9 @@ from tensorflow.keras.initializers import Orthogonal
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras import Model
+from ray.rllib.offline import 
 #https://ray.readthedocs.io/en/latest/rllib-models.html
+#https://github.com/ray-project/ray/blob/master/python/ray/rllib/examples/custom_loss.py
 
 class ResNet(Model):
             """Define the layers of a custom model.
@@ -52,3 +54,27 @@ class ResNet(Model):
         output *= -1
         resnet = Model([features, noise], output)
         return resnet
+    def custom_loss(self, policy_loss, loss_inputs):
+        # create a new input reader per worker
+        reader = JsonReader(self.options["custom_options"]["input_files"])
+        input_ops = reader.tf_input_ops()
+
+        # define a secondary loss by building a graph copy with weight sharing
+        obs = tf.cast(input_ops["obs"], tf.float32)
+        logits, _ = self._build_layers_v2({
+            "obs": restore_original_dimensions(obs, self.obs_space)
+        }, self.num_outputs, self.options)
+
+        # You can also add self-supervised losses easily by referencing tensors
+        # created during _build_layers_v2(). For example, an autoencoder-style
+        # loss can be added as follows:
+        # ae_loss = squared_diff(
+        #     loss_inputs["obs"], Decoder(self.fcnet.last_layer))
+        print("FYI: You can also use these tensors: {}, ".format(loss_inputs))
+
+        # compute the IL loss
+        action_dist = Categorical(logits)
+        self.policy_loss = policy_loss
+        self.imitation_loss = tf.reduce_mean(
+            -action_dist.logp(input_ops["actions"]))
+        return policy_loss + 10 * self.imitation_loss
