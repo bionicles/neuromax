@@ -20,12 +20,11 @@ import time
 import csv
 import os
 # globals
-episode, step, num_atoms, num_atoms_squared = 0, 0, 0, 0
+experiment, episode, step, num_atoms, num_atoms_squared = 0, 0, 0, 0, 0
 velocities, masses, chains, model = [], [], [], []
 episode_images_path, episode_stacks_path = '', ''
 episode_path, run_path = '', ''
 ROOT = os.path.abspath('.')
-bayesopt = object
 SAVE_MODEL = False
 atom_index = 0
 pdb_name = ''
@@ -44,51 +43,50 @@ BIGGEST_FIRST_IF_NEG = 1
 RANDOM_PROTEINS = False
 # training
 STOP_LOSS_MULTIPLIER = 1.04
-NUM_RANDOM_TRIALS, NUM_TRIALS = 1, 4
+NUM_RANDOM_TRIALS, NUM_TRIALS = 4, 6
+PEDAGOGY_FILE_NAME = '2-chains.csv'
 NUM_EXPERIMENTS = 1000
-NUM_EPISODES = 20
+NUM_EPISODES = 10
 NUM_STEPS = 100
 VERBOSE = True
-# model
+# hyperparameters
+COMPLEXITY_PUNISHMENT = 1e-4  # 0 is off, higher is simpler
+TIME_PUNISHMENT = 1e-4
 pbounds = {
-    'GAIN': (1e-5, 0.1),
+    'GAIN': (1e-4, 0.1),
     'UNITS': (17, 2000),
     'LR': (1e-4, 1e-1),
+    'EPSILON': (1e-4, 1),
+    'LAYERS': (1, 10),
     'BLOCKS': (1, 50),
     'L1': (0, 0.1),
     'L2': (0, 0.1),
 }
 
 
-def make_block(features, MaybeNoiseOrOutput, units, gain, l1, l2):
+def make_block(features, MaybeNoiseOrOutput, layers, units, gain, l1, l2):
     Attention_layer = Attention()([features, features])
     block_output = Concatenate(2)([Attention_layer, MaybeNoiseOrOutput])
     block_output = Activation('tanh')(block_output)
-    block_output = Dense(units,
-                         kernel_initializer=Orthogonal(gain),
-                         kernel_regularizer=L1L2(l1, l2),
-                         bias_regularizer=L1L2(l1, l2),
-                         activation='tanh'
-                         )(block_output)
-    block_output = Dropout(0.5)(block_output)
-    block_output = Dense(units,
-                         kernel_initializer=Orthogonal(gain),
-                         kernel_regularizer=L1L2(l1, l2),
-                         bias_regularizer=L1L2(l1, l2),
-                         activation='tanh'
-                         )(block_output)
-    block_output = Dropout(0.5)(block_output)
+    for layer_number in range(0, round(layers.item())-1):
+        block_output = Dense(units,
+                             kernel_initializer=Orthogonal(gain),
+                             kernel_regularizer=L1L2(l1, l2),
+                             bias_regularizer=L1L2(l1, l2),
+                             activation='tanh'
+                             )(block_output)
+        block_output = Dropout(0.5)(block_output)
     block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
     block_output = Add()([block_output, MaybeNoiseOrOutput])
     return block_output
 
 
-def make_resnet(name, in1, in2, units, blocks, gain, l1, l2):
+def make_resnet(name, in1, in2, layers, units, blocks, gain, l1, l2):
     features = Input((None, in1))
     noise = Input((None, in2))
-    output = make_block(features, noise, units, gain, l1, l2)
+    output = make_block(features, noise, layers, units, gain, l1, l2)
     for i in range(1, round(blocks.item())):
-        output = make_block(features, output, units, gain, l1, l2)
+        output = make_block(features, output, layers, units, gain, l1, l2)
     output *= -1
     resnet = Model([features, noise], output)
     return resnet
@@ -96,7 +94,7 @@ def make_resnet(name, in1, in2, units, blocks, gain, l1, l2):
 
 def load_pedagogy():
     global pedagogy
-    with open(os.path.join('.', 'pedagogy.csv')) as csvfile:
+    with open(os.path.join('.', PEDAGOGY_FILE_NAME)) as csvfile:
         reader = csv.reader(csvfile)
         results = []
         for row in reader:
@@ -119,7 +117,7 @@ def prepare_pymol():
 def make_gif():
     gif_name = '{}-{}-{}.gif'.format(episode, pdb_name, TIME)
     gif_path = os.path.join(episode_path, gif_name)
-    print("episode path", episode_path)
+    print('episode path', episode_path)
     imagepaths, images = [], []
     for stackname in os.listdir(episode_stacks_path):
         print('processing', stackname)
@@ -221,7 +219,8 @@ def undock(chains):
             cmd.rotate('y', vector[4], selection_string)
             cmd.rotate('z', vector[5], selection_string)
     # set the zoom on the final destination
-    prepare_pymol()
+    if screenshot:
+        prepare_pymol()
     # prepare to animate undock by moving back to original position
     for chain in chains:
         if chain in sum_vector.keys():
@@ -302,7 +301,7 @@ def reset():
         try:
             pdb_name = pedagogy[(episode + 1) * BIGGEST_FIRST_IF_NEG]
         except Exception as e:
-            print("error loading protein", e)
+            print('error loading protein', e)
             pdb_name = random.choice(pedagogy)
     else:
         pdb_name = random.choice(pedagogy)
@@ -334,9 +333,9 @@ def reset():
     positions = get_positions()
     velocities = random_normal(positions.shape, 0, NOISE, 'float')
     current = tf.concat([positions, velocities], 1)
-    print("")
-    print("loaded", pdb_name, "with", num_atoms, "atoms")
-    print("")
+    print('')
+    print('loaded', pdb_name, 'with', num_atoms, 'atoms')
+    print('')
     return initial, current, features
 
 
@@ -351,11 +350,12 @@ def move_atom(xyz):
 def move_atoms(force_field):
     global positions, velocities, atom_index
     acceleration = force_field / masses
-    noise = random_normal((num_atoms, 3), 0, NOISE, dtype="float32")
+    noise = random_normal((num_atoms, 3), 0, NOISE, dtype='float32')
     velocities += acceleration + noise
-    iter_velocity = tf.squeeze(velocities)
-    atom_index = 0
-    np.array([move_atom(xyz) for xyz in iter_velocity])
+    if screenshot:
+        iter_velocity = tf.squeeze(velocities)
+        atom_index = 0
+        np.array([move_atom(xyz) for xyz in iter_velocity])
     positions = tf.math.add(positions, velocities)
     return positions, velocities
 
@@ -385,31 +385,30 @@ def loss(action, initial):
     # loss value (sum)
     loss_value = shape_loss + pv_loss
     if VERBOSE:
-        print('model', TIME, 'episode', episode, 'step', step, num_atoms, 'atoms')
-        print('shape loss', shape_loss.numpy().tolist())
-        print('p v   loss', pv_loss.numpy().tolist())
-        print('total loss', loss_value.numpy().tolist())
+        print('shape', round(shape_loss.numpy().tolist(), 2),
+              'pv', round(pv_loss.numpy().tolist(), 2),
+              'total loss', round(loss_value.numpy().tolist(), 2))
     return loss_value
 
 
-def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
+def train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2):
     global TIME, run_path, screenshot, positions, velocities, features, episode, step
-    TIME = str(time.time())
+    start = time.time()
+    TIME = str(start)
     run_path = os.path.join(ROOT, 'runs', TIME)
     if SAVE_MODEL:
         os.makedirs(run_path)
         save_path = os.path.join(run_path, 'model.h5')
     global_step = 0
     agent = make_resnet('agent', 17, 3, units=UNITS, blocks=BLOCKS,
-                        gain=GAIN, l1=L1, l2=L2)
+                        layers=LAYERS, gain=GAIN, l1=L1, l2=L2)
     decayed_lr = tf.train.exponential_decay(LR, global_step, 10000, 0.96, staircase=True)
-    adam = tf.train.AdamOptimizer(decayed_lr, epsilon=0.1)
+    adam = tf.train.AdamOptimizer(decayed_lr, epsilon=EPSILON)
     cumulative_improvement, episode = 0, 0
     load_pedagogy()
     for i in range(NUM_EPISODES):
-        print("")
-        print("BEGIN EPISODE", episode)
-        print("")
+        print('')
+        print('BEGIN EPISODE', episode)
         done, step = False, 0
         screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0 and SAVE_MODEL
         initial, current, features = reset()
@@ -417,10 +416,9 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         step += 1
         while not done:
-            print("")
-            print('model', TIME, 'episode', episode)
-            print("BLOCKS", round(BLOCKS), 'UNITS', round(UNITS), "LR", LR, "L1", L1, "L2", L2)
-            print("")
+            print('')
+            print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', step)
+            print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'UNITS', round(UNITS), 'LR', LR, 'L1', L1, 'L2', L2)
             with tf.GradientTape() as tape:
                 atoms = tf.expand_dims(tf.concat([current, features], 1), 0)
                 noise = tf.expand_dims(random_normal((num_atoms, 3)), 0)
@@ -428,6 +426,7 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
                 loss_value = loss(force_field, initial)
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
+            global_step += 1
             if screenshot:
                 make_image()
             step += 1
@@ -441,44 +440,51 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
         print('done because of', reason)
         percent_improvement = (initial_loss - loss_value) / 100
         cumulative_improvement += percent_improvement
-        global_step += step
         if screenshot:
             make_gif()
         episode += 1
         if SAVE_MODEL:
             tf.saved_model.save(agent, save_path)
+    if COMPLEXITY_PUNISHMENT is not 0:
+        cumulative_improvement /= agent.count_params() * COMPLEXITY_PUNISHMENT
+    if TIME_PUNISHMENT is not 0:
+        elapsed = time.time() - start
+        cumulative_improvement /= elapsed * TIME_PUNISHMENT
+    cumulative_improvement /= NUM_EPISODES
     return cumulative_improvement
 
 
-def trial(GAIN, UNITS, LR, BLOCKS, L1, L2):
+def trial(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2):
     try:
-        return train(GAIN, UNITS, LR, BLOCKS, L1, L2)
+        return train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2)
     except Exception as e:
-        print("EXPERIMENT FAILED!!!", e)
-        return -100000000000000000000000
+        print('EXPERIMENT FAIL!!!', e)
+        return -10
 
 
 def main():
-    global NUM_RANDOM_TRIALS, NUM_TRIALS, NUM_EPISODES, SAVE_MODEL, optimizer
+    global NUM_RANDOM_TRIALS, RANDOM_PROTEINS, NUM_TRIALS, NUM_EPISODES, SAVE_MODEL, optimizer, experiment
     tf.enable_eager_execution()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    logger = JSONLogger(path="./runs/logs.json")
-    bayesopt = BayesianOptimization(f=partial(trial), pbounds=pbounds,
+    logger = JSONLogger(path='./runs/logs.json')
+    bayes = BayesianOptimization(f=partial(trial), pbounds=pbounds,
                                     verbose=2, random_state=1)
-    bayesopt.subscribe(Events.OPTMIZATION_STEP, logger)
+    bayes.subscribe(Events.OPTMIZATION_STEP, logger)
     try:
-        load_logs(bayesopt, logs=["./runs/logs.json"])
+        load_logs(bayes, logs=['./runs/logs.json'])
     except Exception as e:
-        print("failed to load bayesian optimization logs", e)
-    for experiment in range(NUM_EXPERIMENTS):
-        bayesopt.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
-        for i, res in enumerate(bayesopt.res):
-            print("iteration: {}, results: {}".format(i, res))
+        print('failed to load bayesian optimization logs', e)
+    for exp in range(NUM_EXPERIMENTS):
+        experiment = exp
+        bayes.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
+        print("BEST MODEL:", bayes.max)
+        # for i, res in enumerate(bayes.res):
+        #     print('iteration: {}, results: {}'.format(i, res))
     NUM_RANDOM_TRIALS, NUM_TRIALS, NUM_EPISODES, SAVE_MODEL = 0, 1, 10000, True
     RANDOM_PROTEINS = True
-    bayesopt.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
-    for i, res in enumerate(bayesopt.res):
-        print("iteration: {}, results: {}".format(i, res))
+    bayes.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
+    for i, res in enumerate(bayes.res):
+        print('iteration: {}, results: {}'.format(i, res))
 
 
 if __name__ == '__main__':
