@@ -3,7 +3,7 @@ from tensorflow.keras.layers import Input, Attention, Concatenate, Activation, D
 from tensorflow.keras.initializers import Orthogonal
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.regularizers import L1L2
-from tensorflow.keras.models import Model
+from tensorflow.keras import Model
 from bayes_opt import BayesianOptimization
 from bayes_opt.observer import JSONLogger
 from bayes_opt.util import load_logs
@@ -297,7 +297,11 @@ def reset():
             os.makedirs(p)
     # get pdb
     if episode < len(pedagogy):
-        pdb_name = pedagogy[(episode + 1) * -1]
+        try:
+            pdb_name = pedagogy[(episode + 2) * -1]
+        except Exception as e:
+            print("error loading protein", e)
+            pdb_name = random.choice(pedagogy)
     else:
         pdb_name = random.choice(pedagogy)
     pdb_file_name = pdb_name + '.pdb'
@@ -390,8 +394,8 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
     global TIME, run_path, screenshot, positions, velocities, features, episode, step
     TIME = str(time.time())
     run_path = os.path.join(ROOT, 'runs', TIME)
-    os.makedirs(run_path)
     if SAVE_MODEL:
+        os.makedirs(run_path)
         save_path = os.path.join(run_path, 'model.h5')
     done, step = False, 0
     agent = make_resnet('agent', 17, 3, units=UNITS, blocks=BLOCKS,
@@ -404,8 +408,7 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
         print("")
         print("BEGIN EPISODE", episode)
         print("")
-        screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0
-
+        screenshot = episode > WARMUP and episode % SCREENSHOT_EVERY == 0 and SAVE_MODEL
         initial, current, features = reset()
         initial_loss = loss(tf.zeros_like(positions), initial)
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
@@ -446,8 +449,8 @@ def train(GAIN, UNITS, LR, BLOCKS, L1, L2):
 def trial(GAIN, UNITS, LR, BLOCKS, L1, L2):
     try:
         return train(GAIN, UNITS, LR, BLOCKS, L1, L2)
-    except Exception:
-        print("EXPERIMENT FAILED!!!")
+    except Exception as e:
+        print("EXPERIMENT FAILED!!!", e)
         return -100000000000000000000000
 
 
@@ -456,13 +459,13 @@ def main():
     tf.enable_eager_execution()
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     logger = JSONLogger(path="./runs/logs.json")
-    bayesopt = BayesianOptimization(f=partial(train), pbounds=pbounds,
+    bayesopt = BayesianOptimization(f=partial(trial), pbounds=pbounds,
                                     verbose=2, random_state=1)
     bayesopt.subscribe(Events.OPTMIZATION_STEP, logger)
     try:
         load_logs(bayesopt, logs=["./runs/logs.json"])
-    except Exception:
-        print("failed to load bayesian optimization logs")
+    except Exception as e:
+        print("failed to load bayesian optimization logs", e)
     for experiment in range(NUM_EXPERIMENTS):
         bayesopt.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
         for i, res in enumerate(bayesopt.res):
