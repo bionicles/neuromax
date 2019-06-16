@@ -32,8 +32,8 @@ TIME = ''
 # task
 IMAGE_SIZE = 256
 POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 10, 1
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 8, 9
-MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 5, 5
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 8, 64
+MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 1, 1
 MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 1, 1
 SCREENSHOT_EVERY = 5
 NOISE = 0.002
@@ -44,7 +44,7 @@ RANDOM_PROTEINS = False
 # training
 STOP_LOSS_MULTIPLIER = 1.04
 NUM_RANDOM_TRIALS, NUM_TRIALS = 4, 6
-PEDAGOGY_FILE_NAME = '2-chains.csv'
+PEDAGOGY_FILE_NAME = 'big.csv'
 NUM_EXPERIMENTS = 100
 NUM_EPISODES = 7
 NUM_STEPS = 100
@@ -362,6 +362,7 @@ def move_atoms(force_field):
 
 
 def calculate_distances(position_tensor):
+    print("calculate_distances", position_tensor.shape)
     distances = tf.reduce_sum(position_tensor * position_tensor, 1)
     distances = tf.reshape(distances, [-1, 1])
     distances = distances - 2 * tf.matmul(
