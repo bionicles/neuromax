@@ -3,23 +3,12 @@ from tensorflow.keras.initializers import Orthogonal
 from tensorflow.keras.backend import random_normal
 from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras import Model
-from ray.rllib.offline import 
+import tensorflow as tf
 #https://ray.readthedocs.io/en/latest/rllib-models.html
 #https://github.com/ray-project/ray/blob/master/python/ray/rllib/examples/custom_loss.py
 
+
 class ResNet(Model):
-            """Define the layers of a custom model.
-
-        Arguments:
-            input_dict (dict): Dictionary of input tensors, including "obs",
-                "prev_action", "prev_reward", "is_training".
-            num_outputs (int): Output tensor must be of size
-                [BATCH_SIZE, num_outputs].
-            options (dict): Model options.
-
-        Returns:
-            (outputs, feature_layer): Tensors of size [BATCH_SIZE, num_outputs]
-                and [BATCH_SIZE, desired_feature_size]"""
     def __init__(self, name, in1, in2, layers, units, blocks, gain, l1, l2):
         self.name = name
         self.in1 = in1
@@ -30,9 +19,10 @@ class ResNet(Model):
         self.gain = gain
         self.l1 = l1
         self.l2 = l2
+
     def make_block(self, features, noise):
         Attention_layer = Attention()([features, features])
-        block_output = Concatenate(2)([Attention_layer, MaybeNoiseOrOutput])
+        block_output = Concatenate(2)([Attention_layer, noise])
         block_output = Activation('tanh')(block_output)
         for layer_number in range(0, round(self.layers.item())-1):
             block_output = Dense(self.units,
@@ -42,10 +32,11 @@ class ResNet(Model):
                                  activation='tanh'
                                  )(block_output)
             block_output = Dropout(0.5)(block_output)
-        block_output = Dense(MaybeNoiseOrOutput.shape[-1], 'tanh')(block_output)
-        block_output = Add()([block_output, MaybeNoiseOrOutput])
+        block_output = Dense(noise.shape[-1], 'tanh')(block_output)
+        block_output = Add()([block_output, noise])
         return block_output
-    def make_resnet(self,  input_dict, num_outputs, options)):
+
+    def make_resnet(self,  input_dict, num_outputs, options):
         features = Input((None, self.in1))
         noise = Input((None, self.in2))
         output = make_block(features, noise, self.layers, self.units, self.gain, self.l1, self.l2)
@@ -54,6 +45,7 @@ class ResNet(Model):
         output *= -1
         resnet = Model([features, noise], output)
         return resnet
+
     def custom_loss(self, policy_loss, loss_inputs):
         # create a new input reader per worker
         reader = JsonReader(self.options["custom_options"]["input_files"])
