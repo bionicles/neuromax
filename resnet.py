@@ -4,8 +4,8 @@ from tensorflow.keras.backend import random_normal
 from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras import Model
 import tensorflow as tf
-#https://ray.readthedocs.io/en/latest/rllib-models.html
-#https://github.com/ray-project/ray/blob/master/python/ray/rllib/examples/custom_loss.py
+# https://ray.readthedocs.io/en/latest/rllib-models.html
+# https://github.com/ray-project/ray/blob/master/python/ray/rllib/examples/custom_loss.py
 
 
 class ResNet(Model):
@@ -28,7 +28,7 @@ class ResNet(Model):
             block_output = Dense(self.units,
                                  kernel_initializer=Orthogonal(self.gain),
                                  kernel_regularizer=L1L2(self.l1, self.l2),
-                                 bias_regularizer=L1L2(self.l1,self. l2),
+                                 bias_regularizer=L1L2(self.l1, self.l2),
                                  activation='tanh'
                                  )(block_output)
             block_output = Dropout(0.5)(block_output)
@@ -36,37 +36,12 @@ class ResNet(Model):
         block_output = Add()([block_output, noise])
         return block_output
 
-    def make_resnet(self,  input_dict, num_outputs, options):
+    def _build_layers_v2(self,  input_dict, num_outputs, options):
         features = Input((None, self.in1))
         noise = Input((None, self.in2))
-        output = make_block(features, noise, self.layers, self.units, self.gain, self.l1, self.l2)
+        output = self.make_block(features, noise)
         for i in range(1, round(self.blocks.item())):
-            output = self.make_block(features, output, layers, units, gain, l1, l2)
+            output = self.make_block(features, output)
         output *= -1
         resnet = Model([features, noise], output)
         return resnet
-
-    def custom_loss(self, policy_loss, loss_inputs):
-        # create a new input reader per worker
-        reader = JsonReader(self.options["custom_options"]["input_files"])
-        input_ops = reader.tf_input_ops()
-
-        # define a secondary loss by building a graph copy with weight sharing
-        obs = tf.cast(input_ops["obs"], tf.float32)
-        logits, _ = self._build_layers_v2({
-            "obs": restore_original_dimensions(obs, self.obs_space)
-        }, self.num_outputs, self.options)
-
-        # You can also add self-supervised losses easily by referencing tensors
-        # created during _build_layers_v2(). For example, an autoencoder-style
-        # loss can be added as follows:
-        # ae_loss = squared_diff(
-        #     loss_inputs["obs"], Decoder(self.fcnet.last_layer))
-        print("FYI: You can also use these tensors: {}, ".format(loss_inputs))
-
-        # compute the IL loss
-        action_dist = Categorical(logits)
-        self.policy_loss = policy_loss
-        self.imitation_loss = tf.reduce_mean(
-            -action_dist.logp(input_ops["actions"]))
-        return policy_loss + 10 * self.imitation_loss

@@ -9,9 +9,7 @@ import time
 import gym
 import csv
 import os
-import pymol
-
-cmd = pymol.cmd
+from pymol import cmd
 
 
 class PyMolEnv(gym.Env):
