@@ -456,11 +456,11 @@ if __name__ == '__main__':
     logger = JSONLogger(path="./runs/logs.json")
     optimizer = BayesianOptimization(f=partial(train), pbounds=pbounds,
                                      verbose=2, random_state=1)
-    optimizer.subscribe(Events.OPTMIZATION_STEP, logger)
     try:
         load_logs(optimizer, logs=["./runs/logs.json"])
     except:
         print("failed to load bayesian optimization logs")
+    optimizer.subscribe(Events.OPTMIZATION_STEP, logger)
     optimizer.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
     for i, res in enumerate(optimizer.res):
         print("Iteration {}: \n\t{}".format(i, res))
