@@ -39,17 +39,18 @@ SCREENSHOT_EVERY = 5
 NOISE = 0.002
 WARMUP = 1000
 BUFFER = 42
-BIGGEST_FIRST_IF_NEG = 1
+BIGGEST_FIRST_IF_NEG = -1
 RANDOM_PROTEINS = False
 # training
 STOP_LOSS_MULTIPLIER = 1.04
 NUM_RANDOM_TRIALS, NUM_TRIALS = 4, 6
 PEDAGOGY_FILE_NAME = '2-chains.csv'
-NUM_EXPERIMENTS = 1000
-NUM_EPISODES = 10
+NUM_EXPERIMENTS = 100
+NUM_EPISODES = 7
 NUM_STEPS = 100
 VERBOSE = True
 # hyperparameters
+NUM_RANDOM_VALIDATION_TRIALS, NUM_VALIDATION_TRIALS, NUM_VALIDATION_EPISODES = 0, 1, 1000
 COMPLEXITY_PUNISHMENT = 1e-4  # 0 is off, higher is simpler
 TIME_PUNISHMENT = 1e-4
 pbounds = {
@@ -94,7 +95,7 @@ def make_resnet(name, in1, in2, layers, units, blocks, gain, l1, l2):
 
 def load_pedagogy():
     global pedagogy
-    with open(os.path.join('.', PEDAGOGY_FILE_NAME)) as csvfile:
+    with open(os.path.join('.', 'csvs', PEDAGOGY_FILE_NAME)) as csvfile:
         reader = csv.reader(csvfile)
         results = []
         for row in reader:
@@ -181,9 +182,9 @@ def get_atom_features(atom):
                      atom.q,
                      atom.b,
                      atom.get_free_valence(0),
-                     sum([ord(i) for i in atom.resi])//len(atom.resi),
-                     sum([ord(i) for i in atom.resn])//len(atom.resn),
-                     sum([ord(i) for i in atom.symbol])//len(atom.symbol)])
+                     sum([ord(i.lower())/122 for i in atom.resi])//len(atom.resi),
+                     sum([ord(i.lower())/122 for i in atom.resn])//len(atom.resn),
+                     sum([ord(i.lower())/122 for i in atom.name])//len(atom.name)])
 
 
 def undock(chains):
@@ -385,9 +386,9 @@ def loss(action, initial):
     # loss value (sum)
     loss_value = shape_loss + pv_loss
     if VERBOSE:
-        print('shape', round(shape_loss.numpy().tolist(), 2),
-              'pv', round(pv_loss.numpy().tolist(), 2),
-              'total loss', round(loss_value.numpy().tolist(), 2))
+        print('shape', round(shape_loss.numpy().tolist(), 3),
+              'pv', round(pv_loss.numpy().tolist(), 3),
+              'total loss', round(loss_value.numpy().tolist(), 3))
     return loss_value
 
 
@@ -480,8 +481,7 @@ def main():
         print("BEST MODEL:", bayes.max)
         # for i, res in enumerate(bayes.res):
         #     print('iteration: {}, results: {}'.format(i, res))
-    NUM_RANDOM_TRIALS, NUM_TRIALS, NUM_EPISODES, SAVE_MODEL = 0, 1, 10000, True
-    RANDOM_PROTEINS = True
+    RANDOM_PROTEINS, SAVE_MODEL, NUM_EPISODES = True, True, NUM_VALIDATION_EPISODES
     bayes.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
     for i, res in enumerate(bayes.res):
         print('iteration: {}, results: {}'.format(i, res))
