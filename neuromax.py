@@ -31,28 +31,28 @@ pdb_name = ''
 TIME = ''
 # task
 IMAGE_SIZE = 256
-POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 10, 1
+POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 100, 1
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 8, 64
 MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 1, 1
-MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 1, 1
-SCREENSHOT_EVERY = 5
-NOISE = 0.002
+MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
+SCREENSHOT_EVERY = 10
+NOISE = 0.01
 WARMUP = 1000
 BUFFER = 42
-BIGGEST_FIRST_IF_NEG = -1
-RANDOM_PROTEINS = False
+BIGGEST_FIRST_IF_NEG = 1
+RANDOM_PROTEINS = True
 # training
 STOP_LOSS_MULTIPLIER = 1.04
-NUM_RANDOM_TRIALS, NUM_TRIALS = 4, 6
-PEDAGOGY_FILE_NAME = 'big.csv'
+NUM_RANDOM_TRIALS, NUM_TRIALS = 2, 3
+PEDAGOGY_FILE_NAME = '2-chains.csv'
 NUM_EXPERIMENTS = 100
-NUM_EPISODES = 7
+NUM_EPISODES = 42
 NUM_STEPS = 100
 VERBOSE = True
 # hyperparameters
-NUM_RANDOM_VALIDATION_TRIALS, NUM_VALIDATION_TRIALS, NUM_VALIDATION_EPISODES = 0, 1, 1000
-COMPLEXITY_PUNISHMENT = 1e-4  # 0 is off, higher is simpler
-TIME_PUNISHMENT = 1e-4
+NUM_RANDOM_VALIDATION_TRIALS, NUM_VALIDATION_TRIALS, NUM_VALIDATION_EPISODES = 0, 1, 10000
+COMPLEXITY_PUNISHMENT = 0  # 0 is off, higher is simpler
+TIME_PUNISHMENT = 0
 pbounds = {
     'GAIN': (1e-4, 0.1),
     'UNITS': (17, 2000),
@@ -60,20 +60,19 @@ pbounds = {
     'EPSILON': (1e-4, 1),
     'LAYERS': (1, 10),
     'BLOCKS': (1, 50),
-    'L1': (0, 0.1),
-    'L2': (0, 0.1),
 }
+REG = 0.01
 
 
-def make_block(features, MaybeNoiseOrOutput, layers, units, gain, l1, l2):
+def make_block(features, MaybeNoiseOrOutput, layers, units, gain):
     Attention_layer = Attention()([features, features])
     block_output = Concatenate(2)([Attention_layer, MaybeNoiseOrOutput])
     block_output = Activation('tanh')(block_output)
     for layer_number in range(0, round(layers.item())-1):
         block_output = Dense(units,
                              kernel_initializer=Orthogonal(gain),
-                             kernel_regularizer=L1L2(l1, l2),
-                             bias_regularizer=L1L2(l1, l2),
+                             kernel_regularizer=L1L2(REG, REG),
+                             bias_regularizer=L1L2(REG, REG),
                              activation='tanh'
                              )(block_output)
         block_output = Dropout(0.5)(block_output)
@@ -82,12 +81,12 @@ def make_block(features, MaybeNoiseOrOutput, layers, units, gain, l1, l2):
     return block_output
 
 
-def make_resnet(name, in1, in2, layers, units, blocks, gain, l1, l2):
+def make_resnet(name, in1, in2, layers, units, blocks, gain):
     features = Input((None, in1))
     noise = Input((None, in2))
-    output = make_block(features, noise, layers, units, gain, l1, l2)
+    output = make_block(features, noise, layers, units, gain)
     for i in range(1, round(blocks.item())):
-        output = make_block(features, output, layers, units, gain, l1, l2)
+        output = make_block(features, output, layers, units, gain)
     output *= -1
     resnet = Model([features, noise], output)
     return resnet
@@ -298,7 +297,9 @@ def reset():
         for p in [episode_images_path, episode_stacks_path, episode_pngs_path]:
             os.makedirs(p)
     # get pdb
-    if episode < len(pedagogy) and RANDOM_PROTEINS is False:
+    if episode is 0:
+        pdb_name = pedagogy[-1]
+    elif episode < len(pedagogy) and RANDOM_PROTEINS is False:
         try:
             pdb_name = pedagogy[(episode + 1) * BIGGEST_FIRST_IF_NEG]
         except Exception as e:
@@ -393,7 +394,7 @@ def loss(action, initial):
     return loss_value
 
 
-def train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2):
+def train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS):
     global TIME, run_path, screenshot, positions, velocities, features, episode, step
     start = time.time()
     TIME = str(start)
@@ -403,7 +404,7 @@ def train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2):
         save_path = os.path.join(run_path, 'model.h5')
     global_step = 0
     agent = make_resnet('agent', 17, 3, units=UNITS, blocks=BLOCKS,
-                        layers=LAYERS, gain=GAIN, l1=L1, l2=L2)
+                        layers=LAYERS, gain=GAIN)
     decayed_lr = tf.train.exponential_decay(LR, global_step, 10000, 0.96, staircase=True)
     adam = tf.train.AdamOptimizer(decayed_lr, epsilon=EPSILON)
     cumulative_improvement, episode = 0, 0
@@ -420,7 +421,7 @@ def train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2):
         while not done:
             print('')
             print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', step)
-            print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'UNITS', round(UNITS), 'LR', LR, 'L1', L1, 'L2', L2)
+            print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'UNITS', round(UNITS), 'LR', LR)
             with tf.GradientTape() as tape:
                 atoms = tf.expand_dims(tf.concat([current, features], 1), 0)
                 noise = tf.expand_dims(random_normal((num_atoms, 3)), 0)
@@ -456,9 +457,10 @@ def train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2):
     return cumulative_improvement
 
 
-def trial(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2):
+def trial(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS):
+    tf.keras.backend.clear_session()
     try:
-        return train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS, L1, L2)
+        return train(GAIN, UNITS, LR, EPSILON, LAYERS, BLOCKS)
     except Exception as e:
         print('EXPERIMENT FAIL!!!', e)
         return -10
@@ -480,8 +482,6 @@ def main():
         experiment = exp
         bayes.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
         print("BEST MODEL:", bayes.max)
-        # for i, res in enumerate(bayes.res):
-        #     print('iteration: {}, results: {}'.format(i, res))
     RANDOM_PROTEINS, SAVE_MODEL, NUM_EPISODES = True, True, NUM_VALIDATION_EPISODES
     bayes.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
     for i, res in enumerate(bayes.res):
