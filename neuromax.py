@@ -61,7 +61,7 @@ import tensorflow as tf
 
 def get_mlp(features, outputs, units_array):
     input = Input((features * 2))
-    output = Dense(units, activation='tanh', kernel_initializer=Orthogonal)(input)
+    output = Dense(units_array[0], activation='tanh', kernel_initializer=Orthogonal)(input)
     for units in units_array[1:]:
         output = Dense(units, activation='tanh', kernel_initializer=Orthogonal)(output)
     output = Dense(outputs, activation='tanh', kernel_initializer=Orthogonal)(output)
@@ -75,12 +75,10 @@ class ConvPair(Layer):
                  outputs=3):
         super(ConvPair, self).__init__()
         self.kernel = get_mlp(features, outputs, units_array)
+        self.outputs = outputs
 
     def __call__(self, inputs):
-        return tf.py_function(func=self.op, inp=inputs, Tout=tf.float32)
-
-    def op(self, inputs):
-        outputs = tf.zeros((inputs.shape[0], self.units_array[-1]))
+        outputs = tf.zeros((inputs.shape[0], self.outputs))
         for i in num_atoms:
             for j in inputs:
                 if i == j:
@@ -93,7 +91,7 @@ class ConvPair(Layer):
 
 def make_block(features, noise_or_output, n_layers):
     block_output = Concatenate(2)([features, noise_or_output])
-    for layer_n in range(0, n_layers - 1):
+    for layer_n in range(0, int(n_layers) - 1):
         block_output = ConvPair()(block_output)
         block_output = Concatenate(2)([features, block_output])
     block_output = ConvPair()(block_output)
