@@ -174,7 +174,7 @@ def step(initial_positions, initial_distances, positions, velocities, masses, nu
 
 def move_atoms(positions, velocities, masses, force_field):
     acceleration = force_field / masses
-    noise = random_normal((num_atoms, 3), 0, NOISE, dtype='float16')
+    noise = tf.random.normal((num_atoms, 3), 0, NOISE, dtype='float16')
     velocities += acceleration + noise
     positions += velocities
     return positions, velocities
@@ -230,7 +230,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
             print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'UNITS', round(UNITS), 'LR', LR)
             with tf.GradientTape() as tape:
                 atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
-                noise = tf.expand_dims(random_normal((num_atoms, 3)), 0)
+                noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
                 force_field = tf.squeeze(agent([atoms, noise]), 0)
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, force_field)
             gradients = tape.gradient(loss_value, agent.trainable_weights)
