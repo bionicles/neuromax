@@ -127,7 +127,7 @@ def parse_example(example):
     return {
         'initial_positions': initial_positions,
         'initial_distances': calculate_distances(initial_positions),
-        'protein_tensor': context['protein'],
+        'protein_name_tensor': context['protein'],
         'positions': parse_feature(sequence['positions'][0], 3),
         'masses': tf.concat([masses, masses, masses], 1),
         'features': tf.concat([masses, features], 1),
