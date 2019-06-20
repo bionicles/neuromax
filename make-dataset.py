@@ -103,7 +103,6 @@ def load(protein):
     cmd.remove('solvent')
     cmd.select(name='current', selection='all')
     initial_positions = get_positions()
-    num_atoms = int(initial_positions.shape[0])
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
@@ -113,13 +112,12 @@ def load(protein):
     undock(chains)
     unfold(chains)
     positions = get_positions()
-    return make_example(protein, initial_positions, positions, features, num_atoms, masses)
+    return make_example(protein, initial_positions, positions, features, masses)
 
 
-def make_example(protein, initial_positions, positions, features, num_atoms, masses):
+def make_example(protein, initial_positions, positions, features, masses):
     example = tf.train.SequenceExample()
     # non-sequential features
-    example.context.feature["num_atoms"].int64_list.value.append(num_atoms)
     example.context.feature["protein"].bytes_list.value.append(bytes(protein, 'utf-8'))
     # sequential features
     fl_initial_positions = example.feature_lists.feature_list["initial_positions"]
