@@ -139,7 +139,7 @@ def parse_example(example):
         }
 
 
-def make_iterator():
+def make_dataset():
     path = os.path.join('.', 'tfrecords')
     recordpaths = []
     for name in os.listdir(path):
@@ -211,7 +211,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         os.makedirs(run_path)
         save_path = os.path.join(run_path, 'model.h5')
     train_step = 0
-    iterator = make_iterator()
+    dataset = make_dataset()
     agent = make_resnet('agent', 17, 3, blocks=BLOCKS, layers=LAYERS)
     decayed_lr = tf.train.exponential_decay(LR, train_step, 10000, 0.96, staircase=True)
     adam = tf.train.AdamOptimizer(decayed_lr, epsilon=EPSILON)
