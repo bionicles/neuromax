@@ -96,7 +96,7 @@ def make_iterator():
 
 
 def parse_feature(byte_string, d):
-    tensor = tf.io.parse_tensor(byte_string, tf.int8)
+    tensor = tf.io.parse_tensor(byte_string, tf.float32)
     return tf.reshape(tensor, [-1, d])
 
 
