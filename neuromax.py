@@ -17,8 +17,6 @@ import shutil
 import time
 import csv
 import os
-# locals
-from ConvPair import make_resnet
 # globals
 save_model = False
 experiment = 0
