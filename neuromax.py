@@ -60,7 +60,7 @@ import tensorflow as tf
 
 
 def get_mlp(features, outputs, units_array):
-    input = Input((features * 2))
+    input = Input((features))
     output = Dense(units_array[0], activation='tanh', kernel_initializer=Orthogonal)(input)
     for units in units_array[1:]:
         output = Dense(units, activation='tanh', kernel_initializer=Orthogonal)(output)
@@ -68,25 +68,34 @@ def get_mlp(features, outputs, units_array):
     return Model(input, output)
 
 
-class ConvPair(Layer):
-    def __init__(self,
-                 units_array=[2048, 2048],
-                 features=16,
-                 outputs=3):
-        super(ConvPair, self).__init__()
+class ConvKernel(Layer):
+    def __init__(self, units_array=[2048, 2048], features=16, outputs=5):
+        super(ConvKernel, self).__init__()
         self.kernel = get_mlp(features, outputs, units_array)
         self.outputs = outputs
 
     def __call__(self, inputs):
-        outputs = tf.zeros((inputs.shape[0], self.outputs))
-        for i in num_atoms:
-            for j in inputs:
-                if i == j:
-                    continue
-                else:
-                    k_in = tf.concat([inputs[i,:], inputs[j,:]])
-                    outputs[i] = self.kernel(k_in)
-        return outputs
+        return tf.vectorized_map(self.kernel, inputs)
+
+class ConvPair(Layer):
+    def __init__(self,
+                 units_array=[128, 128],
+                 features=8,
+                 outputs=3):
+        super(ConvPair, self).__init__()
+        self.kernel = get_mlp(features * 2, outputs, units_array)
+        self.outputs = outputs
+
+    def __call__(self, inputs):
+        self.inputs = inputs
+        return tf.vectorized_map(self.compute_atom, inputs)
+
+    def compute_atom(self, atom1):
+        def compute_pair(atom2):
+            pair = tf.concat([atom1, atom2])
+            return self.kernel(pair)
+        contributions = tf.vectorized_map(compute_pair, self.inputs)
+        return tf.reduce_sum(contributions)
 
 
 def make_block(features, noise_or_output, n_layers):
@@ -102,9 +111,10 @@ def make_block(features, noise_or_output, n_layers):
 def make_resnet(name, d_in, d_out, blocks, layers):
     features = Input((None, d_in))
     noise = Input((None, d_out))
-    output = make_block(features, noise, layers)
+    compressed_features = ConvKernel()(features)
+    output = make_block(compressed_features, noise, layers)
     for i in range(1, round(blocks.item())):
-        output = make_block(features, noise, layers)
+        output = make_block(compressed_features, noise, layers)
     output *= -1
     return Model([features, noise], output)
 # end model
