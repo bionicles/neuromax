@@ -17,11 +17,9 @@ class ConvPair(Layer):
     def __init__(self,
                  units_array=[2048, 2048],
                  features=16,
-                 n_kernels=2,
                  outputs=3):
         super(ConvPair, self).__init__()
-        self.kernels = [
-            get_mlp(features, outputs, units_array) for _ in range(n_kernels)]
+        self.kernel = get_mlp(features, outputs, units_array) 
 
     def __call__(self, inputs):
         return tf.py_function(func=self.op, inp=inputs, Tout=tf.float32)
@@ -34,7 +32,7 @@ class ConvPair(Layer):
                     continue
                 else:
                     k_in = tf.concat([inputs[i,:], inputs[j,:]])
-                    outputs[i] += tf.reduce_sum([k(k_in) for k in self.kernels])
+                    outputs[i] = self.kernel(k_in)
         return outputs
 
 
