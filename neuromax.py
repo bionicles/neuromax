@@ -1,4 +1,7 @@
 # neuromax.py - why?: 1 simple file with functions over classes
+from tensorflow.keras.layers import Layer, Dense, Concatenate
+from tensorflow.keras.initializers import Orthogonal
+from tensorflow.keras import Model, Input
 import tensorflow as tf
 tf.compat.v1.enable_eager_execution()
 
@@ -53,12 +56,6 @@ pbounds = {
 }
 
 # begin model
-from tensorflow.keras.layers import Layer, Dense, Concatenate
-from tensorflow.keras.initializers import Orthogonal
-from tensorflow.keras import Model, Input
-import tensorflow as tf
-
-
 def get_mlp(features, outputs, units_array):
     input = Input((features))
     output = Dense(units_array[0], activation='tanh', kernel_initializer=Orthogonal)(input)
