@@ -10,13 +10,12 @@ import os
 
 tf.enable_eager_execution()
 
+
 CSV_FILE_NAME = 'less-than-164kd-9-chains.csv'
-
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
-
 PROTEINS_PER_TFRECORD = 8
+DTYPE = tf.float32
 
-DTYPE = tf.bfloat16
 
 def load_pedagogy(pedagogy_path):
     pedagogy = []
@@ -163,6 +162,7 @@ def write_shards():
     print('problem children:')
     [print(problem) for problem in problems]
     print('done!')
+
 
 def main():
     tfrecord_path = os.path.join('.', 'tfrecords')
