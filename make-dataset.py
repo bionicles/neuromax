@@ -157,7 +157,7 @@ def write_shards():
             print('failed on', p, protein)
             print(e)
             problems.append([p, protein, e])
-        print('wrote', protein)
+        print('wrote', protein, 'to', shard_path)
         p += 1
     print('problem children:')
     [print(problem) for problem in problems]
