@@ -66,7 +66,7 @@ def parse_example(example):
     initial_positions = parse_feature(sequence['initial_positions'][0], 3)
     features = parse_feature(sequence['features'][0], 9)
     masses = parse_feature(sequence['masses'][0], 1)
-    features = tf.concat([masses, features], 2)
+    features = tf.concat([masses, features], 1)
     return {
         'initial_positions': initial_positions,
         'initial_distances': calculate_distances(initial_positions),

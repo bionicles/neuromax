@@ -16,6 +16,8 @@ MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
 
 PROTEINS_PER_TFRECORD = 8
 
+DTYPE = tf.bfloat16
+
 def load_pedagogy(pedagogy_path):
     pedagogy = []
     with open(pedagogy_path) as csvfile:
@@ -32,7 +34,7 @@ def load_pedagogy(pedagogy_path):
 def get_positions():
     model = cmd.get_model('all', 1)
     positions = np.array(model.get_coord_list())
-    return tf.convert_to_tensor(positions, preferred_dtype=tf.int8)
+    return tf.convert_to_tensor(positions, preferred_dtype=DTYPE)
 
 
 def get_atom_features(atom):
@@ -106,9 +108,9 @@ def load(protein):
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
-    features = tf.convert_to_tensor(features, preferred_dtype=tf.int8)
+    features = tf.convert_to_tensor(features, preferred_dtype=DTYPE)
     masses = np.array([atom.get_mass() for atom in model.atom])
-    masses = tf.convert_to_tensor(masses, preferred_dtype=tf.int8)
+    masses = tf.convert_to_tensor(masses, preferred_dtype=DTYPE)
     undock(chains)
     unfold(chains)
     positions = get_positions()
