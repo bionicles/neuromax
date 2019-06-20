@@ -64,24 +64,22 @@ def get_mlp(features, outputs, units_array):
 
 
 class ConvKernel(Layer):
-    def __init__(self, units_array=[16, 512, 512, 5]):
+    def __init__(self, units_array=[512, 512, 5]):
         super(ConvKernel, self).__init__()
-        w_init = Orthogonal()
-        self.V = [self.build_weight(w_init, units_array[i-1], units_array[i]) for i in range(1, len(units_array))]
-
-    def build_weight(self, w_init, d1, d2):
-        return tf.Variable(
-                        initial_value=w_init(shape=(d1, d2)),
-                        trainable=True
-                        )
+        self.units_array = units_array
+        [self.add_weight(
+                    shape=(units_array[i-1], units_array[i]),
+                    initializer='truncated_normal',
+                    trainable=True
+         ) for i in range(1, len(units_array))]
 
     def __call__(self, inputs):
         return tf.vectorized_map(self.apply_kernel, inputs)
 
     def apply_kernel(self, input):
-        output = tf.keras.backend.dot(self.V[0], input)
-        for weight in self.V[1:]:
-            output = tf.keras.backend.dot(weight, output)
+        output = tf.matmul(input, self.weights[0])
+        for weight in self.weights[1:]:
+            output = tf.matmul(output, weight)
         return output
 
 class ConvPair(Layer):
