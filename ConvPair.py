@@ -4,21 +4,24 @@ from tensorflow.keras import Model, Input
 import tensorflow as tf
 
 
-def get_mlp(features, units_array):
+def get_mlp(features, outputs, units_array):
     input = Input((features * 2))
     output = Dense(units, activation='tanh', kernel_initializer=Orthogonal)(input)
     for units in units_array[1:]:
         output = Dense(units, activation='tanh', kernel_initializer=Orthogonal)(output)
+    output = Dense(outputs, activation='tanh', kernel_initializer=Orthogonal)(output)
     return Model(input, output)
 
 
 class ConvPair(Layer):
     def __init__(self,
+                 units_array=[2048, 2048],
                  features=16,
                  n_kernels=2,
-                 units_array=[2048, 2048, 3]):
+                 outputs=3):
         super(ConvPair, self).__init__()
-        self.kernels = [get_mlp(features, units_array) for _ in range(n_kernels)]
+        self.kernels = [
+            get_mlp(features, outputs, units_array) for _ in range(n_kernels)]
 
     def __call__(self, inputs):
         return tf.py_function(func=self.op, inp=inputs, Tout=tf.float32)
