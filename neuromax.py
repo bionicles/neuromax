@@ -112,6 +112,11 @@ def make_resnet(name, d_in, d_out, blocks, layers):
 # end model
 
 # begin dataset
+def parse_feature(byte_string, d):
+    tensor = tf.io.parse_tensor(byte_string, tf.float32)
+    return tf.reshape(tensor, [-1, d])
+
+
 def parse_example(example):
     context_features={'protein': tf.io.FixedLenFeature([], dtype=tf.string)}
     sequence_features={
@@ -145,13 +150,7 @@ def make_iterator():
                 num_parallel_calls=N_PARALLEL_CALLS)
     dataset = dataset.batch(batch_size=BATCH_SIZE)
     dataset = dataset.prefetch(buffer_size=BATCH_SIZE)
-    iterator = dataset.make_initializable_iterator()
-    return iterator
-
-
-def parse_feature(byte_string, d):
-    tensor = tf.io.parse_tensor(byte_string, tf.float32)
-    return tf.reshape(tensor, [-1, d])
+    return dataset
 
 
 def reset(dataset):
@@ -159,11 +158,9 @@ def reset(dataset):
     state = parse_example(example)
     return (
         state['protein'],
-        state['num_atoms'],
         state['initial_positions'],
         state['initial_distances'],
         state['positions'],
-        state['velocities'],
         state['masses'],
         state['features'])
 # end dataset
