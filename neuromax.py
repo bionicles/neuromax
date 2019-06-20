@@ -64,13 +64,25 @@ def get_mlp(features, outputs, units_array):
 
 
 class ConvKernel(Layer):
-    def __init__(self, units_array=[2048, 2048], features=16, outputs=5):
+    def __init__(self, units_array=[16, 512, 512, 5]):
         super(ConvKernel, self).__init__()
-        self.kernel = get_mlp(features, outputs, units_array)
-        self.outputs = outputs
+        w_init = Orthogonal()
+        self.V = [self.build_weight(w_init, units_array[i-1], units_array[i]) for i in range(1, len(units_array))]
+
+    def build_weight(self, w_init, d1, d2):
+        return tf.Variable(
+                        initial_value=w_init(shape=(d1, d2)),
+                        trainable=True
+                        )
 
     def __call__(self, inputs):
-        return tf.vectorized_map(self.kernel, inputs)
+        return tf.vectorized_map(self.apply_kernel, inputs)
+
+    def apply_kernel(self, input):
+        output = tf.keras.backend.dot(self.V[0], input)
+        for weight in self.V[1:]:
+            output = tf.keras.backend.dot(weight, output)
+        return output
 
 class ConvPair(Layer):
     def __init__(self,
@@ -215,13 +227,11 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         save_path = os.path.join(run_path, 'model.h5')
     train_step = 0
     dataset = make_dataset()
-    agent = make_resnet('agent', 17, 3, blocks=BLOCKS, layers=LAYERS)
+    agent = make_resnet('agent', 16, 3, blocks=BLOCKS, layers=LAYERS)
     decayed_lr = tf.train.exponential_decay(LR, train_step, 10000, 0.96, staircase=True)
     adam = tf.train.AdamOptimizer(decayed_lr, epsilon=EPSILON)
     cumulative_improvement, episode = 0, 0
     for i in range(NUM_EPISODES):
-        print('')
-        print('BEGIN EPISODE', episode)
         done, step = False, 0
         protein, num_atoms, initial_positions, initial_distances, positions, velocities, masses, features = reset(iterator)
         initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses)
