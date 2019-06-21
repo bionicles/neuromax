@@ -96,7 +96,7 @@ class ConvPair(Layer):
             return self.kernel(pair)
         contributions = tf.map_fn(compute_pair, self.inputs)
         print('ConvPair.compute_atom contributions.shape', contributions.shape)
-        potentials = tf.reduce_sum(contributions, axis=1)
+        potentials = tf.reduce_sum(contributions, axis=0)
         print('ConvPair.compute_atom potentials.shape', potentials.shape)
         return potentials
 
@@ -236,7 +236,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
                 print('atoms.shape', atoms.shape)
                 # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
                 noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
-                print(noise.shape)
+                print('noise.shape', noise.shape)
                 force_field = agent([atoms, noise])
                 # force_field = tf.squeeze(agent([atoms, noise]), 0)
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, force_field)
