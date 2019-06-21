@@ -26,4 +26,7 @@ class Array(gym.Space):
         if self.shape is not None and None in self.shape:
             raise ValueError("cannot sample arrays with shape None")
         else:
-            return np.random.normal(self.mean, self.variance, self.shape)
+            result = np.random.normal(self.mean, self.variance, self.shape)
+            if self.high is not None or self.low is not None:
+                result = np.clip(result, self.low, self.high)
+            return result
