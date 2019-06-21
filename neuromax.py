@@ -50,8 +50,8 @@ N_RANDOM_VALIDATION_TRIALS, N_VALIDATION_TRIALS, N_VALIDATION_EPISODES = 0, 1, 1
 COMPLEXITY_PUNISHMENT = 0  # 0 is off, higher is simpler
 TIME_PUNISHMENT = 0
 pbounds = {
-    'BLOCKS': (1, 2),
-    'LAYERS': (1, 2),
+    'BLOCKS': (1, 1),
+    'LAYERS': (1, 1),
     'LR': (1e-4, 1e-1),
     'EPSILON': (1e-4, 1),
 }
@@ -75,8 +75,7 @@ class ConvKernel(Layer):
         self.kernel = get_mlp(features, outputs, units_array)
 
     def call(self, inputs):
-        outputs = tf.vectorized_map(self.kernel, inputs)
-        return outputs
+        return tf.vectorized_map(self.kernel, inputs)
 
 
 class ConvPair(Layer):
@@ -85,20 +84,20 @@ class ConvPair(Layer):
         self.kernel = get_mlp(features, outputs, units_array)
 
     def call(self, inputs):
-        self.inputs = inputs
-        outputs = tf.vectorized_map(self.compute_atom, self.inputs)
+        self.inputs = tf.squeeze(inputs)
+        outputs = tf.map_fn(self.compute_atom, self.inputs)
         print('ConvPair.call outputs.shape', outputs.shape)
         return outputs
 
     def compute_atom(self, atom1):
         def compute_pair(atom2):
-            if atom1 == atom2:
-                return tf.zeros(shape=(1, 3))
             pair = tf.concat([atom1, atom2], 0)
             return self.kernel(pair)
-        contributions = tf.vectorized_map(compute_pair, self.inputs)
+        contributions = tf.map_fn(compute_pair, self.inputs)
         print('ConvPair.compute_atom contributions.shape', contributions.shape)
         potentials = tf.reduce_sum(contributions, axis=1)
+        print('ConvPair.compute_atom potentials.shape', potentials.shape)
+        potentials = K.backend.expand_dims(potentials)
         print('ConvPair.compute_atom potentials.shape', potentials.shape)
         return potentials
 
@@ -121,7 +120,7 @@ def make_resnet(name, d_in, d_out, blocks, layers):
     compressed_features = ConvKernel()(features)
     output = make_block(compressed_features, noise, layers)
     for i in range(1, round(blocks.item())):
-        output = make_block(compressed_features, noise, layers)
+        output = make_block(compressed_features, output, layers)
     output *= -1
     resnet = K.Model([features, noise], output)
     K.utils.plot_model(resnet, name + '.png', show_shapes=True)
