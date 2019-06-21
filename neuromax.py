@@ -50,8 +50,8 @@ N_RANDOM_VALIDATION_TRIALS, N_VALIDATION_TRIALS, N_VALIDATION_EPISODES = 0, 1, 1
 COMPLEXITY_PUNISHMENT = 0  # 0 is off, higher is simpler
 TIME_PUNISHMENT = 0
 pbounds = {
-    'BLOCKS': (1, 1),
-    'LAYERS': (1, 1),
+    'BLOCKS': (2, 2),
+    'LAYERS': (2, 2),
     'LR': (1e-4, 1e-1),
     'EPSILON': (1e-4, 1),
 }
@@ -84,7 +84,7 @@ class ConvPair(Layer):
         self.kernel = get_mlp(features, outputs, units_array)
 
     def call(self, inputs):
-        self.inputs = tf.squeeze(inputs)
+        self.inputs = inputs
         outputs = tf.map_fn(self.compute_atom, self.inputs)
         print('ConvPair.call outputs.shape', outputs.shape)
         return outputs
@@ -97,10 +97,7 @@ class ConvPair(Layer):
         print('ConvPair.compute_atom contributions.shape', contributions.shape)
         potentials = tf.reduce_sum(contributions, axis=1)
         print('ConvPair.compute_atom potentials.shape', potentials.shape)
-        potentials = K.backend.expand_dims(potentials)
-        print('ConvPair.compute_atom potentials.shape', potentials.shape)
         return potentials
-
 
 
 def make_block(features, noise_or_output, n_layers):
