@@ -102,6 +102,7 @@ class ConvPair(Layer):
 
 
 def make_block(features, noise_or_output, n_layers):
+    print("features and noise shape: ", features.shape, noise_or_output.shape)
     block_output = Concatenate(2)([features, noise_or_output])
     for layer_n in range(0, int(n_layers) - 1):
         block_output = ConvPair()(block_output)
@@ -223,7 +224,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         velocities = tf.random.normal(shape=positions.shape)
         force_field = tf.zeros_like(velocities)
         initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-        num_atoms = initial_positions.shape[0]
+        num_atoms = initial_positions.shape[1]
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         step += 1
         while not done:
@@ -235,6 +236,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
                 print('atoms.shape', atoms.shape)
                 # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
                 noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
+                print(noise.shape)
                 force_field = agent([atoms, noise])
                 # force_field = tf.squeeze(agent([atoms, noise]), 0)
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, force_field)
