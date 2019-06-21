@@ -50,8 +50,8 @@ N_RANDOM_VALIDATION_TRIALS, N_VALIDATION_TRIALS, N_VALIDATION_EPISODES = 0, 1, 1
 COMPLEXITY_PUNISHMENT = 0  # 0 is off, higher is simpler
 TIME_PUNISHMENT = 0
 pbounds = {
-    'BLOCKS': (1, 32),
-    'LAYERS': (1, 8),
+    'BLOCKS': (1, 2),
+    'LAYERS': (1, 2),
     'LR': (1e-4, 1e-1),
     'EPSILON': (1e-4, 1),
 }
@@ -70,24 +70,25 @@ def get_mlp(features, outputs, units_array):
 
 
 class ConvKernel(Layer):
-    def __init__(self, features=16, outputs=5, units_array=[512, 512, 512]):
+    def __init__(self, features=16, outputs=5, units_array=[512, 512]):
         super(ConvKernel, self).__init__()
         self.kernel = get_mlp(features, outputs, units_array)
 
     def call(self, inputs):
+        print('ConvKernel.call inputs.shape', inputs.shape)
         return tf.vectorized_map(self.kernel, inputs)
 
 
 class ConvPair(Layer):
     def __init__(self,
-                 units_array=[128, 128, 128],
+                 units_array=[128, 128],
                  features=8,
                  outputs=3):
         super(ConvPair, self).__init__()
         self.kernel = get_mlp(features, outputs, units_array)
 
     def call(self, inputs):
-        self.inputs = inputs[0, :, :]
+        self.inputs = inputs
         return tf.vectorized_map(self.compute_atom, self.inputs)
 
     def compute_atom(self, atom1):
@@ -111,6 +112,7 @@ def make_block(features, noise_or_output, n_layers):
 
 
 def make_resnet(name, d_in, d_out, blocks, layers):
+    print('make_resnet', d_in, '--->', d_out)
     features = K.Input((None, d_in))
     noise = K.Input((None, d_out))
     compressed_features = ConvKernel()(features)
@@ -142,8 +144,8 @@ def parse_example(example):
     initial_distances = calculate_distances(initial_positions)
     # protein_name_tensor = context['protein']
     positions = parse_feature(sequence['positions'][0], 3)
-    masses = tf.concat([masses, masses, masses], 1)
     features = tf.concat([masses, features], 1)
+    masses = tf.concat([masses, masses, masses], 1)
     return initial_positions, initial_distances, positions, masses, features
 
 
@@ -228,6 +230,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
             print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'LR', LR)
             with tf.GradientTape() as tape:
                 atoms = tf.concat([positions, velocities, features], 2)
+                print('atoms.shape', atoms.shape)
                 # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
                 noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
                 force_field = tf.squeeze(agent([atoms, noise]), 0)
