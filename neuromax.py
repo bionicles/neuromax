@@ -216,7 +216,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
     adam = tf.train.AdamOptimizer(decayed_lr, epsilon=EPSILON)
     cumulative_improvement, episode = 0, 0
     for protein_data in dataset:
-        done, step = False, 0
+        done, train_step = False, 0
         initial_positions, initial_distances, positions, masses, features = protein_data
         [print(i.shape) for i in protein_data]
         num_atoms = positions.shape[0].value
@@ -226,7 +226,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
         num_atoms = initial_positions.shape[1]
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
-        step += 1
+        train_step += 1
         while not done:
             print('')
             print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', step)
@@ -243,8 +243,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
             train_step += 1
-            step += 1
-            done_because_step = step > N_STEPS
+            done_because_step = train_step > N_STEPS
             done_because_loss = loss_value > stop_loss
             done = done_because_step or done_because_loss
             if not done:
