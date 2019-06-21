@@ -243,14 +243,15 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
             train_step += 1
-            loss_value_condition = tf.reduce_sum(loss_value, axis = -1)
-            stop_loss_condition = tf.reduce_sum(stop_loss, axis = -1)
+            loss_value_condition = tf.reduce_mean(loss_value, axis = -1)
+            stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
             done_because_step = train_step > N_STEPS
             done_because_loss = loss_value_condition > stop_loss_condition
             done = done_because_step or done_because_loss
             if not done:
-                current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
-                stop_loss = current_stop_loss if current_stop_loss < stop_loss else stop_loss
+                current_stop_loss = loss_value_condition * STOP_LOSS_MULTIPLIER
+                print("~~~~ stop_loss", stop_loss)
+                stop_loss = current_stop_loss if current_stop_loss < stop_loss_condition else stop_loss
         reason = 'STEP' if done_because_step else 'STOP LOSS'
         print('done because of', reason)
         percent_improvement = (initial_loss - loss_value) / 100
