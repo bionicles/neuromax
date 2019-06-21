@@ -213,6 +213,8 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         done, train_step = False, 0
         initial_positions, initial_distances, positions, masses, features = protein_data
         print('')
+        print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', train_step)
+        print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'LR', LR)
         [print(i.shape) for i in protein_data]
         num_atoms = positions.shape[0].value
         num_atoms_squared = num_atoms ** 2
@@ -223,9 +225,6 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
         while not done:
-            print('')
-            print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', train_step)
-            print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'LR', LR)
             with tf.GradientTape() as tape:
                 atoms = tf.concat([positions, velocities, features], 2)
                 # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
@@ -235,11 +234,11 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
+            step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
+            print('step', train_step, 'mean loss', step_mean_loss.numpy())
+            done_because_loss = step_mean_loss > stop_loss_condition
             train_step += 1
             done_because_step = train_step > N_STEPS
-            step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
-            print('mean loss', step_mean_loss.numpy())
-            done_because_loss = step_mean_loss > stop_loss_condition
             done = done_because_step or done_because_loss
             if not done:
                 current_stop_loss = step_mean_loss * STOP_LOSS_MULTIPLIER
@@ -248,7 +247,8 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         print('done because of', reason)
         initial_loss = tf.reduce_mean(initial_loss, axis = 1)
         loss_value = tf.reduce_mean(loss_value, axis = 1)
-        percent_improvement = (initial_loss - loss_value) / 100 # initial_loss and loss_value don't have same shape
+        percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100 # initial_loss and loss_value don't have same shape
+        print('improved by', percent_improvement.numpy(), '%')
         cumulative_improvement += percent_improvement
         episode += 1
         if save_model:
@@ -259,7 +259,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         elapsed = time.time() - start
         cumulative_improvement /= elapsed * TIME_PUNISHMENT
     cumulative_improvement /= N_EPISODES
-    return cumulative_improvement
+    return cumulative_improvement.numpy()
 
 
 def trial(BLOCKS, LAYERS, LR, EPSILON):
