@@ -1,23 +1,19 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.layers import Layer, Dense, Concatenate, Activation, Add
-from tensorflow.keras.initializers import Orthogonal
+import tensorflow.keras.layers as L
+from functools import partial
 import tensorflow.keras as K
 import tensorflow as tf
-tf.compat.v1.enable_eager_execution()
-from bayes_opt import BayesianOptimization
-from bayes_opt.observer import JSONLogger
-from bayes_opt.util import load_logs
-from bayes_opt.event import Events
-from functools import partial
 import numpy as np
 import imageio
 import random
 import shutil
+import skopt
 import time
 import csv
 import os
+tf.compat.v1.enable_eager_execution()
 # globals
-save_model = False
+best_cumulative_improvement = 0
 experiment = 0
 # simulation
 IMAGE_SIZE = 256
@@ -46,42 +42,63 @@ N_EPISODES = 1
 N_STEPS = 100
 VERBOSE = True
 # hyperparameters
-N_RANDOM_VALIDATION_TRIALS, N_VALIDATION_TRIALS, N_VALIDATION_EPISODES = 0, 1, 10000
-COMPLEXITY_PUNISHMENT = 0  # 0 is off, higher is simpler
-TIME_PUNISHMENT = 0
-pbounds = {
-    'BLOCKS': (2, 2),
-    'LAYERS': (2, 2),
-    'LR': (1e-4, 1e-1),
-    'EPSILON': (1e-4, 1),
-}
+d_blocks = skopt.space.Integer(1, 9, name='blocks')
+d_block_layers = skopt.space.Integer(1, 9, name='block_layers')
+d_compressor_kernel_units = skopt.space.Integer(16, 1024, name='compressor_kernel_units')
+d_compressor_kernel_layers = skopt.space.Integer(1, 9, name='compressor_kernel_layers')
+d_pair_kernel_units = skopt.space.Integer(16, 1024, name='pair_kernel_units')
+d_pair_kernel_layers = skopt.space.Integer(1, 9, name='pair_kernel_layers')
+d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
+d_decay = skopt.space.Real(0.0001, 0.01, name='decay')
+
+dimensions = [
+                d_compressor_kernel_layers,
+                d_compressor_kernel_units,
+                d_pair_kernel_layers,
+                d_pair_kernel_units,
+                d_blocks,
+                d_block_layers,
+                d_learning_rate,
+                d_decay
+            ]
+
+default_hyperparameters = [
+    2,
+    512,
+    2,
+    512,
+    2,
+    2,
+    0.001,
+    0.0001
+]
 
 # begin model
 def get_layer(units):
-    return Dense(units, activation='tanh')
+    return L.Dense(units, activation='tanh')
 
-def get_mlp(features, outputs, units_array):
+def get_mlp(features, outputs, layers, units):
     input = K.Input((features, ))
-    output = get_layer(units_array[0])(input)
-    for units in units_array[1:]:
+    output = get_layer(units)(input)
+    for layer in range(layers):
         output = get_layer(units)(output)
     output = get_layer(outputs)(output)
     return K.Model(input, output)
 
 
-class ConvKernel(Layer):
-    def __init__(self, features=16, outputs=5, units_array=[512, 512]):
+class ConvKernel(L.Layer):
+    def __init__(self, features=16, outputs=5, layers=2, units=512):
         super(ConvKernel, self).__init__()
-        self.kernel = get_mlp(features, outputs, units_array)
+        self.kernel = get_mlp(features, outputs, layers, units)
 
     def call(self, inputs):
         return tf.vectorized_map(self.kernel, inputs)
 
 
-class ConvPair(Layer):
-    def __init__(self, features=16, outputs=3, units_array=[128, 128]):
+class ConvPair(L.Layer):
+    def __init__(self, features=16, outputs=3, layers=2, units=512):
         super(ConvPair, self).__init__()
-        self.kernel = get_mlp(features, outputs, units_array)
+        self.kernel = get_mlp(features, outputs, layers, units)
 
     def call(self, inputs):
         self.inputs = inputs
@@ -97,22 +114,22 @@ class ConvPair(Layer):
         return potentials
 
 
-def make_block(features, noise_or_output, n_layers):
-    block_output = Concatenate(2)([features, noise_or_output])
-    for layer_n in range(0, int(n_layers) - 1):
-        block_output = ConvPair()(block_output)
-        block_output = Concatenate(2)([features, block_output])
-    block_output = ConvPair()(block_output)
-    return Add()([block_output, noise_or_output])
+def make_block(features, noise_or_output, block_layers, pair_kernel_layers, pair_kernel_units):
+    block_output = L.Concatenate(2)([features, noise_or_output])
+    for layer_n in range(block_layers):
+        block_output = ConvPair(layers=pair_kernel_layers, units=pair_kernel_units)(block_output)
+        block_output = L.Concatenate(2)([features, block_output])
+    block_output = ConvPair(layers=pair_kernel_layers, units=pair_kernel_units)(block_output)
+    return L.Add()([block_output, noise_or_output])
 
 
-def make_resnet(name, d_in, d_out, blocks, layers):
+def make_resnet(name, d_in, d_out, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers):
     features = K.Input((None, d_in))
     noise = K.Input((None, d_out))
-    compressed_features = ConvKernel()(features)
-    output = make_block(compressed_features, noise, layers)
-    for i in range(1, round(blocks.item())):
-        output = make_block(compressed_features, output, layers)
+    compressed_features = ConvKernel(layers=compressor_kernel_layers, units=compressor_kernel_units)(features)
+    output = make_block(compressed_features, noise, block_layers, pair_kernel_layers, pair_kernel_units)
+    for i in range(1, blocks):
+        output = make_block(compressed_features, output, block_layers, pair_kernel_layers, pair_kernel_units)
     output *= -1
     resnet = K.Model([features, noise], output)
     K.utils.plot_model(resnet, name + '.png', show_shapes=True)
@@ -195,19 +212,21 @@ def calculate_distances(positions):
     return distances - 2 * tf.matmul(positions, tf.transpose(positions)) + tf.transpose(distances)
 # end step/loss
 
-
-def train(BLOCKS, LAYERS, LR, EPSILON):
+@skopt.utils.use_named_args(dimensions=dimensions)
+def train(compressor_kernel_layers,
+          compressor_kernel_units,
+          pair_kernel_layers,
+          pair_kernel_units,
+          blocks,
+          block_layers,
+          learning_rate,
+          decay):
     start = time.time()
     TIME = str(start)
-    if save_model:
-        run_path = os.path.join('.', 'runs', TIME)
-        os.makedirs(run_path)
-        save_path = os.path.join(run_path, 'model.h5')
     train_step = 0
     dataset = make_dataset()
-    agent = make_resnet('agent', 16, 3, blocks=BLOCKS, layers=LAYERS)
-    decayed_lr = tf.train.exponential_decay(LR, train_step, 10000, 0.96, staircase=True)
-    adam = tf.train.AdamOptimizer(decayed_lr, epsilon=EPSILON)
+    agent = make_resnet('agent', 16, 3, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers)
+    adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
     cumulative_improvement, episode = 0, 0
     for protein_data in dataset:
         if episode > N_EPISODES:
@@ -215,8 +234,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         done, train_step = False, 0
         initial_positions, initial_distances, positions, masses, features = protein_data
         print('')
-        print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', train_step)
-        print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'LR', LR)
+        print('model', TIME, 'episode', episode, 'step', train_step)
         [print(i.shape) for i in protein_data]
         num_atoms = positions.shape[0].value
         num_atoms_squared = num_atoms ** 2
@@ -246,7 +264,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
                 current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
                 current_stop_loss_condition = tf.reduce_mean(current_stop_loss, axis = -1)
                 if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
-                    stop_loss = current_stop_loss_condition
+                    stop_loss_condition = current_stop_loss_condition
                     print('new stop loss:', current_stop_loss_condition.numpy())
         reason = 'STEP' if done_because_step else 'STOP LOSS'
         print('done because of', reason)
@@ -256,42 +274,32 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         print('improved by', percent_improvement.numpy(), '%')
         cumulative_improvement += percent_improvement
         episode += 1
-        if save_model:
-            tf.saved_model.save(agent, save_path)
-    if COMPLEXITY_PUNISHMENT is not 0:
-        cumulative_improvement /= agent.count_params() * COMPLEXITY_PUNISHMENT
-    if TIME_PUNISHMENT is not 0:
-        elapsed = time.time() - start
-        cumulative_improvement /= elapsed * TIME_PUNISHMENT
     cumulative_improvement /= N_EPISODES
-    return cumulative_improvement.numpy()[0]
-
-
-def trial(BLOCKS, LAYERS, LR, EPSILON):
-    tf.keras.backend.clear_session()
-    # try:
-    return train(BLOCKS, LAYERS, LR, EPSILON)
-    # except Exception as e:
-    #     print('EXPERIMENT FAIL!!!', e)
-    #     return -10
+    global best_cumulative_improvement
+    if cumulative_improvement > best_cumulative_improvement:
+        print('new best mean cumulative improvement:', cumulative_improvement.numpy())
+        best_cumulative_improvement = cumulative_improvement
+        run_path = os.path.join('.', 'runs', TIME)
+        os.makedirs(run_path)
+        save_path = os.path.join(run_path, 'best_agent.h5')
+        tf.saved_model.save(agent, save_path)
+        print('saved agent to', save_path)
+    K.backend.clear_session()
+    del agent
+    return -1 * cumulative_improvement.numpy()[0]
 
 
 def main():
-    global N_EPISODES, experiment, save_model
+    global N_EPISODES
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    logger = JSONLogger(path='./runs/logs.json')
-    bayes = BayesianOptimization(f=partial(trial), pbounds=pbounds,
-                                 verbose=2, random_state=1)
-    bayes.subscribe(Events.OPTMIZATION_STEP, logger)
-    try:
-        load_logs(bayes, logs=['./runs/logs.json'])
-    except Exception as e:
-        print('failed to load bayesian optimization logs', e)
-    for e in range(N_EXPERIMENTS):
-        experiment = e
-        bayes.maximize(init_points=N_RANDOM_TRIALS, n_iter=N_TRIALS)
-        print("BEST MODEL:", bayes.max)
-    N_EPISODES, save_model = N_VALIDATION_EPISODES, True
+
+    search_result = skopt.gp_minimize(func=train,
+                            dimensions=dimensions,
+                            acq_func='EI', # Expected Improvement.
+                            n_calls=12,
+                            x0=default_hyperparameters)
+
+    N_EPISODES = N_VALIDATION_EPISODES, True
     bayes.maximize(init_points=0, n_iter=1)
     for i, res in enumerate(bayes.res):
         print('iteration: {}, results: {}'.format(i, res))
