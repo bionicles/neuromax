@@ -227,10 +227,9 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
         num_atoms = initial_positions.shape[1]
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
-        train_step += 1
         while not done:
             print('')
-            print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', step)
+            print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', train_step)
             print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'LR', LR)
             with tf.GradientTape() as tape:
                 atoms = tf.concat([positions, velocities, features], 2)
@@ -244,6 +243,8 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
             train_step += 1
+            loss_value = tf.reduce_sum(loss_value, axis = -1)
+            stop_loss = tf.reduce_sum(stop_loss, axis = -1)
             done_because_step = train_step > N_STEPS
             done_because_loss = loss_value > stop_loss
             done = done_because_step or done_because_loss
