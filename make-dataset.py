@@ -175,7 +175,8 @@ def main():
     p = Pool(num_cpus - 1)
     pedagogy_path = os.path.join('.', 'csvs', CSV_FILE_NAME)
     pedagogy = load_pedagogy(pedagogy_path)
-    p.map(write_shards, pedagogy)
+    # p.map(write_shards, pedagogy)
+    write_shards(pedagogy)
 
 
 
