@@ -6,10 +6,10 @@ import random
 import shutil
 import csv
 import os
-
-
+from multiprocessing import Pool
+import secrets
 tf.enable_eager_execution()
-
+from cpuinfo import get_cpu_info
 
 CSV_FILE_NAME = 'less-than-164kd-9-chains.csv'
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
@@ -133,19 +133,18 @@ def make_example(protein, initial_positions, positions, features, masses):
     return example.SerializeToString()
 
 
-def write_shards():
-    pedagogy_path = os.path.join('.', 'csvs', CSV_FILE_NAME)
-    pedagogy = load_pedagogy(pedagogy_path)
+def write_shards(pedagogy):
     problems = []
     k = 0
     p = 0
+    random_token = secrets.token_urlsafe(5)
     for protein in ProgIter(pedagogy, verbose=1):
         if p % PROTEINS_PER_TFRECORD is 0:
             try:
                 writer.close()
             except Exception as e:
                 print('writer.close() exception', e)
-            shard_path = os.path.join('.', 'tfrecords', str(k) + '.tfrecord')
+            shard_path = os.path.join('.', 'tfrecords', str(k) + random_token + '.tfrecord')
             writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
             k += 1
         try:
@@ -172,8 +171,11 @@ def main():
         os.mkdir(tfrecord_path)
     except Exception as e:
         print('os.path.makedirs(tfrecord_path) exception', e)
-
-    write_shards()
+    num_cpus = get_cpu_info()["count"]
+    p = Pool(num_cpus - 1)
+    pedagogy_path = os.path.join('.', 'csvs', CSV_FILE_NAME)
+    pedagogy = load_pedagogy(pedagogy_path)
+    p.map(write_shards, pedagogy)
 
 
 

@@ -50,8 +50,8 @@ N_RANDOM_VALIDATION_TRIALS, N_VALIDATION_TRIALS, N_VALIDATION_EPISODES = 0, 1, 1
 COMPLEXITY_PUNISHMENT = 0  # 0 is off, higher is simpler
 TIME_PUNISHMENT = 0
 pbounds = {
-    'BLOCKS': (2, 2),
-    'LAYERS': (2, 2),
+    'BLOCKS': (4, 8),
+    'LAYERS': (3, 5),
     'LR': (1e-4, 1e-1),
     'EPSILON': (1e-4, 1),
 }
