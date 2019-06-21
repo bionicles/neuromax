@@ -57,12 +57,15 @@ pbounds = {
 }
 
 # begin model
+def get_layer(units):
+    return Dense(units, activation='tanh', kernel_initializer='orthogonal')
+
 def get_mlp(features, outputs, units_array):
     input = K.Input((features))
-    output = Dense(units_array[0], activation='tanh', kernel_initializer=Orthogonal)(input)
+    output = get_layer(units_array[0])(input)
     for units in units_array[1:]:
-        output = Dense(units, activation='tanh', kernel_initializer=Orthogonal)(output)
-    output = Dense(outputs, activation='tanh', kernel_initializer=Orthogonal)(output)
+        output = get_layer(units)(output)
+    output = get_layer(outputs)(output)
     return K.Model(input, output)
 
 
@@ -81,15 +84,17 @@ class ConvPair(Layer):
                  features=8,
                  outputs=3):
         super(ConvPair, self).__init__()
-        self.kernel = get_mlp(features * 2, outputs, units_array)
+        self.kernel = get_mlp(features, outputs, units_array)
 
     def call(self, inputs):
-        self.inputs = inputs
+        self.inputs = inputs[0, :, :]
         return tf.vectorized_map(self.compute_atom, self.inputs)
 
     def compute_atom(self, atom1):
         def compute_pair(atom2):
-            pair = tf.concat([atom1, atom2], 1)
+            print('ConvPair.compute_pair atom1', atom1)
+            print('ConvPair.compute_pair atom2', atom2)
+            pair = tf.concat([atom1, atom2], 0)
             return self.kernel(pair)
         contributions = tf.vectorized_map(compute_pair, self.inputs)
         return tf.reduce_sum(contributions)
