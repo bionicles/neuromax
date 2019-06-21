@@ -167,7 +167,7 @@ def make_dataset():
 # begin step / loss
 def step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field):
     positions, velocities = move_atoms(positions, velocities, masses, force_field)
-    loss_value = loss(initial_positions, initial_distances, positions, velocities, masses, force_field)
+    loss_value = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
     return positions, velocities, loss_value
 
 def move_atoms(positions, velocities, masses, force_field):
