@@ -61,7 +61,7 @@ def get_layer(units):
     return Dense(units, activation='tanh')
 
 def get_mlp(features, outputs, units_array):
-    input = K.Input((features))
+    input = K.Input((features, ))
     output = get_layer(units_array[0])(input)
     for units in units_array[1:]:
         output = get_layer(units)(output)
@@ -79,7 +79,7 @@ class ConvKernel(Layer):
 
 
 class ConvPair(Layer):
-    def __init__(self, features=8, outputs=3, units_array=[128, 128]):
+    def __init__(self, features=16, outputs=3, units_array=[128, 128]):
         super(ConvPair, self).__init__()
         self.kernel = get_mlp(features, outputs, units_array)
 
