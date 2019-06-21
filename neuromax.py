@@ -166,11 +166,11 @@ def make_dataset():
 
 # begin step / loss
 def step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field):
-    positions, velocities = move_atoms(positions, velocities, masses, force_field)
+    positions, velocities = move_atoms(positions, velocities, masses, force_field, num_atoms)
     loss_value = loss(initial_positions, initial_distances, positions, velocities, masses, force_field)
     return positions, velocities, loss_value
 
-def move_atoms(positions, velocities, masses, force_field):
+def move_atoms(positions, velocities, masses, force_field, num_atoms):
     acceleration = force_field / masses
     noise = tf.random.normal((num_atoms, 3), 0, NOISE, dtype='float16')
     velocities += acceleration + noise
