@@ -239,7 +239,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
                 print('noise.shape', noise.shape)
                 force_field = agent([atoms, noise])
                 # force_field = tf.squeeze(agent([atoms, noise]), 0)
-                positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, force_field)
+                positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
             train_step += 1
