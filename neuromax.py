@@ -36,13 +36,13 @@ RANDOM_PROTEINS = True
 N_PARALLEL_CALLS = 1
 BATCH_SIZE = 1
 # training
-N_RANDOM_TRIALS, N_TRIALS = 2, 3
+N_RANDOM_TRIALS, N_TRIALS = 1, 1
 STOP_LOSS_MULTIPLIER = 1.04
 POSITION_ERROR_WEIGHT = 1
 ACTION_ERROR_WEIGHT = 1
 SHAPE_ERROR_WEIGHT = 1
-N_EXPERIMENTS = 100
-N_EPISODES = 42
+N_EXPERIMENTS = 1
+N_EPISODES = 1
 N_STEPS = 100
 VERBOSE = True
 # hyperparameters
@@ -220,6 +220,8 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
     adam = tf.train.AdamOptimizer(decayed_lr, epsilon=EPSILON)
     cumulative_improvement, episode = 0, 0
     for protein_data in dataset:
+        if episode > N_EPISODES:
+            break
         done, train_step = False, 0
         initial_positions, initial_distances, positions, masses, features = protein_data
         print('')
@@ -251,8 +253,11 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
             done_because_step = train_step > N_STEPS
             done = done_because_step or done_because_loss
             if not done:
-                current_stop_loss = step_mean_loss * STOP_LOSS_MULTIPLIER
-                stop_loss = current_stop_loss if current_stop_loss < stop_loss_condition else stop_loss
+                current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
+                current_stop_loss_condition = tf.reduce_mean(current_stop_loss, axis = -1)
+                if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
+                    stop_loss = current_stop_loss_condition
+                    print('new stop loss:', current_stop_loss_condition.numpy())
         reason = 'STEP' if done_because_step else 'STOP LOSS'
         print('done because of', reason)
         initial_loss = tf.reduce_mean(initial_loss, axis = 1)
@@ -269,7 +274,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         elapsed = time.time() - start
         cumulative_improvement /= elapsed * TIME_PUNISHMENT
     cumulative_improvement /= N_EPISODES
-    return cumulative_improvement.numpy()
+    return cumulative_improvement.numpy()[0]
 
 
 def trial(BLOCKS, LAYERS, LR, EPSILON):
@@ -285,10 +290,8 @@ def main():
     global N_EPISODES, experiment, save_model
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     logger = JSONLogger(path='./runs/logs.json')
-    bayes = BayesianOptimization(f=partial(trial),
-                                 pbounds=pbounds,
-                                 verbose=2,
-                                 random_state=1)
+    bayes = BayesianOptimization(f=partial(trial), pbounds=pbounds,
+                                 verbose=2, random_state=1)
     bayes.subscribe(Events.OPTMIZATION_STEP, logger)
     try:
         load_logs(bayes, logs=['./runs/logs.json'])
