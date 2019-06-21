@@ -233,7 +233,7 @@ def train(compressor_kernel_layers,
     start = time.time()
     TIME = str(start)
     train_step = 0
-    dataset = make_dataset()
+    dataset = read_dataset()
     agent = make_resnet('agent', 16, 3, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers)
     adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
     cumulative_improvement, episode = 0, 0
