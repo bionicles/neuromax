@@ -75,44 +75,47 @@ class ConvKernel(Layer):
         self.kernel = get_mlp(features, outputs, units_array)
 
     def call(self, inputs):
-        print('ConvKernel.call inputs.shape', inputs.shape)
-        return tf.vectorized_map(self.kernel, inputs)
+        outputs = tf.vectorized_map(self.kernel, inputs)
+        return outputs
 
 
 class ConvPair(Layer):
-    def __init__(self,
-                 units_array=[128, 128],
-                 features=8,
-                 outputs=3):
+    def __init__(self, features=8, outputs=3, units_array=[128, 128]):
         super(ConvPair, self).__init__()
         self.kernel = get_mlp(features, outputs, units_array)
 
     def call(self, inputs):
         self.inputs = inputs
-        return tf.vectorized_map(self.compute_atom, self.inputs)
+        outputs = tf.vectorized_map(self.compute_atom, self.inputs)
+        print('ConvPair.call outputs.shape', outputs.shape)
+        return outputs
 
     def compute_atom(self, atom1):
         def compute_pair(atom2):
-            print('ConvPair.compute_pair atom1', atom1)
-            print('ConvPair.compute_pair atom2', atom2)
+            if atom1 == atom2:
+                return tf.zeros(shape=(1, 3))
             pair = tf.concat([atom1, atom2], 0)
             return self.kernel(pair)
         contributions = tf.vectorized_map(compute_pair, self.inputs)
-        return tf.reduce_sum(contributions)
+        print('ConvPair.compute_atom contributions.shape', contributions.shape)
+        potentials = tf.reduce_sum(contributions, axis=1)
+        print('ConvPair.compute_atom potentials.shape', potentials.shape)
+        return potentials
+
 
 
 def make_block(features, noise_or_output, n_layers):
     block_output = Concatenate(2)([features, noise_or_output])
     for layer_n in range(0, int(n_layers) - 1):
         block_output = ConvPair()(block_output)
+        print('make_block block_output.shape', block_output.shape)
+        print('make_block features.shape', features.shape)
         block_output = Concatenate(2)([features, block_output])
     block_output = ConvPair()(block_output)
-    block_output = Add()([block_output, noise_or_output])
-    return block_output
+    return Add()([block_output, noise_or_output])
 
 
 def make_resnet(name, d_in, d_out, blocks, layers):
-    print('make_resnet', d_in, '--->', d_out)
     features = K.Input((None, d_in))
     noise = K.Input((None, d_out))
     compressed_features = ConvKernel()(features)
@@ -120,7 +123,9 @@ def make_resnet(name, d_in, d_out, blocks, layers):
     for i in range(1, round(blocks.item())):
         output = make_block(compressed_features, noise, layers)
     output *= -1
-    return K.Model([features, noise], output)
+    resnet = K.Model([features, noise], output)
+    K.utils.plot_model(resnet, name + '.png', show_shapes=True)
+    return resnet
 # end model
 
 # begin dataset
@@ -233,7 +238,8 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
                 print('atoms.shape', atoms.shape)
                 # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
                 noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
-                force_field = tf.squeeze(agent([atoms, noise]), 0)
+                force_field = agent([atoms, noise])
+                # force_field = tf.squeeze(agent([atoms, noise]), 0)
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, force_field)
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
