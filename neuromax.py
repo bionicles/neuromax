@@ -50,8 +50,8 @@ N_RANDOM_VALIDATION_TRIALS, N_VALIDATION_TRIALS, N_VALIDATION_EPISODES = 0, 1, 1
 COMPLEXITY_PUNISHMENT = 0  # 0 is off, higher is simpler
 TIME_PUNISHMENT = 0
 pbounds = {
-    'BLOCKS': (4, 8),
-    'LAYERS': (3, 5),
+    'BLOCKS': (2, 2),
+    'LAYERS': (2, 2),
     'LR': (1e-4, 1e-1),
     'EPSILON': (1e-4, 1),
 }
@@ -212,6 +212,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
     for protein_data in dataset:
         done, train_step = False, 0
         initial_positions, initial_distances, positions, masses, features = protein_data
+        print('')
         [print(i.shape) for i in protein_data]
         num_atoms = positions.shape[0].value
         num_atoms_squared = num_atoms ** 2
@@ -220,7 +221,9 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
         num_atoms = initial_positions.shape[1]
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
+        stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
         while not done:
+            print('')
             print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', train_step)
             print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'LR', LR)
             with tf.GradientTape() as tape:
@@ -230,18 +233,16 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
                 force_field = agent([atoms, noise])
                 # force_field = tf.squeeze(agent([atoms, noise]), 0)
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-            print("loss_value: ", loss_value)
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
             train_step += 1
-            loss_value_condition = tf.reduce_mean(loss_value, axis = -1)
-            stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
             done_because_step = train_step > N_STEPS
-            done_because_loss = loss_value_condition > stop_loss_condition
+            step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
+            print('mean loss', step_mean_loss.numpy())
+            done_because_loss = step_mean_loss > stop_loss_condition
             done = done_because_step or done_because_loss
             if not done:
-                current_stop_loss = loss_value_condition * STOP_LOSS_MULTIPLIER
-                print("~~~~ stop_loss", stop_loss)
+                current_stop_loss = step_mean_loss * STOP_LOSS_MULTIPLIER
                 stop_loss = current_stop_loss if current_stop_loss < stop_loss_condition else stop_loss
         reason = 'STEP' if done_because_step else 'STOP LOSS'
         print('done because of', reason)
