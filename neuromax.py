@@ -1,10 +1,9 @@
 # neuromax.py - why?: 1 simple file with functions over classes
-from tensorflow.keras.layers import Layer, Dense, Concatenate
+from tensorflow.keras.layers import Layer, Dense, Concatenate, Activation, Add
 from tensorflow.keras.initializers import Orthogonal
-from tensorflow.keras import Model, Input
+import tensorflow.keras as K
 import tensorflow as tf
 tf.compat.v1.enable_eager_execution()
-
 from bayes_opt import BayesianOptimization
 from bayes_opt.observer import JSONLogger
 from bayes_opt.util import load_logs
@@ -30,20 +29,24 @@ SCREENSHOT_EVERY = 10
 NOISE = 0.01
 WARMUP = 1000
 BUFFER = 42
+# dataset
+PEDAGOGY_FILE_NAME = 'less-than-164kd-9-chains.csv'
 BIGGEST_FIRST_IF_NEG = 1
 RANDOM_PROTEINS = True
 N_PARALLEL_CALLS = 1
 BATCH_SIZE = 1
 # training
+N_RANDOM_TRIALS, N_TRIALS = 2, 3
 STOP_LOSS_MULTIPLIER = 1.04
-NUM_RANDOM_TRIALS, NUM_TRIALS = 2, 3
-PEDAGOGY_FILE_NAME = 'less-than-164kd-9-chains.csv'
-NUM_EXPERIMENTS = 100
-NUM_EPISODES = 42
-NUM_STEPS = 100
+POSITION_ERROR_WEIGHT = 1
+ACTION_ERROR_WEIGHT = 1
+SHAPE_ERROR_WEIGHT = 1
+N_EXPERIMENTS = 100
+N_EPISODES = 42
+N_STEPS = 100
 VERBOSE = True
 # hyperparameters
-NUM_RANDOM_VALIDATION_TRIALS, NUM_VALIDATION_TRIALS, NUM_VALIDATION_EPISODES = 0, 1, 10000
+N_RANDOM_VALIDATION_TRIALS, N_VALIDATION_TRIALS, N_VALIDATION_EPISODES = 0, 1, 10000
 COMPLEXITY_PUNISHMENT = 0  # 0 is off, higher is simpler
 TIME_PUNISHMENT = 0
 pbounds = {
@@ -55,49 +58,38 @@ pbounds = {
 
 # begin model
 def get_mlp(features, outputs, units_array):
-    input = Input((features))
+    input = K.Input((features))
     output = Dense(units_array[0], activation='tanh', kernel_initializer=Orthogonal)(input)
     for units in units_array[1:]:
         output = Dense(units, activation='tanh', kernel_initializer=Orthogonal)(output)
     output = Dense(outputs, activation='tanh', kernel_initializer=Orthogonal)(output)
-    return Model(input, output)
+    return K.Model(input, output)
 
 
 class ConvKernel(Layer):
-    def __init__(self, units_array=[512, 512, 5]):
+    def __init__(self, features=16, outputs=5, units_array=[512, 512, 512]):
         super(ConvKernel, self).__init__()
-        self.units_array = units_array
-        [self.add_weight(
-                    shape=(units_array[i-1], units_array[i]),
-                    initializer='truncated_normal',
-                    trainable=True
-         ) for i in range(1, len(units_array))]
+        self.kernel = get_mlp(features, outputs, units_array)
 
-    def __call__(self, inputs):
-        return tf.vectorized_map(self.apply_kernel, inputs)
+    def call(self, inputs):
+        return tf.vectorized_map(self.kernel, inputs)
 
-    def apply_kernel(self, input):
-        output = tf.matmul(input, self.weights[0])
-        for weight in self.weights[1:]:
-            output = tf.matmul(output, weight)
-        return output
 
 class ConvPair(Layer):
     def __init__(self,
-                 units_array=[128, 128],
+                 units_array=[128, 128, 128],
                  features=8,
                  outputs=3):
         super(ConvPair, self).__init__()
         self.kernel = get_mlp(features * 2, outputs, units_array)
-        self.outputs = outputs
 
-    def __call__(self, inputs):
+    def call(self, inputs):
         self.inputs = inputs
-        return tf.vectorized_map(self.compute_atom, inputs)
+        return tf.vectorized_map(self.compute_atom, self.inputs)
 
     def compute_atom(self, atom1):
         def compute_pair(atom2):
-            pair = tf.concat([atom1, atom2])
+            pair = tf.concat([atom1, atom2], 1)
             return self.kernel(pair)
         contributions = tf.vectorized_map(compute_pair, self.inputs)
         return tf.reduce_sum(contributions)
@@ -114,14 +106,14 @@ def make_block(features, noise_or_output, n_layers):
 
 
 def make_resnet(name, d_in, d_out, blocks, layers):
-    features = Input((None, d_in))
-    noise = Input((None, d_out))
+    features = K.Input((None, d_in))
+    noise = K.Input((None, d_out))
     compressed_features = ConvKernel()(features)
     output = make_block(compressed_features, noise, layers)
     for i in range(1, round(blocks.item())):
         output = make_block(compressed_features, noise, layers)
     output *= -1
-    return Model([features, noise], output)
+    return K.Model([features, noise], output)
 # end model
 
 # begin dataset
@@ -142,14 +134,12 @@ def parse_example(example):
     initial_positions = parse_feature(sequence['initial_positions'][0], 3)
     features = parse_feature(sequence['features'][0], 9)
     masses = parse_feature(sequence['masses'][0], 1)
-    return {
-        'initial_positions': initial_positions,
-        'initial_distances': calculate_distances(initial_positions),
-        'protein_name_tensor': context['protein'],
-        'positions': parse_feature(sequence['positions'][0], 3),
-        'masses': tf.concat([masses, masses, masses], 1),
-        'features': tf.concat([masses, features], 1),
-        }
+    initial_distances = calculate_distances(initial_positions)
+    # protein_name_tensor = context['protein']
+    positions = parse_feature(sequence['positions'][0], 3)
+    masses = tf.concat([masses, masses, masses], 1)
+    features = tf.concat([masses, features], 1)
+    return initial_positions, initial_distances, positions, masses, features
 
 
 def make_dataset():
@@ -157,27 +147,12 @@ def make_dataset():
     recordpaths = []
     for name in os.listdir(path):
         recordpaths.append(os.path.join(path, name))
-    print(recordpaths)
     dataset = tf.data.TFRecordDataset(recordpaths, 'ZLIB')
-    dataset.map(map_func=parse_example,
-                num_parallel_calls=N_PARALLEL_CALLS)
+    dataset = dataset.map(map_func=parse_example)
     dataset = dataset.batch(batch_size=BATCH_SIZE)
     dataset = dataset.prefetch(buffer_size=BATCH_SIZE)
     return dataset
-
-
-def reset(dataset):
-    example = dataset.take(1)
-    state = parse_example(example)
-    return (
-        state['protein'],
-        state['initial_positions'],
-        state['initial_distances'],
-        state['positions'],
-        state['masses'],
-        state['features'])
 # end dataset
-
 
 # begin step / loss
 def step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field):
@@ -210,6 +185,7 @@ def loss(initial_positions, initial_distances, positions, velocities, masses, nu
     return position_error + shape_error + average_action_error
 
 def calculate_distances(positions):
+    positions = tf.squeeze(positions)
     distances = tf.reduce_sum(positions * positions, 1)
     distances = tf.reshape(distances, [-1, 1])
     return distances - 2 * tf.matmul(positions, tf.transpose(positions)) + tf.transpose(distances)
@@ -229,18 +205,25 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
     decayed_lr = tf.train.exponential_decay(LR, train_step, 10000, 0.96, staircase=True)
     adam = tf.train.AdamOptimizer(decayed_lr, epsilon=EPSILON)
     cumulative_improvement, episode = 0, 0
-    for i in range(NUM_EPISODES):
+    for protein_data in dataset:
         done, step = False, 0
-        protein, num_atoms, initial_positions, initial_distances, positions, velocities, masses, features = reset(iterator)
-        initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses)
+        initial_positions, initial_distances, positions, masses, features = protein_data
+        [print(i.shape) for i in protein_data]
+        num_atoms = positions.shape[0].value
+        num_atoms_squared = num_atoms ** 2
+        velocities = tf.random.normal(shape=positions.shape)
+        force_field = tf.zeros_like(velocities)
+        initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
+        num_atoms = initial_positions.shape[0]
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         step += 1
         while not done:
             print('')
             print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', step)
-            print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'UNITS', round(UNITS), 'LR', LR)
+            print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'LR', LR)
             with tf.GradientTape() as tape:
-                atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
+                atoms = tf.concat([positions, velocities, features], 2)
+                # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
                 noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
                 force_field = tf.squeeze(agent([atoms, noise]), 0)
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, force_field)
@@ -248,7 +231,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
             train_step += 1
             step += 1
-            done_because_step = step > NUM_STEPS
+            done_because_step = step > N_STEPS
             done_because_loss = loss_value > stop_loss
             done = done_because_step or done_because_loss
             if not done:
@@ -266,7 +249,7 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
     if TIME_PUNISHMENT is not 0:
         elapsed = time.time() - start
         cumulative_improvement /= elapsed * TIME_PUNISHMENT
-    cumulative_improvement /= NUM_EPISODES
+    cumulative_improvement /= N_EPISODES
     return cumulative_improvement
 
 
@@ -280,8 +263,7 @@ def trial(BLOCKS, LAYERS, LR, EPSILON):
 
 
 def main():
-    global NUM_EPISODES, experiment, save_model
-    print('eager?', tf.executing_eagerly())
+    global N_EPISODES, experiment, save_model
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     logger = JSONLogger(path='./runs/logs.json')
     bayes = BayesianOptimization(f=partial(trial),
@@ -293,11 +275,11 @@ def main():
         load_logs(bayes, logs=['./runs/logs.json'])
     except Exception as e:
         print('failed to load bayesian optimization logs', e)
-    for e in range(NUM_EXPERIMENTS):
+    for e in range(N_EXPERIMENTS):
         experiment = e
-        bayes.maximize(init_points=NUM_RANDOM_TRIALS, n_iter=NUM_TRIALS)
+        bayes.maximize(init_points=N_RANDOM_TRIALS, n_iter=N_TRIALS)
         print("BEST MODEL:", bayes.max)
-    NUM_EPISODES, save_model = NUM_VALIDATION_EPISODES, True
+    N_EPISODES, save_model = N_VALIDATION_EPISODES, True
     bayes.maximize(init_points=0, n_iter=1)
     for i, res in enumerate(bayes.res):
         print('iteration: {}, results: {}'.format(i, res))
