@@ -86,28 +86,21 @@ class ConvPair(Layer):
     def call(self, inputs):
         self.inputs = inputs
         outputs = tf.map_fn(self.compute_atom, self.inputs)
-        print('ConvPair.call outputs.shape', outputs.shape)
         return outputs
 
     def compute_atom(self, atom1):
         def compute_pair(atom2):
             pair = tf.concat([atom1, atom2], 1)
-            print('ConvPair.compute_pair pair.shape', pair.shape)
             return self.kernel(pair)
         contributions = tf.map_fn(compute_pair, self.inputs)
-        print('ConvPair.compute_atom contributions.shape', contributions.shape)
         potentials = tf.reduce_sum(contributions, axis=0)
-        print('ConvPair.compute_atom potentials.shape', potentials.shape)
         return potentials
 
 
 def make_block(features, noise_or_output, n_layers):
-    print("features and noise shape: ", features.shape, noise_or_output.shape)
     block_output = Concatenate(2)([features, noise_or_output])
     for layer_n in range(0, int(n_layers) - 1):
         block_output = ConvPair()(block_output)
-        print('make_block block_output.shape', block_output.shape)
-        print('make_block features.shape', features.shape)
         block_output = Concatenate(2)([features, block_output])
     block_output = ConvPair()(block_output)
     return Add()([block_output, noise_or_output])
@@ -228,18 +221,16 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         num_atoms = initial_positions.shape[1]
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         while not done:
-            print('')
             print('experiment', experiment, 'model', TIME, 'episode', episode, 'step', train_step)
             print('BLOCKS', round(BLOCKS), 'LAYERS', round(LAYERS), 'LR', LR)
             with tf.GradientTape() as tape:
                 atoms = tf.concat([positions, velocities, features], 2)
-                print('atoms.shape', atoms.shape)
                 # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
                 noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
-                print('noise.shape', noise.shape)
                 force_field = agent([atoms, noise])
                 # force_field = tf.squeeze(agent([atoms, noise]), 0)
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
+            print("loss_value: ", loss_value)
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
             train_step += 1
@@ -256,8 +247,6 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
         print('done because of', reason)
         initial_loss = tf.reduce_mean(initial_loss, axis = 1)
         loss_value = tf.reduce_mean(loss_value, axis = 1)
-        print("initial_loss", initial_loss)
-        print("loss_value", loss_value)
         percent_improvement = (initial_loss - loss_value) / 100 # initial_loss and loss_value don't have same shape
         cumulative_improvement += percent_improvement
         episode += 1
