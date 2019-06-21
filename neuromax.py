@@ -243,10 +243,10 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
             gradients = tape.gradient(loss_value, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
             train_step += 1
-            loss_value = tf.reduce_sum(loss_value, axis = -1)
-            stop_loss = tf.reduce_sum(stop_loss, axis = -1)
+            loss_value_condition = tf.reduce_sum(loss_value, axis = -1)
+            stop_loss_condition = tf.reduce_sum(stop_loss, axis = -1)
             done_because_step = train_step > N_STEPS
-            done_because_loss = loss_value > stop_loss
+            done_because_loss = loss_value_condition > stop_loss_condition
             done = done_because_step or done_because_loss
             if not done:
                 current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
