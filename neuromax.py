@@ -179,6 +179,7 @@ def move_atoms(positions, velocities, masses, force_field):
 
 def loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field):
     # position
+    num_atoms = tf.dtypes.cast(num_atoms, dtype = tf.float32)
     position_error = K.losses.mean_squared_error(initial_positions, positions)
     position_error /= num_atoms
     position_error *= POSITION_ERROR_WEIGHT
