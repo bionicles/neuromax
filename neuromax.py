@@ -58,7 +58,7 @@ pbounds = {
 
 # begin model
 def get_layer(units):
-    return Dense(units, activation='tanh', kernel_initializer='orthogonal')
+    return Dense(units, activation='tanh')
 
 def get_mlp(features, outputs, units_array):
     input = K.Input((features))
@@ -91,7 +91,8 @@ class ConvPair(Layer):
 
     def compute_atom(self, atom1):
         def compute_pair(atom2):
-            pair = tf.concat([atom1, atom2], 0)
+            pair = tf.concat([atom1, atom2], 1)
+            print('ConvPair.compute_pair pair.shape', pair.shape)
             return self.kernel(pair)
         contributions = tf.map_fn(compute_pair, self.inputs)
         print('ConvPair.compute_atom contributions.shape', contributions.shape)
