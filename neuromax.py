@@ -73,6 +73,7 @@ default_hyperparameters = [
     0.0001
 ]
 
+
 # begin model
 def get_layer(units):
     return L.Dense(units, activation='tanh')
@@ -136,6 +137,7 @@ def make_resnet(name, d_in, d_out, compressor_kernel_layers, compressor_kernel_u
     return resnet
 # end model
 
+
 # begin dataset
 def parse_feature(byte_string, d):
     tensor = tf.io.parse_tensor(byte_string, tf.float32)
@@ -143,12 +145,12 @@ def parse_feature(byte_string, d):
 
 
 def parse_example(example):
-    context_features={'protein': tf.io.FixedLenFeature([], dtype=tf.string)}
-    sequence_features={
-        'initial_positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),  # num_atoms * 3
-        'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),  # num_atoms * 3
-        'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),  # num_atoms * 16
-        'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)  # num_atoms * 3
+    context_features = {'protein': tf.io.FixedLenFeature([], dtype=tf.string)}
+    sequence_features = {
+        'initial_positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+        'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+        'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+        'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)
     }
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     initial_positions = parse_feature(sequence['initial_positions'][0], 3)
@@ -162,7 +164,7 @@ def parse_example(example):
     return initial_positions, initial_distances, positions, masses, features
 
 
-def make_dataset():
+def read_dataset():
     path = os.path.join('.', 'tfrecords')
     recordpaths = []
     for name in os.listdir(path):
@@ -174,11 +176,16 @@ def make_dataset():
     return dataset
 # end dataset
 
+
 # begin step / loss
-def step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field):
+def step(initial_positions, initial_distances, positions, velocities,
+         masses, num_atoms, num_atoms_squared, force_field):
     positions, velocities = move_atoms(positions, velocities, masses, force_field)
-    loss_value = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
+    loss_value = loss(initial_positions, initial_distances, positions,
+                      velocities, masses,
+                      num_atoms, num_atoms_squared, force_field)
     return positions, velocities, loss_value
+
 
 def move_atoms(positions, velocities, masses, force_field):
     acceleration = force_field / masses
@@ -186,6 +193,7 @@ def move_atoms(positions, velocities, masses, force_field):
     velocities += acceleration + noise
     positions += velocities
     return positions, velocities
+
 
 def loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field):
     # position
@@ -204,6 +212,7 @@ def loss(initial_positions, initial_distances, positions, velocities, masses, nu
     average_action_error = tf.reduce_mean(kinetic_energy - potential_energy)
     average_action_error *= ACTION_ERROR_WEIGHT
     return position_error + shape_error + average_action_error
+
 
 def calculate_distances(positions):
     positions = tf.squeeze(positions)
@@ -270,7 +279,7 @@ def train(compressor_kernel_layers,
         print('done because of', reason)
         initial_loss = tf.reduce_mean(initial_loss, axis = 1)
         loss_value = tf.reduce_mean(loss_value, axis = 1)
-        percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100 # initial_loss and loss_value don't have same shape
+        percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
         print('improved by', percent_improvement.numpy(), '%')
         cumulative_improvement += percent_improvement
         episode += 1
