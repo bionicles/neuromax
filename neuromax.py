@@ -254,7 +254,11 @@ def train(BLOCKS, LAYERS, LR, EPSILON):
                 stop_loss = current_stop_loss if current_stop_loss < stop_loss_condition else stop_loss
         reason = 'STEP' if done_because_step else 'STOP LOSS'
         print('done because of', reason)
-        percent_improvement = (initial_loss - loss_value) / 100
+        initial_loss = tf.reduce_mean(initial_loss, axis = 1)
+        loss_value = tf.reduce_mean(loss_value, axis = 1)
+        print("initial_loss", initial_loss)
+        print("loss_value", loss_value)
+        percent_improvement = (initial_loss - loss_value) / 100 # initial_loss and loss_value don't have same shape
         cumulative_improvement += percent_improvement
         episode += 1
         if save_model:
