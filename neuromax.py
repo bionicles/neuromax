@@ -5,6 +5,7 @@ import tensorflow as tf
 import skopt
 import time
 import sys
+import numpy as np
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.compat.v1.enable_eager_execution()
@@ -223,7 +224,7 @@ def run_episode(adam, agent, iterator):
         batch_initial_distances.append(initial_distances), batch_masses.append(masses)
         time.sleep(2)
         [print(i.shape) for i in protein_data]
-        num_atoms = positions.shape[0].value
+        num_atoms = positions.shape[1].value
         batch_num_atoms.append(num_atoms)
         num_atoms_squared = num_atoms ** 2
         velocities = tf.random.normal(shape=positions.shape)
@@ -239,13 +240,13 @@ def run_episode(adam, agent, iterator):
         with tf.GradientTape() as tape:
             for i in range(ITERATOR_BATCH):
                 positions, velocities, features = batch_positions[i], batch_velocities[i], batch_features[i]
+                masses, num_atoms = batch_masses[i], batch_num_atoms[i]
                 atoms = tf.concat([positions, velocities, features], 2)
                 # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
                 noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
                 force_field = agent([atoms, noise])
                 # force_field = tf.squeeze(agent([atoms, noise]), 0)
                 initial_positions, initial_distances, positions = batch_initial_positions[i], batch_initial_distances[i], batch_positions[i]
-                masses, num_atoms = batch_masses[i], batch_num_atoms[i]
                 num_atoms_squared = num_atoms**2
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
                 batch_loss_value.append(loss_value)
