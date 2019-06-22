@@ -26,8 +26,8 @@ PEDAGOGY_FILE_NAME = 'less-than-164kd-9-chains.csv'
 BIGGEST_FIRST_IF_NEG = 1
 RANDOM_PROTEINS = True
 N_PARALLEL_CALLS = 1
-BATCH_SIZE = 1
-ITERATOR_BATCH = 8
+BATCH_SIZE = 2
+BATCH_SIZE = 2
 # training
 N_RANDOM_TRIALS, N_TRIALS = 1, 1
 STOP_LOSS_MULTIPLIER = 1.04
@@ -35,11 +35,11 @@ POSITION_ERROR_WEIGHT = 1
 ACTION_ERROR_WEIGHT = 1
 SHAPE_ERROR_WEIGHT = 1
 N_EPISODES = 10000
-N_STEPS = 10
+N_STEPS = 100
 VERBOSE = True
 # hyperparameters
 d_blocks = skopt.space.Integer(1, 9, name='blocks')
-d_block_layers = skopt.space.Integer(3, 5, name='block_layers')
+d_block_layers = skopt.space.Integer(1, 9, name='block_layers')
 d_compressor_kernel_units = skopt.space.Integer(16, 1024, name='compressor_kernel_units')
 d_compressor_kernel_layers = skopt.space.Integer(1, 9, name='compressor_kernel_layers')
 d_pair_kernel_units = skopt.space.Integer(16, 1024, name='pair_kernel_units')
@@ -120,19 +120,14 @@ def make_resnet(name, d_in, d_out, compressor_kernel_layers, compressor_kernel_u
         output = make_block(compressed_features, output, block_layers, pair_kernel_layers, pair_kernel_units)
     output *= -1
     resnet = K.Model([features, noise], output)
-    K.utils.plot_model(resnet, name + '.png', show_shapes=True)
-    resnet.summary()
+    # K.utils.plot_model(resnet, name + '.png', show_shapes=True)
+    # resnet.summary()
     return resnet
 # end model
 
 
 # begin dataset
-def parse_feature(byte_string, d):
-    tensor = tf.io.parse_tensor(byte_string, tf.float32)
-    return tf.reshape(tensor, [-1, d])
-
-
-def parse_example(example):
+def parse_protein(example):
     context_features = {'protein': tf.io.FixedLenFeature([], dtype=tf.string)}
     sequence_features = {
         'initial_positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
@@ -140,43 +135,68 @@ def parse_example(example):
         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)
     }
-    context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
-    initial_positions = parse_feature(sequence['initial_positions'][0], 3)
-    features = parse_feature(sequence['features'][0], 9)
-    masses = parse_feature(sequence['masses'][0], 1)
-    initial_distances = calculate_distances(initial_positions)
-    # protein_name_tensor = context['protein']
-    positions = parse_feature(sequence['positions'][0], 3)
+    context, sequence = tf.io.parse_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
+    initial_positions = tf.reshape(tf.io.parse_tensor(sequence['initial_positions'][0], tf.float32), [-1, 3])
+    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 9])
+    masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
+    positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
-    return initial_positions, initial_distances, positions, masses, features
+    return initial_positions, positions, masses, features
 
 
-def dataset_iterator():
+def parse_batch(batch_input):
+    batch_initial_positions, batch_initial_distances, batch_masses, batch_num_atoms = [], [], [], []
+    batch_stop_loss_condition, batch_loss_value, batch_step_mean_loss = [], [], []
+    batch_positions, batch_features, batch_velocities =[], [], []
+    for protein in batch_input:
+        initial_positions, positions, masses, features = protein
+        initial_distances = calculate_distances(initial_positions)
+        batch_positions.append(positions), batch_features.append(features), batch_initial_positions.append(initial_positions)
+        batch_initial_distances.append(initial_distances), batch_masses.append(masses)
+        [print(i.shape) for i in protein_data]
+        num_atoms = positions.shape[1].value
+        batch_num_atoms.append(num_atoms)
+        velocities = tf.random.normal(shape=positions.shape)
+        batch_velocities.append(velocities)
+        force_field = tf.zeros_like(velocities)
+        initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, force_field)
+        num_atoms = initial_positions.shape[1]
+        stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
+        stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
+        batch_stop_loss_condition.append(stop_loss_condition)
+        stop_loss_condition = tf.reduce_mean(batch_stop_loss_condition, axis = 0)
+    batch_output = (batch_initial_positions, batch_initial_distances, batch_masses, batch_num_atoms, )
+    return batch_output
+
+
+def make_dataset():
     path = os.path.join('.', 'tfrecords')
     recordpaths = []
     for name in os.listdir(path):
         recordpaths.append(os.path.join(path, name))
     dataset = tf.data.TFRecordDataset(recordpaths, 'ZLIB')
     dataset = dataset.shuffle(420)
-    dataset = dataset.map(map_func=parse_example)
+    dataset = dataset.map(map_func=parse_protein)
     dataset = dataset.batch(batch_size=BATCH_SIZE)
-    dataset = dataset.prefetch(buffer_size=BATCH_SIZE)
+    dataset = dataset.map(map_func=parse_batch)
+    dataset = dataset.prefetch(buffer_size=1)
     iterator = dataset.make_one_shot_iterator()
     return iterator
 # end dataset
 
 
 # begin step / loss
+@tf.function
 def step(initial_positions, initial_distances, positions, velocities,
-         masses, num_atoms, num_atoms_squared, force_field):
+         masses, num_atoms, force_field):
     positions, velocities = move_atoms(positions, velocities, masses, force_field)
     loss_value = loss(initial_positions, initial_distances, positions,
-                      velocities, masses,
-                      num_atoms, num_atoms_squared, force_field)
+                      velocities, masses, num_atoms, force_field)
     return positions, velocities, loss_value
 
 
+@tf.function
 def move_atoms(positions, velocities, masses, force_field):
     acceleration = force_field / masses
     noise = tf.random.normal(acceleration.shape, 0, NOISE, dtype='float32')
@@ -185,25 +205,30 @@ def move_atoms(positions, velocities, masses, force_field):
     return positions, velocities
 
 
-def loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field):
+@tf.function
+def loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, force_field):
     # position
     num_atoms = tf.dtypes.cast(num_atoms, dtype = tf.float32)
     position_error = K.losses.mean_squared_error(initial_positions, positions)
     position_error /= num_atoms
     position_error *= POSITION_ERROR_WEIGHT
+    print("position error shape", position_error.shape)
     # shape
     distances = calculate_distances(positions)
     shape_error = K.losses.mean_squared_error(initial_distances, distances)
-    shape_error /= num_atoms_squared
+    shape_error /= num_atoms
     shape_error *= SHAPE_ERROR_WEIGHT
+    print("shape error shape", shape_error.shape)
     # action energy
     kinetic_energy = (masses / 2) * (velocities ** 2)
     potential_energy = -1 * force_field
     average_action_error = tf.reduce_mean(kinetic_energy - potential_energy)
     average_action_error *= ACTION_ERROR_WEIGHT
+    print("average_action_error shape", average_action_error.shape)
     return position_error + shape_error + average_action_error
 
 
+@tf.function
 def calculate_distances(positions):
     positions = tf.squeeze(positions)
     distances = tf.reduce_sum(positions * positions, 1)
@@ -212,32 +237,12 @@ def calculate_distances(positions):
 # end step/loss
 
 
-def run_episode(adam, agent, iterator):
+# begin training
+def run_episode(adam, agent, batch):
     done, train_step = False, 0
-    batch_stop_loss_condition, batch_loss_value, batch_step_mean_loss = [], [], []
-    batch_positions, batch_features, batch_velocities =[], [], []
-    batch_initial_positions, batch_initial_distances, batch_masses, batch_num_atoms = [], [], [], []
-    for i in range(ITERATOR_BATCH):
-        protein_data = iterator.get_next()
-        initial_positions, initial_distances, positions, masses, features = protein_data
-        batch_positions.append(positions), batch_features.append(features), batch_initial_positions.append(initial_positions)
-        batch_initial_distances.append(initial_distances), batch_masses.append(masses)
-        [print(i.shape) for i in protein_data]
-        num_atoms = positions.shape[1].value
-        batch_num_atoms.append(num_atoms)
-        num_atoms_squared = num_atoms ** 2
-        velocities = tf.random.normal(shape=positions.shape)
-        batch_velocities.append(velocities)
-        force_field = tf.zeros_like(velocities)
-        initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-        num_atoms = initial_positions.shape[1]
-        stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
-        stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
-        batch_stop_loss_condition.append(stop_loss_condition)
-        stop_loss_condition = tf.reduce_mean(batch_stop_loss_condition, axis = 0)
     while not done:
         with tf.GradientTape(persistent = True) as tape:
-            for i in range(ITERATOR_BATCH):
+            for i in range(BATCH_SIZE):
                 positions, velocities, features = batch_positions[i], batch_velocities[i], batch_features[i]
                 masses, num_atoms = batch_masses[i], batch_num_atoms[i]
                 atoms = tf.concat([positions, velocities, features], 2)
@@ -246,8 +251,7 @@ def run_episode(adam, agent, iterator):
                 force_field = agent([atoms, noise])
                 # force_field = tf.squeeze(agent([atoms, noise]), 0)
                 initial_positions, initial_distances, positions = batch_initial_positions[i], batch_initial_distances[i], batch_positions[i]
-                num_atoms_squared = num_atoms**2
-                positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
+                positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, force_field)
                 batch_loss_value.append(loss_value)
         for i in range(len(batch_loss_value)):
             gradients = tape.gradient(batch_loss_value[i], agent.trainable_weights)
@@ -258,9 +262,7 @@ def run_episode(adam, agent, iterator):
         batch_loss_value = []
         step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
         batch_step_mean_loss.append(step_mean_loss)
-        print('step', train_step, 'mean loss', step_mean_loss.numpy())
-        print("stop_loss_condition", stop_loss_condition)
-        #stop_loss_condition = tf.reduce_mean(stop_loss_condition, axis = -1)
+        print('step', train_step, 'stop_loss_condition', stop_loss_condition.numpy(), 'mean loss', step_mean_loss.numpy())
         done_because_loss = step_mean_loss > stop_loss_condition
         train_step += 1
         done_because_step = train_step > N_STEPS
@@ -271,7 +273,6 @@ def run_episode(adam, agent, iterator):
             if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
                 stop_loss_condition = current_stop_loss_condition
                 print('new stop loss:', current_stop_loss_condition.numpy())
-    #adam.apply_gradients(zip(gradients, agent.trainable_weights))
     reason = 'STEP' if done_because_step else 'STOP LOSS'
     print('done because of', reason)
     initial_loss = tf.reduce_mean(initial_loss, axis = 1)
@@ -296,23 +297,16 @@ def train(compressor_kernel_layers,
     try:
         start = time.time()
         TIME = str(start)
-        iterator = dataset_iterator()
+        dataset = read_dataset()
         agent = make_resnet('agent', 16, 3, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers)
         adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
         cumulative_improvement, episode, iterator_is_done = 0, 0, False
-        while not iterator_is_done:
+        for batch in dataset:
             print('')
             print('', TIME, 'episode', episode)
-            print("compressor_kernel_layers", compressor_kernel_layers,
-                  "compressor_kernel_units", compressor_kernel_units,
-                  "pair_kernel_layers", pair_kernel_layers,
-                  "pair_kernel_units", pair_kernel_units,
-                  "blocks", blocks,
-                  "block_layers", block_layers,
-                  "learning_rate", learning_rate,
-                  "decay", decay)
+            print("compressor_kernel_layers", compressor_kernel_layers, "compressor_kernel_units", compressor_kernel_units, "pair_kernel_layers", pair_kernel_layers, "pair_kernel_units", pair_kernel_units, "blocks", blocks, "block_layers", block_layers, "learning_rate", learning_rate, "decay", decay)
             try:
-                actual_cumulative_improvement, iterator_is_done = run_episode(adam, agent, iterator)
+                actual_cumulative_improvement, iterator_is_done = run_episode(adam, agent, batch)
                 cumulative_improvement += actual_cumulative_improvement
             except Exception as e:
                 print(e)
