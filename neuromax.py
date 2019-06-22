@@ -251,8 +251,7 @@ def run_episode(adam, agent, iterator):
         for i in range(len(batch_loss_value)):
             gradients = tape.gradient(batch_loss_value[i], agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
-            print("ok")
-            time.sleep(5)
+            batch_loss_value[i] = tf.reduce_mean(batch_loss_value[i], axis = -1)
         batch_loss_value = tf.convert_to_tensor(batch_loss_value)
         loss_value = tf.reduce_sum(batch_loss_value, axis = 1)
         step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
