@@ -214,7 +214,7 @@ def calculate_distances(positions):
 
 def run_episode(adam, agent, iterator):
     done, train_step = False, 0
-    batch_stop_loss_condition, batch_loss_value = [], []
+    batch_stop_loss_condition, batch_loss_value, batch_step_mean_loss = [], [], []
     batch_positions, batch_features, batch_velocities =[], [], []
     batch_initial_positions, batch_initial_distances, batch_masses, batch_num_atoms = [], [], [], []
     for i in range(ITERATOR_BATCH):
@@ -257,6 +257,7 @@ def run_episode(adam, agent, iterator):
         loss_value = tf.reduce_sum(batch_loss_value, axis = 1)
         batch_loss_value = []
         step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
+        batch_step_mean_loss.append(step_mean_loss)
         print('step', train_step, 'mean loss', step_mean_loss.numpy())
         print("stop_loss_condition", stop_loss_condition)
         #stop_loss_condition = tf.reduce_mean(stop_loss_condition, axis = -1)
@@ -274,7 +275,10 @@ def run_episode(adam, agent, iterator):
     reason = 'STEP' if done_because_step else 'STOP LOSS'
     print('done because of', reason)
     initial_loss = tf.reduce_mean(initial_loss, axis = 1)
-    percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
+    batch_step_mean_loss = tf.convert_to_tensor(batch_step_mean_loss)
+    all_mean_loss = tf.reduce_mean(batch_step_mean_loss, axis = -1)
+    batch_step_mean_loss = []
+    percent_improvement = ((initial_loss - all_mean_loss) / initial_loss ) * 100
     percent_improvement = tf.reduce_sum(percent_improvement, axis = 0)
     print('improved by', percent_improvement.numpy(), '%')
     return percent_improvement, True
