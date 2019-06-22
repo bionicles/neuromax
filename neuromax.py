@@ -154,7 +154,7 @@ def parse_batch(batch_input):
         initial_distances = calculate_distances(initial_positions)
         batch_positions.append(positions), batch_features.append(features), batch_initial_positions.append(initial_positions)
         batch_initial_distances.append(initial_distances), batch_masses.append(masses)
-        [print(i.shape) for i in protein_data]
+        [print(i.shape) for i in protein]
         num_atoms = positions.shape[1].value
         batch_num_atoms.append(num_atoms)
         velocities = tf.random.normal(shape=positions.shape)
@@ -170,7 +170,7 @@ def parse_batch(batch_input):
     return batch_output
 
 
-def make_dataset():
+def read_dataset():
     path = os.path.join('.', 'tfrecords')
     recordpaths = []
     for name in os.listdir(path):
