@@ -235,7 +235,7 @@ def run_episode(adam, agent, iterator):
         batch_stop_loss_condition.append(stop_loss_condition)
         stop_loss_condition = tf.reduce_mean(batch_stop_loss_condition, axis = -1)
     while not done:
-        with tf.GradientTape() as tape:
+        with tf.GradientTape(persistent = True) as tape:
             for i in range(ITERATOR_BATCH):
                 positions, velocities, features = batch_positions[i], batch_velocities[i], batch_features[i]
                 masses, num_atoms = batch_masses[i], batch_num_atoms[i]
@@ -247,10 +247,14 @@ def run_episode(adam, agent, iterator):
                 initial_positions, initial_distances, positions = batch_initial_positions[i], batch_initial_distances[i], batch_positions[i]
                 num_atoms_squared = num_atoms**2
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-                batch_loss_value.append(tf.reduce_sum(loss_value, axis = 1))
+                batch_loss_value.append(loss_value)
+        for i in range(len(batch_loss_value)):
+            gradients = tape.gradient(batch_loss_value[i], agent.trainable_weights)
+            adam.apply_gradients(zip(gradients, agent.trainable_weights))
+            print("ok")
+            time.sleep(5)
         batch_loss_value = tf.convert_to_tensor(batch_loss_value)
         loss_value = tf.reduce_sum(batch_loss_value, axis = 1)
-        gradients = tape.gradient(loss_value, agent.trainable_weights)
         step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
         print('step', train_step, 'mean loss', step_mean_loss.numpy())
         print("stop_loss_condition", stop_loss_condition)
@@ -265,7 +269,7 @@ def run_episode(adam, agent, iterator):
             if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
                 stop_loss_condition = current_stop_loss_condition
                 print('new stop loss:', current_stop_loss_condition.numpy())
-    adam.apply_gradients(zip(gradients, agent.trainable_weights))
+    #adam.apply_gradients(zip(gradients, agent.trainable_weights))
     reason = 'STEP' if done_because_step else 'STOP LOSS'
     print('done because of', reason)
     initial_loss = tf.reduce_mean(initial_loss, axis = 1)
