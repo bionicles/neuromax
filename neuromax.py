@@ -276,6 +276,7 @@ def run_episode(adam, agent, iterator):
     loss_value = tf.reduce_mean(loss_value, axis = 1)
     percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
     print('improved by', percent_improvement.numpy(), '%')
+    return percent_improvement, True
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
