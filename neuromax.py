@@ -273,7 +273,6 @@ def run_episode(adam, agent, iterator):
     reason = 'STEP' if done_because_step else 'STOP LOSS'
     print('done because of', reason)
     initial_loss = tf.reduce_mean(initial_loss, axis = 1)
-    loss_value = tf.reduce_mean(loss_value, axis = 1)
     percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
     print('improved by', percent_improvement.numpy(), '%')
     return percent_improvement, True
