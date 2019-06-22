@@ -250,6 +250,7 @@ def run_episode(adam, agent, protein_data):
     percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
     print('improved by', percent_improvement.numpy(), '%')
 
+
 @skopt.utils.use_named_args(dimensions=dimensions)
 def train(compressor_kernel_layers,
           compressor_kernel_units,
@@ -278,11 +279,10 @@ def train(compressor_kernel_layers,
                   "learning_rate", learning_rate,
                   "decay", decay)
             try:
-                cumulative_improvement += run_episode(protein_data)
+                cumulative_improvement += run_episode(adam, agent, protein_data)
             except Exception as e:
                 print(e)
             episode += 1
-
         cumulative_improvement /= N_EPISODES
         global best_cumulative_improvement
         if cumulative_improvement > best_cumulative_improvement:
