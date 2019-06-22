@@ -222,7 +222,6 @@ def run_episode(adam, agent, iterator):
         initial_positions, initial_distances, positions, masses, features = protein_data
         batch_positions.append(positions), batch_features.append(features), batch_initial_positions.append(initial_positions)
         batch_initial_distances.append(initial_distances), batch_masses.append(masses)
-        time.sleep(2)
         [print(i.shape) for i in protein_data]
         num_atoms = positions.shape[1].value
         batch_num_atoms.append(num_atoms)
@@ -249,9 +248,9 @@ def run_episode(adam, agent, iterator):
                 initial_positions, initial_distances, positions = batch_initial_positions[i], batch_initial_distances[i], batch_positions[i]
                 num_atoms_squared = num_atoms**2
                 positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-                batch_loss_value.append(loss_value)
-        batch_loss_value = np.array(batch_loss_value)
-        loss_value = batch_loss_value.mean(axis = 0)
+                batch_loss_value.append(tf.reduce_sum(loss_value, axis = 1))
+        batch_loss_value = tf.convert_to_tensor(batch_loss_value)
+        loss_value = tf.reduce_sum(batch_loss_value, axis = 1)
         gradients = tape.gradient(loss_value, agent.trainable_weights)
         step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
         print('step', train_step, 'mean loss', step_mean_loss.numpy())
