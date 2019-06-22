@@ -135,7 +135,7 @@ def parse_protein(example):
         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)
     }
-    context, sequence = tf.io.parse_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
+    context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     initial_positions = tf.reshape(tf.io.parse_tensor(sequence['initial_positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 9])
     masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
