@@ -151,7 +151,7 @@ def parse_example(example):
     return initial_positions, initial_distances, positions, masses, features
 
 
-def read_dataset():
+def dataset_iterator():
     path = os.path.join('.', 'tfrecords')
     recordpaths = []
     for name in os.listdir(path):
@@ -289,7 +289,7 @@ def train(compressor_kernel_layers,
     try:
         start = time.time()
         TIME = str(start)
-        iterator = read_dataset()
+        iterator = dataset_iterator()
         agent = make_resnet('agent', 16, 3, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers)
         adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
         cumulative_improvement, episode, iterator_is_done = 0, 0, False
