@@ -101,7 +101,6 @@ class ConvPair(L.Layer):
         return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(lambda atom2: self.kernel(tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
 
-
 def make_block(features, noise_or_output, block_layers, pair_kernel_layers, pair_kernel_units):
     block_output = L.Concatenate(2)([features, noise_or_output])
     for layer_n in range(block_layers):
@@ -209,6 +208,48 @@ def calculate_distances(positions):
     return distances - 2 * tf.matmul(positions, tf.transpose(positions)) + tf.transpose(distances)
 # end step/loss
 
+
+def run_episode(adam, agent, protein_data):
+    done, train_step = False, 0
+    initial_positions, initial_distances, positions, masses, features = protein_data
+    [print(i.shape) for i in protein_data]
+    num_atoms = positions.shape[0].value
+    num_atoms_squared = num_atoms ** 2
+    velocities = tf.random.normal(shape=positions.shape)
+    force_field = tf.zeros_like(velocities)
+    initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
+    num_atoms = initial_positions.shape[1]
+    stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
+    stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
+    while not done:
+        with tf.GradientTape() as tape:
+            atoms = tf.concat([positions, velocities, features], 2)
+            # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
+            noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
+            force_field = agent([atoms, noise])
+            # force_field = tf.squeeze(agent([atoms, noise]), 0)
+            positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
+        gradients = tape.gradient(loss_value, agent.trainable_weights)
+        step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
+        print('step', train_step, 'mean loss', step_mean_loss.numpy())
+        done_because_loss = step_mean_loss > stop_loss_condition
+        train_step += 1
+        done_because_step = train_step > N_STEPS
+        done = done_because_step or done_because_loss
+        if not done:
+            current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
+            current_stop_loss_condition = tf.reduce_mean(current_stop_loss, axis = -1)
+            if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
+                stop_loss_condition = current_stop_loss_condition
+                print('new stop loss:', current_stop_loss_condition.numpy())
+    adam.apply_gradients(zip(gradients, agent.trainable_weights))
+    reason = 'STEP' if done_because_step else 'STOP LOSS'
+    print('done because of', reason)
+    initial_loss = tf.reduce_mean(initial_loss, axis = 1)
+    loss_value = tf.reduce_mean(loss_value, axis = 1)
+    percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
+    print('improved by', percent_improvement.numpy(), '%')
+
 @skopt.utils.use_named_args(dimensions=dimensions)
 def train(compressor_kernel_layers,
           compressor_kernel_units,
@@ -226,57 +267,22 @@ def train(compressor_kernel_layers,
         adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
         cumulative_improvement, episode = 0, 0
         for protein_data in dataset:
-            done, train_step = False, 0
-            initial_positions, initial_distances, positions, masses, features = protein_data
             print('')
             print('model', TIME, 'episode', episode)
             print("compressor_kernel_layers", compressor_kernel_layers,
-                "compressor_kernel_units", compressor_kernel_units,
-                "pair_kernel_layers", pair_kernel_layers,
-                "pair_kernel_units", pair_kernel_units,
-                "blocks", blocks,
-                "block_layers", block_layers,
-                "learning_rate", learning_rate,
-                "decay", decay)
-            [print(i.shape) for i in protein_data]
-            num_atoms = positions.shape[0].value
-            num_atoms_squared = num_atoms ** 2
-            velocities = tf.random.normal(shape=positions.shape)
-            force_field = tf.zeros_like(velocities)
-            initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-            num_atoms = initial_positions.shape[1]
-            stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
-            stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
-            while not done:
-                with tf.GradientTape() as tape:
-                    atoms = tf.concat([positions, velocities, features], 2)
-                    # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
-                    noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
-                    force_field = agent([atoms, noise])
-                    # force_field = tf.squeeze(agent([atoms, noise]), 0)
-                    positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-                gradients = tape.gradient(loss_value, agent.trainable_weights)
-                adam.apply_gradients(zip(gradients, agent.trainable_weights))
-                step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
-                print('step', train_step, 'mean loss', step_mean_loss.numpy())
-                done_because_loss = step_mean_loss > stop_loss_condition
-                train_step += 1
-                done_because_step = train_step > N_STEPS
-                done = done_because_step or done_because_loss
-                if not done:
-                    current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
-                    current_stop_loss_condition = tf.reduce_mean(current_stop_loss, axis = -1)
-                    if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
-                        stop_loss_condition = current_stop_loss_condition
-                        print('new stop loss:', current_stop_loss_condition.numpy())
-            reason = 'STEP' if done_because_step else 'STOP LOSS'
-            print('done because of', reason)
-            initial_loss = tf.reduce_mean(initial_loss, axis = 1)
-            loss_value = tf.reduce_mean(loss_value, axis = 1)
-            percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
-            print('improved by', percent_improvement.numpy(), '%')
-            cumulative_improvement += percent_improvement
+                  "compressor_kernel_units", compressor_kernel_units,
+                  "pair_kernel_layers", pair_kernel_layers,
+                  "pair_kernel_units", pair_kernel_units,
+                  "blocks", blocks,
+                  "block_layers", block_layers,
+                  "learning_rate", learning_rate,
+                  "decay", decay)
+            try:
+                cumulative_improvement += run_episode(protein_data)
+            except Exception as e:
+                print(e)
             episode += 1
+
         cumulative_improvement /= N_EPISODES
         global best_cumulative_improvement
         if cumulative_improvement > best_cumulative_improvement:
