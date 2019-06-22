@@ -27,7 +27,7 @@ BIGGEST_FIRST_IF_NEG = 1
 RANDOM_PROTEINS = True
 N_PARALLEL_CALLS = 1
 BATCH_SIZE = 1
-ITERATOR_BATCH = 2
+ITERATOR_BATCH = 8
 # training
 N_RANDOM_TRIALS, N_TRIALS = 1, 1
 STOP_LOSS_MULTIPLIER = 1.04
@@ -35,11 +35,11 @@ POSITION_ERROR_WEIGHT = 1
 ACTION_ERROR_WEIGHT = 1
 SHAPE_ERROR_WEIGHT = 1
 N_EPISODES = 10000
-N_STEPS = 100
+N_STEPS = 10
 VERBOSE = True
 # hyperparameters
 d_blocks = skopt.space.Integer(1, 9, name='blocks')
-d_block_layers = skopt.space.Integer(1, 9, name='block_layers')
+d_block_layers = skopt.space.Integer(3, 5, name='block_layers')
 d_compressor_kernel_units = skopt.space.Integer(16, 1024, name='compressor_kernel_units')
 d_compressor_kernel_layers = skopt.space.Integer(1, 9, name='compressor_kernel_layers')
 d_pair_kernel_units = skopt.space.Integer(16, 1024, name='pair_kernel_units')
@@ -60,9 +60,9 @@ dimensions = [
 
 default_hyperparameters = [
     2,
-    512,
+    128,
     2,
-    512,
+    128,
     2,
     2,
     0.001,
@@ -85,7 +85,7 @@ def get_mlp(features, outputs, layers, units):
 
 
 class ConvKernel(L.Layer):
-    def __init__(self, features=16, outputs=5, layers=2, units=512):
+    def __init__(self, features=16, outputs=5, layers=2, units=128):
         super(ConvKernel, self).__init__()
         self.kernel = get_mlp(features, outputs, layers, units)
 
@@ -94,7 +94,7 @@ class ConvKernel(L.Layer):
 
 
 class ConvPair(L.Layer):
-    def __init__(self, features=16, outputs=3, layers=2, units=512):
+    def __init__(self, features=16, outputs=3, layers=2, units=128):
         super(ConvPair, self).__init__()
         self.kernel = get_mlp(features, outputs, layers, units)
 
@@ -120,7 +120,8 @@ def make_resnet(name, d_in, d_out, compressor_kernel_layers, compressor_kernel_u
         output = make_block(compressed_features, output, block_layers, pair_kernel_layers, pair_kernel_units)
     output *= -1
     resnet = K.Model([features, noise], output)
-    # K.utils.plot_model(resnet, name + '.png', show_shapes=True)
+    K.utils.plot_model(resnet, name + '.png', show_shapes=True)
+    resnet.summary()
     return resnet
 # end model
 
@@ -274,6 +275,7 @@ def run_episode(adam, agent, iterator):
     print('done because of', reason)
     initial_loss = tf.reduce_mean(initial_loss, axis = 1)
     percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
+    percent_improvement = tf.reduce_sum(percent_improvement, axis = 0)
     print('improved by', percent_improvement.numpy(), '%')
     return percent_improvement, True
 
@@ -296,7 +298,7 @@ def train(compressor_kernel_layers,
         cumulative_improvement, episode, iterator_is_done = 0, 0, False
         while not iterator_is_done:
             print('')
-            print('model', TIME, 'episode', episode)
+            print('', TIME, 'episode', episode)
             print("compressor_kernel_layers", compressor_kernel_layers,
                   "compressor_kernel_units", compressor_kernel_units,
                   "pair_kernel_layers", pair_kernel_layers,
