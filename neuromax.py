@@ -1,16 +1,12 @@
 # neuromax.py - why?: 1 simple file with functions over classes
 import tensorflow.keras.layers as L
-from functools import partial
 import tensorflow.keras as K
 import tensorflow as tf
-import numpy as np
-import imageio
-import random
-import shutil
 import skopt
 import time
-import csv
+import sys
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.compat.v1.enable_eager_execution()
 # globals
 best_cumulative_improvement = 0
@@ -37,8 +33,7 @@ STOP_LOSS_MULTIPLIER = 1.04
 POSITION_ERROR_WEIGHT = 1
 ACTION_ERROR_WEIGHT = 1
 SHAPE_ERROR_WEIGHT = 1
-N_EXPERIMENTS = 1
-N_EPISODES = 1
+N_EPISODES = 5
 N_STEPS = 100
 VERBOSE = True
 # hyperparameters
@@ -78,6 +73,7 @@ default_hyperparameters = [
 def get_layer(units):
     return L.Dense(units, activation='tanh')
 
+
 def get_mlp(features, outputs, layers, units):
     input = K.Input((features, ))
     output = get_layer(units)(input)
@@ -112,6 +108,7 @@ class ConvPair(L.Layer):
             return self.kernel(pair)
         contributions = tf.map_fn(compute_pair, self.inputs)
         potentials = tf.reduce_sum(contributions, axis=0)
+        compute_pair = None
         return potentials
 
 
@@ -170,6 +167,7 @@ def read_dataset():
     for name in os.listdir(path):
         recordpaths.append(os.path.join(path, name))
     dataset = tf.data.TFRecordDataset(recordpaths, 'ZLIB')
+    dataset = dataset.shuffle(420)
     dataset = dataset.map(map_func=parse_example)
     dataset = dataset.batch(batch_size=BATCH_SIZE)
     dataset = dataset.prefetch(buffer_size=BATCH_SIZE)
@@ -230,89 +228,85 @@ def train(compressor_kernel_layers,
           block_layers,
           learning_rate,
           decay):
-    start = time.time()
-    TIME = str(start)
-    train_step = 0
-    dataset = read_dataset()
-    agent = make_resnet('agent', 16, 3, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers)
-    adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
-    cumulative_improvement, episode = 0, 0
-    for protein_data in dataset:
-        if episode > N_EPISODES:
-            break
-        done, train_step = False, 0
-        initial_positions, initial_distances, positions, masses, features = protein_data
-        print('')
-        print('model', TIME, 'episode', episode, 'step', train_step)
-        [print(i.shape) for i in protein_data]
-        num_atoms = positions.shape[0].value
-        num_atoms_squared = num_atoms ** 2
-        velocities = tf.random.normal(shape=positions.shape)
-        force_field = tf.zeros_like(velocities)
-        initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-        num_atoms = initial_positions.shape[1]
-        stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
-        stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
-        while not done:
-            with tf.GradientTape() as tape:
-                atoms = tf.concat([positions, velocities, features], 2)
-                # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
-                noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
-                force_field = agent([atoms, noise])
-                # force_field = tf.squeeze(agent([atoms, noise]), 0)
-                positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-            gradients = tape.gradient(loss_value, agent.trainable_weights)
-            adam.apply_gradients(zip(gradients, agent.trainable_weights))
-            step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
-            print('step', train_step, 'mean loss', step_mean_loss.numpy())
-            done_because_loss = step_mean_loss > stop_loss_condition
-            train_step += 1
-            done_because_step = train_step > N_STEPS
-            done = done_because_step or done_because_loss
-            if not done:
-                current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
-                current_stop_loss_condition = tf.reduce_mean(current_stop_loss, axis = -1)
-                if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
-                    stop_loss_condition = current_stop_loss_condition
-                    print('new stop loss:', current_stop_loss_condition.numpy())
-        reason = 'STEP' if done_because_step else 'STOP LOSS'
-        print('done because of', reason)
-        initial_loss = tf.reduce_mean(initial_loss, axis = 1)
-        loss_value = tf.reduce_mean(loss_value, axis = 1)
-        percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
-        print('improved by', percent_improvement.numpy(), '%')
-        cumulative_improvement += percent_improvement
-        episode += 1
-    cumulative_improvement /= N_EPISODES
-    global best_cumulative_improvement
-    if cumulative_improvement > best_cumulative_improvement:
-        print('new best mean cumulative improvement:', cumulative_improvement.numpy())
-        best_cumulative_improvement = cumulative_improvement
-        run_path = os.path.join('.', 'runs', TIME)
-        os.makedirs(run_path)
-        save_path = os.path.join(run_path, 'best_agent.h5')
-        tf.saved_model.save(agent, save_path)
-        print('saved agent to', save_path)
-    K.backend.clear_session()
-    del agent
-    return -1 * cumulative_improvement.numpy()[0]
+    try:
+        start = time.time()
+        TIME = str(start)
+        dataset = read_dataset()
+        agent = make_resnet('agent', 16, 3, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers)
+        adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
+        cumulative_improvement, episode = 0, 0
+        for protein_data in dataset:
+            if episode > N_EPISODES:
+                break
+            done, train_step = False, 0
+            initial_positions, initial_distances, positions, masses, features = protein_data
+            print('')
+            print('model', TIME, 'episode', episode)
+            [print(i.shape) for i in protein_data]
+            num_atoms = positions.shape[0].value
+            num_atoms_squared = num_atoms ** 2
+            velocities = tf.random.normal(shape=positions.shape)
+            force_field = tf.zeros_like(velocities)
+            initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
+            num_atoms = initial_positions.shape[1]
+            stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
+            stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
+            while not done:
+                with tf.GradientTape() as tape:
+                    atoms = tf.concat([positions, velocities, features], 2)
+                    # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
+                    noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
+                    force_field = agent([atoms, noise])
+                    # force_field = tf.squeeze(agent([atoms, noise]), 0)
+                    positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
+                gradients = tape.gradient(loss_value, agent.trainable_weights)
+                adam.apply_gradients(zip(gradients, agent.trainable_weights))
+                step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
+                print('step', train_step, 'mean loss', step_mean_loss.numpy())
+                done_because_loss = step_mean_loss > stop_loss_condition
+                train_step += 1
+                done_because_step = train_step > N_STEPS
+                done = done_because_step or done_because_loss
+                if not done:
+                    current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
+                    current_stop_loss_condition = tf.reduce_mean(current_stop_loss, axis = -1)
+                    if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
+                        stop_loss_condition = current_stop_loss_condition
+                        print('new stop loss:', current_stop_loss_condition.numpy())
+            reason = 'STEP' if done_because_step else 'STOP LOSS'
+            print('done because of', reason)
+            initial_loss = tf.reduce_mean(initial_loss, axis = 1)
+            loss_value = tf.reduce_mean(loss_value, axis = 1)
+            percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
+            print('improved by', percent_improvement.numpy(), '%')
+            cumulative_improvement += percent_improvement
+            episode += 1
+        cumulative_improvement /= N_EPISODES
+        global best_cumulative_improvement
+        if cumulative_improvement > best_cumulative_improvement:
+            print('new best mean cumulative improvement:', cumulative_improvement.numpy())
+            best_cumulative_improvement = cumulative_improvement
+            run_path = os.path.join('.', 'runs', TIME)
+            os.makedirs(run_path)
+            save_path = os.path.join(run_path, 'best_agent.h5')
+            tf.saved_model.save(agent, save_path)
+            print('saved agent to', save_path)
+        K.backend.clear_session()
+        del agent
+        return -1 * cumulative_improvement.numpy()[0]
+    except Exception:
+        return 1000
 
 
 def main():
-    global N_EPISODES
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
     search_result = skopt.gp_minimize(func=train,
                             dimensions=dimensions,
-                            acq_func='EI', # Expected Improvement.
-                            n_calls=12,
+                            acq_func='EI',
                             x0=default_hyperparameters)
 
-    N_EPISODES = N_VALIDATION_EPISODES, True
-    bayes.maximize(init_points=0, n_iter=1)
-    for i, res in enumerate(bayes.res):
-        print('iteration: {}, results: {}'.format(i, res))
+    print(search_result)
 
 
 if __name__ == '__main__':
+    sys.stderr = None
     main()
