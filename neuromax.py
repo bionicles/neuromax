@@ -5,7 +5,6 @@ import tensorflow as tf
 import skopt
 import time
 import sys
-import numpy as np
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.compat.v1.enable_eager_execution()
@@ -254,6 +253,8 @@ def run_episode(adam, agent, iterator):
         gradients = tape.gradient(loss_value, agent.trainable_weights)
         step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
         print('step', train_step, 'mean loss', step_mean_loss.numpy())
+        print("stop_loss_condition", stop_loss_condition)
+        stop_loss_condition = tf.reduce_mean(stop_loss_condition, axis = -1)
         done_because_loss = step_mean_loss > stop_loss_condition
         train_step += 1
         done_because_step = train_step > N_STEPS
