@@ -33,7 +33,7 @@ STOP_LOSS_MULTIPLIER = 1.04
 POSITION_ERROR_WEIGHT = 1
 ACTION_ERROR_WEIGHT = 1
 SHAPE_ERROR_WEIGHT = 1
-N_EPISODES = 5
+N_EPISODES = 10000
 N_STEPS = 100
 VERBOSE = True
 # hyperparameters
@@ -98,18 +98,8 @@ class ConvPair(L.Layer):
         self.kernel = get_mlp(features, outputs, layers, units)
 
     def call(self, inputs):
-        self.inputs = inputs
-        outputs = tf.map_fn(self.compute_atom, self.inputs)
-        return outputs
+        return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(lambda atom2: self.kernel(tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
-    def compute_atom(self, atom1):
-        def compute_pair(atom2):
-            pair = tf.concat([atom1, atom2], 1)
-            return self.kernel(pair)
-        contributions = tf.map_fn(compute_pair, self.inputs)
-        potentials = tf.reduce_sum(contributions, axis=0)
-        compute_pair = None
-        return potentials
 
 
 def make_block(features, noise_or_output, block_layers, pair_kernel_layers, pair_kernel_units):
@@ -130,7 +120,7 @@ def make_resnet(name, d_in, d_out, compressor_kernel_layers, compressor_kernel_u
         output = make_block(compressed_features, output, block_layers, pair_kernel_layers, pair_kernel_units)
     output *= -1
     resnet = K.Model([features, noise], output)
-    K.utils.plot_model(resnet, name + '.png', show_shapes=True)
+    # K.utils.plot_model(resnet, name + '.png', show_shapes=True)
     return resnet
 # end model
 
@@ -236,12 +226,18 @@ def train(compressor_kernel_layers,
         adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
         cumulative_improvement, episode = 0, 0
         for protein_data in dataset:
-            if episode > N_EPISODES:
-                break
             done, train_step = False, 0
             initial_positions, initial_distances, positions, masses, features = protein_data
             print('')
             print('model', TIME, 'episode', episode)
+            print("compressor_kernel_layers", compressor_kernel_layers,
+                "compressor_kernel_units", compressor_kernel_units,
+                "pair_kernel_layers", pair_kernel_layers,
+                "pair_kernel_units", pair_kernel_units,
+                "blocks", blocks,
+                "block_layers", block_layers,
+                "learning_rate", learning_rate,
+                "decay", decay)
             [print(i.shape) for i in protein_data]
             num_atoms = positions.shape[0].value
             num_atoms_squared = num_atoms ** 2
@@ -294,7 +290,8 @@ def train(compressor_kernel_layers,
         K.backend.clear_session()
         del agent
         return -1 * cumulative_improvement.numpy()[0]
-    except Exception:
+    except Exception as e:
+        print(e)
         return 1000
 
 
@@ -308,5 +305,4 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.stderr = None
     main()
