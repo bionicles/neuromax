@@ -233,7 +233,7 @@ def run_episode(adam, agent, iterator):
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
         batch_stop_loss_condition.append(stop_loss_condition)
-        stop_loss_condition = tf.reduce_mean(batch_stop_loss_condition, axis = -1)
+        stop_loss_condition = tf.reduce_mean(batch_stop_loss_condition, axis = 0)
     while not done:
         with tf.GradientTape(persistent = True) as tape:
             for i in range(ITERATOR_BATCH):
@@ -254,10 +254,11 @@ def run_episode(adam, agent, iterator):
             batch_loss_value[i] = tf.reduce_mean(batch_loss_value[i], axis = -1)
         batch_loss_value = tf.convert_to_tensor(batch_loss_value)
         loss_value = tf.reduce_sum(batch_loss_value, axis = 1)
+        batch_loss_value = []
         step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
         print('step', train_step, 'mean loss', step_mean_loss.numpy())
         print("stop_loss_condition", stop_loss_condition)
-        stop_loss_condition = tf.reduce_mean(stop_loss_condition, axis = -1)
+        #stop_loss_condition = tf.reduce_mean(stop_loss_condition, axis = -1)
         done_because_loss = step_mean_loss > stop_loss_condition
         train_step += 1
         done_because_step = train_step > N_STEPS
