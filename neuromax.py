@@ -182,9 +182,9 @@ def compute_loss(p):
         p.initial_distances, compute_distances(p.positions)) / p.num_atoms
     kinetic_energy = (p.masses / 2) * (p.velocities ** 2)
     potential_energy = p.forces * -1
-    action = kinetic_energy - potential_energy
-    action = tf.reduce_sum(action, axis = -1)
-    return tf.reduce_sum([position_error, shape_error, action])
+    #action = kinetic_energy - potential_energy
+    potential_energy = tf.reduce_sum(potential_energy, axis = -1)
+    return tf.reduce_sum([position_error, shape_error, potential_energy])
 
 
 def compute_batch_mean_loss(batch_losses):
