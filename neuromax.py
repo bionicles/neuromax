@@ -116,11 +116,14 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
         resnet.summary()
     return resnet
 # end model
+
+
 def make_plot(episode_loss):
     plt.x_label("episode")
     plt.y_label("loss")
     plt.plot(episode_loss)
     plt.savefig('episodes losses')
+
 
 # begin data
 def parse_protein(example):
