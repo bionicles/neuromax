@@ -200,7 +200,6 @@ def compute_loss(p):
     kinetic_energy = (p.masses / 2) * (p.velocities ** 2)
     potential_energy = p.forces * -1
     action = kinetic_energy - potential_energy
-    action = tf.reduce_sum(action, axis = -1)
     return tf.reduce_sum([position_error, shape_error, action])
 
 
@@ -212,19 +211,19 @@ def run_episode(adam, agent, batch):
     initial_batch_losses = [compute_loss(p) for p in batch]
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
     trailing_stop_loss = initial_batch_mean_loss * 1.04
-    episode_loss = False, 0
-    with tf.GradientTape() as tape:
-        for step in range(MAX_STEPS):
+    episode_loss = 0
+    for step in range(MAX_STEPS):
+        with tf.GradientTape() as tape:
             batch = [step_agent_on_protein(agent, p) for p in batch]
             batch_losses = [compute_loss(p) for p in batch]
             batch_mean_loss = compute_batch_mean_loss(batch_losses)
             gradients = tape.gradient(episode_loss, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
-            episode_loss += batch_mean_loss
-            if batch_mean_loss * STOP_LOSS_MULTIPLE < trailing_stop_loss:
-                trailing_stop_loss = batch_mean_loss * STOP_LOSS_MULTIPLE
-            elif batch_mean_loss > trailing_stop_loss:
-                break
+        episode_loss += batch_mean_loss
+        if batch_mean_loss * STOP_LOSS_MULTIPLE < trailing_stop_loss:
+            trailing_stop_loss = batch_mean_loss * STOP_LOSS_MULTIPLE
+        elif batch_mean_loss > trailing_stop_loss:
+            break
 
     return episode_loss
 
