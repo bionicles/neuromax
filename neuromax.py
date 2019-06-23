@@ -170,8 +170,8 @@ def step_agent_on_protein(agent, p):
     p.velocities += forces / p.masses
     p.positions += p.velocities
     return AttrDict({
-        'initial_positions': p[0],
-        'initial_distances': compute_distances(p[0]),
+        'initial_positions': p.initial_positions,
+        'initial_distances': compute_distances(p.initial_positions),
         'features': p.features,
         'positions': p.positions,
         'velocities': p.velocities,
