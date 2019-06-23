@@ -165,23 +165,6 @@ def read_shards():
 
 
 # begin training
-def step_agent_on_protein(agent, p):
-    noise = tf.random.normal(p.positions.shape)
-    forces = agent([tf.concat([p.positions, p.velocities, p.features], axis = -1), noise])
-    p.velocities += forces / p.masses
-    p.positions += p.velocities
-    return AttrDict({
-        'initial_positions': p.initial_positions,
-        'initial_distances': compute_distances(p.initial_positions),
-        'features': p.features,
-        'positions': p.positions,
-        'velocities': p.velocities,
-        'num_atoms': p.num_atoms,
-        'forces': forces,
-        'masses': p.masses
-    })
-
-
 @tf.function
 def compute_distances(positions):
     positions = tf.squeeze(positions)
@@ -207,6 +190,37 @@ def compute_batch_mean_loss(batch_losses):
     return tf.reduce_mean(tf.convert_to_tensor(batch_losses))
 
 
+def step_agent_on_protein(agent, p):
+    noise = tf.random.normal(p.positions.shape)
+    forces = agent([tf.concat([p.positions, p.velocities, p.features], axis = -1), noise])
+    p.velocities += forces / p.masses
+    p.positions += p.velocities
+    return AttrDict({
+        'initial_positions': p.initial_positions,
+        'initial_distances': compute_distances(p.initial_positions),
+        'features': p.features,
+        'positions': p.positions,
+        'velocities': p.velocities,
+        'num_atoms': p.num_atoms,
+        'forces': forces,
+        'masses': p.masses
+    })
+
+
+def attrdict_for(p):
+    # initial_positions, positions, features, masses, initial_distances
+    return AttrDict({
+        'num_atoms': tf.dtypes.cast(p[0].shape[1], dtype=tf.float32),
+        'initial_distances': p[4],
+        'velocities': tf.random.normal(p[1].shape),
+        'forces': tf.zeros_like(p[0]),
+        'initial_positions': p[0],
+        'positions': p[1],
+        'features': p[2],
+        'masses': p[3],
+    })
+
+
 def run_episode(adam, agent, batch):
     initial_batch_losses = [compute_loss(p) for p in batch]
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
@@ -227,18 +241,7 @@ def run_episode(adam, agent, batch):
     return episode_loss
 
 
-def attrdict_for(p):
-    # initial_positions, positions, features, masses, initial_distances
-    return AttrDict({
-        'num_atoms': tf.dtypes.cast(p[0].shape[1], dtype=tf.float32),
-        'initial_distances': p[4],
-        'velocities': tf.random.normal(p[1].shape),
-        'forces': tf.zeros_like(p[0]),
-        'initial_positions': p[0],
-        'positions': p[1],
-        'features': p[2],
-        'masses': p[3],
-    })
+
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
