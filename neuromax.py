@@ -186,7 +186,8 @@ def compute_loss(p):
 
 
 def compute_batch_mean_loss(batch_losses):
-    return tf.reduce_mean(tf.convert_to_tensor(batch_losses))
+    return tf.reduce_mean(tf.convert_to_tensor(
+        [tf.reduce_sum(loss) for loss in batch_losses]))
 
 
 def step_agent_on_protein(agent, p):
