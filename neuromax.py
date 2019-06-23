@@ -166,7 +166,7 @@ def read_shards():
 # begin training
 def step_agent_on_protein(agent, p):
     noise = tf.random.normal(p.positions.shape)
-    forces = agent([tf.concat([p.positions, p.velocities, p.features]), noise])
+    forces = agent([tf.concat([p.positions, p.velocities, p.features], axis = -1), noise])
     p.velocities += forces / p.masses
     p.positions += p.velocities
     return AttrDict({
