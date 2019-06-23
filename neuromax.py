@@ -230,7 +230,7 @@ def run_episode(adam, agent, batch):
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
     trailing_stop_loss = initial_batch_mean_loss * 1.04
     episode_loss = 0
-    with tf.GradientTape(persistent=True) as tape:
+    with tf.GradientTape() as tape:
         for step in range(MAX_STEPS):
             batch = [step_agent_on_protein(agent, p) for p in batch]
             batch_losses = [compute_loss(p) for p in batch]
