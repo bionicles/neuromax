@@ -191,7 +191,8 @@ def compute_distances(positions):
         positions, tf.transpose(positions)) + tf.transpose(distances)
 
 
-def loss(p):
+@tf.function
+def compute_loss(p):
     position_error = K.losses.mean_squared_error(
         p.initial_positions, p.positions) / p.num_atoms
     shape_error = K.losses.mean_squared_error(
@@ -203,16 +204,22 @@ def loss(p):
     return tf.reduce_sum([position_error, shape_error, action])
 
 
+def compute_batch_mean_loss(batch_losses):
+    return tf.reduce_mean(tf.convert_to_tensor(batch_losses))
+
+
 def run_episode(adam, agent, batch):
-    trailing_stop_loss = STOP_LOSS_MULTIPLE * [
-        loss(p) for p in batch]
+    initial_batch_losses = [compute_loss(p) for p in batch]
+    initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
+    trailing_stop_loss = initial_batch_mean_loss * 1.04
     episode_loss = False, 0
     with tf.GradientTape() as tape:
         for step in range(MAX_STEPS):
             batch = [step_agent_on_protein(agent, p) for p in batch]
             # only do loss/train stuff sometimes to run faster!
             if random.random() > 0.5:
-                batch_error = tf.reduce_sum([loss(p) for p in batch])
+                batch_losses = [compute_loss(p) for p in batch]
+                batch_mean_loss = compute_batch_mean_loss(batch_losses)
                 gradients = tape.gradient(episode_loss, agent.trainable_weights)
                 adam.apply_gradients(zip(gradients, agent.trainable_weights))
                 episode_loss += batch_error
