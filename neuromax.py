@@ -138,7 +138,7 @@ def parse_protein(example):
         sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
-    initial_distances = compute_distances(positions)
+    initial_distances = compute_distances(initial_positions)
     return initial_positions, positions, features, masses, initial_distances
 
 
@@ -167,11 +167,10 @@ def compute_distances(positions):
 def compute_loss(p):
     position_error = K.losses.mean_squared_error(
         p.initial_positions, p.positions) / p.num_atoms
+    distances = compute_distances(p.positions)
     shape_error = K.losses.mean_squared_error(
-        p.initial_distances, compute_distances(p.positions))
+        p.initial_distances, distances)
     shape_error /= p.num_atoms_squared
-    # action = (p.masses / 2) * (p.velocities ** 2) + p.forces
-    # action = tf.reduce_sum(action, axis=-1)
     return position_error + shape_error
 
 
@@ -185,7 +184,7 @@ def step_agent_on_protein(agent, p):
     atoms = tf.concat([p.positions, p.velocities, p.features], axis=-1)
     noise = tf.random.normal(p.positions.shape)
     forces = agent([atoms, noise])
-    p.velocities += forces / p.masses
+    p.velocities += (forces / p.masses)
     p.positions += p.velocities
     return AttrDict({
         'initial_positions': p.initial_positions,
@@ -219,6 +218,7 @@ def attrdict_for(p):
 def run_episode(adam, agent, batch):
     initial_batch_losses = [compute_loss(p) for p in batch]
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
+    print("initial batch_mean_loss", initial_batch_mean_loss)
     trailing_stop_loss = initial_batch_mean_loss * 1.04
     episode_loss = 0
     for step in range(MAX_STEPS):
@@ -228,13 +228,14 @@ def run_episode(adam, agent, batch):
             gradients = tape.gradient(batch_losses, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
         batch_mean_loss = compute_batch_mean_loss(batch_losses)
-        print('step', step, 'batch_mean_loss', batch_mean_loss)
+        print('step', step, 'trailing_stop_loss', trailing_stop_loss, 'batch_mean_loss', batch_mean_loss)
         episode_loss += batch_mean_loss
+        if batch_mean_loss > trailing_stop_loss:
+            break
         if batch_mean_loss * STOP_LOSS_MULTIPLE < trailing_stop_loss:
             print('new trailing stop:', batch_mean_loss * STOP_LOSS_MULTIPLE)
             trailing_stop_loss = batch_mean_loss * STOP_LOSS_MULTIPLE
-        elif batch_mean_loss > trailing_stop_loss:
-            break
+
     return agent, episode_loss
 
 
