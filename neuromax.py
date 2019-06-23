@@ -202,9 +202,8 @@ def loss(p):
 
 
 def run_episode(adam, agent, batch):
-    [print(p) for p in batch]
-    trailing_stop_loss = STOP_LOSS_MULTIPLE * tf.reduce_sum([
-        loss(p) for p in batch])
+    trailing_stop_loss = STOP_LOSS_MULTIPLE * [
+        loss(p) for p in batch]
     episode_loss = False, 0
     with tf.GradientTape() as tape:
         for step in MAX_STEPS:
