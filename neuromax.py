@@ -190,8 +190,9 @@ def compute_batch_mean_loss(batch_losses):
 
 
 def step_agent_on_protein(agent, p):
+    atoms = tf.concat([p.positions, p.velocities, p.features], axis=-1)
     noise = tf.random.normal(p.positions.shape)
-    forces = agent([tf.concat([p.positions, p.velocities, p.features], axis = -1), noise])
+    forces = agent([atoms, noise])
     p.velocities += forces / p.masses
     p.positions += p.velocities
     return AttrDict({
