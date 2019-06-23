@@ -47,18 +47,18 @@ default_hyperparameters = [
 
 
 # begin model
-class DropConnectDense(L.Dense):
-    def call(self, inputs):
-        if random.random() > 0.5:
-            kernel = B.dropout(self.kernel, 0.5)
-        else:
-            kernel = self.kernel
-        outputs = B.dot(inputs, kernel)
-        return self.activation(outputs)
+# class DropConnectDense(L.Dense):
+#     def call(self, inputs):
+#         if random.random() > 0.5:
+#             kernel = B.dropout(self.kernel, 0.5)
+#         else:
+#             kernel = self.kernel
+#         outputs = B.dot(inputs, kernel)
+#         return self.activation(outputs)
 
 
 def get_layer(units):
-    return DropConnectDense(units, activation='tanh', use_bias=False)
+    return L.Dense(units, activation='tanh', use_bias=False)
 
 
 def get_mlp(features, outputs, layers, units):
