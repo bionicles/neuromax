@@ -216,17 +216,15 @@ def run_episode(adam, agent, batch):
     with tf.GradientTape() as tape:
         for step in range(MAX_STEPS):
             batch = [step_agent_on_protein(agent, p) for p in batch]
-            # only do loss/train stuff sometimes to run faster!
-            if random.random() > 0.5:
-                batch_losses = [compute_loss(p) for p in batch]
-                batch_mean_loss = compute_batch_mean_loss(batch_losses)
-                gradients = tape.gradient(episode_loss, agent.trainable_weights)
-                adam.apply_gradients(zip(gradients, agent.trainable_weights))
-                episode_loss += batch_error
-                if batch_error * STOP_LOSS_MULTIPLE < trailing_stop_loss:
-                    trailing_stop_loss = batch_error * STOP_LOSS_MULTIPLE
-                elif batch_error > trailing_stop_loss:
-                    break
+            batch_losses = [compute_loss(p) for p in batch]
+            batch_mean_loss = compute_batch_mean_loss(batch_losses)
+            gradients = tape.gradient(episode_loss, agent.trainable_weights)
+            adam.apply_gradients(zip(gradients, agent.trainable_weights))
+            episode_loss += batch_mean_loss
+            if batch_mean_loss * STOP_LOSS_MULTIPLE < trailing_stop_loss:
+                trailing_stop_loss = batch_mean_loss * STOP_LOSS_MULTIPLE
+            elif batch_mean_loss > trailing_stop_loss:
+                break
 
     return episode_loss
 
