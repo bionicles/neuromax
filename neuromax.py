@@ -1,7 +1,6 @@
 # experiment.py: why? simplify
 from attrdict import AttrDict
 import tensorflow as tf
-import random
 import skopt
 import time
 import os
@@ -179,12 +178,11 @@ def compute_loss(p):
     position_error = K.losses.mean_squared_error(
         p.initial_positions, p.positions) / p.num_atoms
     shape_error = K.losses.mean_squared_error(
-        p.initial_distances, compute_distances(p.positions)) / p.num_atoms
-    kinetic_energy = (p.masses / 2) * (p.velocities ** 2)
-    potential_energy = p.forces * -1
-    action = kinetic_energy - potential_energy
-    action = tf.reduce_sum(action, axis = -1)
-    return tf.reduce_sum([position_error, shape_error, action])
+        p.initial_distances, compute_distances(p.positions))
+    shape_error /= p.num_atoms_squared
+    # action = (p.masses / 2) * (p.velocities ** 2) + p.forces
+    # action = tf.reduce_sum(action, axis=-1)
+    return position_error + shape_error
 
 
 def compute_batch_mean_loss(batch_losses):
@@ -202,6 +200,7 @@ def step_agent_on_protein(agent, p):
         'features': p.features,
         'positions': p.positions,
         'velocities': p.velocities,
+        'num_atoms_squared': p.num_atoms_squared,
         'num_atoms': p.num_atoms,
         'forces': forces,
         'masses': p.masses
@@ -210,8 +209,10 @@ def step_agent_on_protein(agent, p):
 
 def attrdict_for(p):
     # initial_positions, positions, features, masses, initial_distances
+    num_atoms = tf.dtypes.cast(p[0].shape[1], dtype=tf.float32)
     return AttrDict({
-        'num_atoms': tf.dtypes.cast(p[0].shape[1], dtype=tf.float32),
+        'num_atoms': num_atoms,
+        'num_atoms_squared': tf.square(num_atoms),
         'initial_distances': p[4],
         'velocities': tf.random.normal(p[1].shape),
         'forces': tf.zeros_like(p[0]),
