@@ -6,6 +6,8 @@ import numpy as np
 import skopt
 import time
 import os
+import seaborn as sns
+sns.set()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -315,8 +317,9 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
 
     global best
     if trial_loss < best:
-        save_path = os.path.join('.', 'agents', str(time.time()) + '.h5')
-        tf.saved_model.save(agent, save_path)
+        if not os.path.exists("agents"):
+            os.makedirs("agents")
+        agent.save_model("agents/" + str(time.time()) + ".h5")
         best = trial_loss
 
     B.clear_session()
