@@ -1,13 +1,14 @@
 # experiment.py: why? simplify
+import matplotlib.pyplot as plt
 from attrdict import AttrDict
-import tensorflow as tf
+import pandas as pd
+import numpy as np
 import skopt
 import time
 import os
-import matplotlib.pyplot as plt
-import seaborn as sns
-sns.set()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import tensorflow as tf
+tf.logging.set_verbosity(tf.logging.ERROR)
 tf.compat.v1.enable_eager_execution()
 B = tf.keras.backend
 L = tf.keras.layers
@@ -17,18 +18,19 @@ best = 0
 STOP_LOSS_MULTIPLE = 1.04
 PLOT_MODEL = True
 MAX_STEPS = 100
-BATCH_SIZE = 2
+BATCH_SIZE = 4
 # hyperparameters
-d_compressor_kernel_units = skopt.space.Integer(
-                                    16, 256, name='compressor_kernel_units')
 d_compressor_kernel_layers = skopt.space.Integer(
-                                    1, 3, name='compressor_kernel_layers')
-d_pair_kernel_units = skopt.space.Integer(16, 256, name='pair_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(1, 3, name='pair_kernel_layers')
-d_blocks = skopt.space.Integer(1, 3, name='blocks')
-d_block_layers = skopt.space.Integer(1, 3, name='block_layers')
+                                    1, 4, name='compressor_kernel_layers')
+d_compressor_kernel_units = skopt.space.Integer(
+                                    16, 1024, name='compressor_kernel_units')
+d_pair_kernel_layers = skopt.space.Integer(1, 4, name='pair_kernel_layers')
+d_pair_kernel_units = skopt.space.Integer(1, 2048, name='pair_kernel_units')
+d_blocks = skopt.space.Integer(1, 4, name='blocks')
+d_block_layers = skopt.space.Integer(1, 4, name='block_layers')
 d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
-d_decay = skopt.space.Real(0.0001, 0.01, name='decay')
+d_decay = skopt.space.Real(0.00001, 0.01, name='decay')
+d_stddev = skopt.space.Real(0.00001, 1, name='stddev')
 dimensions = [
     d_compressor_kernel_layers,
     d_compressor_kernel_units,
@@ -37,45 +39,63 @@ dimensions = [
     d_blocks,
     d_block_layers,
     d_learning_rate,
-    d_decay]
+    d_decay,
+    d_stddev]
 default_hyperparameters = [
-    2,
-    64,
-    2,
-    64,
-    2,
-    2,
-    0.01,
-    0.001]
+    2,  # compressor layers
+    1024,  # compressor units
+    2,  # pair kernel layers
+    1024,  # pair kernel units
+    2,  # blocks
+    2,  # block layers
+    0.001,  # LR
+    0.0001,  # decay
+    0.01]  # noise
 
 
 # begin model
-def get_layer(units):
-    return L.Dense(units, activation='tanh', use_bias=False)
+class NoisyDropConnectDense(L.Dense):
+    def __init__(self, *args, **kwargs):
+        self.stddev = kwargs.pop('stddev')
+        super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
+
+    def call(self, x):
+        kernel = self.kernel + tf.random.truncated_normal(self.kernel.shape,
+                                                          stddev=self.stddev)
+        kernel = B.dropout(kernel, 0.5)
+        bias = self.bias + tf.random.truncated_normal(self.bias.shape,
+                                                      stddev=self.stddev)
+        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
 
 
-def get_mlp(features, outputs, layers, units):
+def get_layer(units, stddev):
+    return NoisyDropConnectDense(units, stddev=stddev, activation='tanh')
+
+
+def get_mlp(features, outputs, layers, units, stddev):
     input = K.Input((features, ))
-    output = get_layer(units)(input)
-    for layer in range(layers):
-        output = get_layer(units)(output)
-    output = get_layer(outputs)(output)
+    output = get_layer(units, stddev)(input)
+    for layer in range(layers - 1):
+        output = get_layer(units, stddev)(output)
+    output = get_layer(outputs, stddev)(output)
     return K.Model(input, output)
 
 
 class ConvKernel(L.Layer):
-    def __init__(self, features=16, outputs=5, layers=2, units=128):
+    def __init__(self,
+                 features=16, outputs=5, layers=2, units=128, stddev=0.01):
         super(ConvKernel, self).__init__()
-        self.kernel = get_mlp(features, outputs, layers, units)
+        self.kernel = get_mlp(features, outputs, layers, units, stddev)
 
     def call(self, inputs):
         return tf.vectorized_map(self.kernel, inputs)
 
 
 class ConvPair(L.Layer):
-    def __init__(self, features=16, outputs=3, layers=2, units=128):
+    def __init__(self,
+                 features=16, outputs=3, layers=2, units=128, stddev=0.01):
         super(ConvPair, self).__init__()
-        self.kernel = get_mlp(features, outputs, layers, units)
+        self.kernel = get_mlp(features, outputs, layers, units, stddev)
 
     def call(self, inputs):
         return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(
@@ -83,11 +103,10 @@ class ConvPair(L.Layer):
                 tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
 
-def make_block(
-        features, noise_or_output, block_layers,
-        pair_kernel_layers, pair_kernel_units):
+def make_block(features, noise_or_output, block_layers,
+               pair_kernel_layers, pair_kernel_units, stddev):
     block_output = L.Concatenate(2)([features, noise_or_output])
-    for layer_n in range(block_layers):
+    for layer_n in range(block_layers - 1):
         block_output = ConvPair(layers=pair_kernel_layers,
                                 units=pair_kernel_units)(block_output)
         block_output = L.Concatenate(2)([features, block_output])
@@ -98,17 +117,18 @@ def make_block(
 
 def make_agent(name, d_in, d_out, compressor_kernel_layers,
                compressor_kernel_units, pair_kernel_layers,
-               pair_kernel_units, blocks, block_layers):
+               pair_kernel_units, blocks, block_layers, stddev):
     features = K.Input((None, d_in))
     noise = K.Input((None, d_out))
     compressed_features = ConvKernel(
         layers=compressor_kernel_layers,
-        units=compressor_kernel_units)(features)
+        units=compressor_kernel_units,
+        stddev=stddev)(features)
     output = make_block(compressed_features, noise, block_layers,
-                        pair_kernel_layers, pair_kernel_units)
-    for i in range(1, blocks):
+                        pair_kernel_layers, pair_kernel_units, stddev)
+    for i in range(blocks - 1):
         output = make_block(compressed_features, output, block_layers,
-                            pair_kernel_layers, pair_kernel_units)
+                            pair_kernel_layers, pair_kernel_units, stddev)
     output *= -1
     resnet = K.Model([features, noise], output)
     if PLOT_MODEL:
@@ -116,13 +136,6 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
         resnet.summary()
     return resnet
 # end model
-
-
-def make_plot(episode_loss):
-    plt.x_label("episode")
-    plt.y_label("loss")
-    plt.plot(episode_loss)
-    plt.savefig('episodes losses')
 
 
 # begin data
@@ -237,7 +250,7 @@ def run_episode(adam, agent, batch):
             gradients = tape.gradient(batch_losses, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
         batch_mean_loss = compute_batch_mean_loss(batch_losses)
-        print(f' {step:02d} stop {int(stop)} loss {int(batch_mean_loss)}')
+        print(f'  {step:02d} stop {int(stop)} loss {int(batch_mean_loss)}')
         episode_loss += batch_mean_loss
         if batch_mean_loss > stop:
             break
@@ -247,35 +260,59 @@ def run_episode(adam, agent, batch):
     change /= initial_batch_mean_loss
     change *= 100
     print('\n', round(change, 1), "% change (lower is better)")
-    return agent, episode_loss
+    return agent, change
+
+
+def compute_running_mean(x, N):
+    cumsum = np.cumsum(np.insert(x, 0, 0))
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+
+def make_plot(changes):
+    plt.clf()
+    N = len(changes)
+    x = [i for i in range(N)]
+    running_mean = pd.Series(x).rolling(window=N).mean().iloc[N-1:].values
+    plt.plot(running_mean, 'r-')
+    plt.scatter(x, changes)
+    plt.xlabel('batch')
+    plt.ylabel('% change (lower is better)')
+    plt.title('neuromax')
+    plt.savefig('changes.png')
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
 def trial(compressor_kernel_layers, compressor_kernel_units,
           pair_kernel_layers, pair_kernel_units, blocks, block_layers,
-          learning_rate, decay):
+          learning_rate, decay, stddev):
     lr_decayed = tf.train.exponential_decay(
         learning_rate, tf.train.get_or_create_global_step(), 1000, decay)
     adam = K.optimizers.Adam(lr_decayed)
     agent = make_agent('agent', 16, 3,
                        compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
-                       blocks, block_layers)
+                       blocks, block_layers, stddev)
 
-    batch_number, trial_loss, batch = 0, 0, []
+    batch_number, trial_loss, batch, changes = 0, 0, [], []
     proteins = read_shards()
-    episodes_losses = []
     for protein in proteins:
         if len(batch) < BATCH_SIZE:
-            batch.append(attrdict_for(protein))
+            try:
+                batch.append(attrdict_for(protein))
+            except Exception as e:
+                print(e)
         else:
-            print('\nbatch', batch_number)
-            agent, episode_loss = run_episode(adam, agent, batch)
-            trial_loss += episode_loss
-            episodes_losses.append(episode_loss)
+            print('\n  batch', batch_number)
+            try:
+                agent, loss_change = run_episode(adam, agent, batch)
+                trial_loss += loss_change
+                changes.append(loss_change.item(0))
+                make_plot(changes)
+            except Exception as e:
+                print(e)
             batch_number += 1
             batch = []
-    make_plot(episodes_losses)
+
     global best
     if trial_loss < best:
         save_path = os.path.join('.', 'agents', str(time.time()) + '.h5')
@@ -290,4 +327,4 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
 
 
 if __name__ == '__main__':
-    skopt.gp_minimize(trial, dimensions)
+    skopt.gp_minimize(trial, dimensions, x0=default_hyperparameters)
