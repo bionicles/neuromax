@@ -224,7 +224,6 @@ def run_episode(adam, agent, batch):
             trailing_stop_loss = batch_mean_loss * STOP_LOSS_MULTIPLE
         elif batch_mean_loss > trailing_stop_loss:
             break
-
     return episode_loss
 
 
