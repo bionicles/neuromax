@@ -4,6 +4,9 @@ import tensorflow as tf
 import skopt
 import time
 import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.compat.v1.enable_eager_execution()
 B = tf.keras.backend
@@ -113,7 +116,11 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
         resnet.summary()
     return resnet
 # end model
-
+def make_plot(episode_loss):
+    plt.x_label("episode")
+    plt.y_label("loss")
+    plt.plot(episode_loss)
+    plt.savefig('episodes losses')
 
 # begin data
 def parse_protein(example):
@@ -254,6 +261,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
 
     batch_number, trial_loss, batch = 0, 0, []
     proteins = read_shards()
+    episodes_losses = []
     for protein in proteins:
         if len(batch) < BATCH_SIZE:
             batch.append(attrdict_for(protein))
@@ -261,9 +269,10 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
             print('\nbatch', batch_number)
             agent, episode_loss = run_episode(adam, agent, batch)
             trial_loss += episode_loss
+            episodes_losses.append(episode_loss)
             batch_number += 1
             batch = []
-
+    make_plot(episodes_losses)
     global best
     if trial_loss < best:
         save_path = os.path.join('.', 'agents', str(time.time()) + '.h5')
