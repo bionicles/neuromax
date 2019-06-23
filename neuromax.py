@@ -47,10 +47,10 @@ default_hyperparameters = [
 
 
 # begin model
-class ShakeDropConnectDense(L.Dense):
+class DropConnectDense(L.Dense):
     def call(self, inputs):
         if random.random() > 0.5:
-            kernel = B.dropout(self.kernel, 0.5) * random.uniform(-1, 1)
+            kernel = B.dropout(self.kernel, 0.5)
         else:
             kernel = self.kernel
         outputs = B.dot(inputs, kernel)
@@ -58,7 +58,7 @@ class ShakeDropConnectDense(L.Dense):
 
 
 def get_layer(units):
-    return ShakeDropConnectDense(units, activation='tanh', use_bias=False)
+    return DropConnectDense(units, activation='tanh', use_bias=False)
 
 
 def get_mlp(features, outputs, layers, units):
@@ -87,8 +87,7 @@ class ConvPair(L.Layer):
     def call(self, inputs):
         return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(
             lambda atom2: self.kernel(
-            tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
-
+                tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
 
 def make_block(
@@ -149,7 +148,8 @@ def parse_protein(example):
         sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
-    return initial_positions, positions, features, masses
+    initial_distances = compute_distances(positions)
+    return initial_positions, positions, features, masses, initial_distances
 
 
 def read_shards():
@@ -181,6 +181,7 @@ def step_agent_on_protein(agent, p):
     })
 
 
+@tf.function
 def compute_distances(positions):
     positions = tf.squeeze(positions)
     distances = tf.reduce_sum(positions * positions, 1)
@@ -208,22 +209,25 @@ def run_episode(adam, agent, batch):
     with tf.GradientTape() as tape:
         for step in MAX_STEPS:
             batch = [step_agent_on_protein(agent, p) for p in batch]
-            batch_error = tf.reduce_sum([loss(p) for p in batch])
-            episode_loss += batch_error
-            if batch_error * STOP_LOSS_MULTIPLE < trailing_stop_loss:
-                trailing_stop_loss = batch_error * STOP_LOSS_MULTIPLE
-            elif batch_error > trailing_stop_loss:
-                break
-        gradients = tape.gradient(episode_loss, agent.trainable_weights)
-        adam.apply_gradients(zip(gradients, agent.trainable_weights))
+            # only do loss/train stuff sometimes to run faster!
+            if random.random() > 0.5:
+                batch_error = tf.reduce_sum([loss(p) for p in batch])
+                gradients = tape.gradient(episode_loss, agent.trainable_weights)
+                adam.apply_gradients(zip(gradients, agent.trainable_weights))
+                episode_loss += batch_error
+                if batch_error * STOP_LOSS_MULTIPLE < trailing_stop_loss:
+                    trailing_stop_loss = batch_error * STOP_LOSS_MULTIPLE
+                elif batch_error > trailing_stop_loss:
+                    break
+
     return episode_loss
 
 
 def attrdict_for(p):
-    # initial_positions, positions, features, masses
+    # initial_positions, positions, features, masses, initial_distances
     return AttrDict({
         'num_atoms': tf.dtypes.cast(p[0].shape[1], dtype=tf.float32),
-        'initial_distances': compute_distances(p[0]),
+        'initial_distances': p[4],
         'velocities': tf.random.normal(p[1].shape),
         'forces': tf.zeros_like(p[0]),
         'initial_positions': p[0],
