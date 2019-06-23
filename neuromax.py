@@ -12,18 +12,18 @@ K = tf.keras
 best = 0
 # training parameters
 STOP_LOSS_MULTIPLE = 1.04
-PLOT_MODEL = False
+PLOT_MODEL = True
 MAX_STEPS = 100
 BATCH_SIZE = 2
 # hyperparameters
 d_compressor_kernel_units = skopt.space.Integer(
-                                    16, 2048, name='compressor_kernel_units')
+                                    16, 256, name='compressor_kernel_units')
 d_compressor_kernel_layers = skopt.space.Integer(
-                                    1, 9, name='compressor_kernel_layers')
-d_pair_kernel_units = skopt.space.Integer(16, 2048, name='pair_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(1, 9, name='pair_kernel_layers')
-d_blocks = skopt.space.Integer(1, 9, name='blocks')
-d_block_layers = skopt.space.Integer(1, 9, name='block_layers')
+                                    1, 3, name='compressor_kernel_layers')
+d_pair_kernel_units = skopt.space.Integer(16, 256, name='pair_kernel_units')
+d_pair_kernel_layers = skopt.space.Integer(1, 3, name='pair_kernel_layers')
+d_blocks = skopt.space.Integer(1, 3, name='blocks')
+d_block_layers = skopt.space.Integer(1, 3, name='block_layers')
 d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
 d_decay = skopt.space.Real(0.0001, 0.01, name='decay')
 dimensions = [
@@ -37,9 +37,9 @@ dimensions = [
     d_decay]
 default_hyperparameters = [
     2,
-    128,
+    64,
     2,
-    128,
+    64,
     2,
     2,
     0.01,
@@ -47,16 +47,6 @@ default_hyperparameters = [
 
 
 # begin model
-# class DropConnectDense(L.Dense):
-#     def call(self, inputs):
-#         if random.random() > 0.5:
-#             kernel = B.dropout(self.kernel, 0.5)
-#         else:
-#             kernel = self.kernel
-#         outputs = B.dot(inputs, kernel)
-#         return self.activation(outputs)
-
-
 def get_layer(units):
     return L.Dense(units, activation='tanh', use_bias=False)
 
@@ -186,8 +176,9 @@ def compute_loss(p):
 
 
 def compute_batch_mean_loss(batch_losses):
-    return tf.reduce_mean(tf.convert_to_tensor(
+    batch_mean_loss_tensor = tf.reduce_mean(tf.convert_to_tensor(
         [tf.reduce_sum(loss) for loss in batch_losses]))
+    return batch_mean_loss_tensor.numpy()
 
 
 def step_agent_on_protein(agent, p):
@@ -230,20 +221,21 @@ def run_episode(adam, agent, batch):
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
     trailing_stop_loss = initial_batch_mean_loss * 1.04
     episode_loss = 0
-    with tf.GradientTape() as tape:
-        for step in range(MAX_STEPS):
+    for step in range(MAX_STEPS):
+        with tf.GradientTape() as tape:
             batch = [step_agent_on_protein(agent, p) for p in batch]
             batch_losses = [compute_loss(p) for p in batch]
-            for loss in batch_losses:
-                gradients = tape.gradient(loss, agent.trainable_weights)
-                adam.apply_gradients(zip(gradients, agent.trainable_weights))
-            batch_mean_loss = compute_batch_mean_loss(batch_losses)
-            episode_loss += batch_mean_loss
-            if batch_mean_loss * STOP_LOSS_MULTIPLE > trailing_stop_loss:
-                trailing_stop_loss = batch_mean_loss * STOP_LOSS_MULTIPLE
-            elif batch_mean_loss > trailing_stop_loss:
-                break
-    return episode_loss
+            gradients = tape.gradient(batch_losses, agent.trainable_weights)
+            adam.apply_gradients(zip(gradients, agent.trainable_weights))
+        batch_mean_loss = compute_batch_mean_loss(batch_losses)
+        print('step', step, 'batch_mean_loss', batch_mean_loss)
+        episode_loss += batch_mean_loss
+        if batch_mean_loss * STOP_LOSS_MULTIPLE < trailing_stop_loss:
+            print('new trailing stop:', batch_mean_loss * STOP_LOSS_MULTIPLE)
+            trailing_stop_loss = batch_mean_loss * STOP_LOSS_MULTIPLE
+        elif batch_mean_loss > trailing_stop_loss:
+            break
+    return agent, episode_loss
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -267,6 +259,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
             print('batch', batch_number)
             agent, episode_loss = run_episode(adam, agent, batch)
             trial_loss += episode_loss
+            batch_number += 1
             batch = []
 
     global best
