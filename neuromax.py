@@ -227,7 +227,7 @@ def run_episode(adam, agent, batch):
             gradients = tape.gradient(batch_losses, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
         batch_mean_loss = compute_batch_mean_loss(batch_losses)
-        print(step, 'stop', int(stop), 'loss', int(batch_mean_loss))
+        print(f' {step:02d} stop {int(stop)} loss {int(batch_mean_loss)}')
         episode_loss += batch_mean_loss
         if batch_mean_loss > stop:
             break
