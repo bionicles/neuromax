@@ -233,8 +233,9 @@ def run_episode(adam, agent, batch):
         for step in range(MAX_STEPS):
             batch = [step_agent_on_protein(agent, p) for p in batch]
             batch_losses = [compute_loss(p) for p in batch]
-            gradients = tape.gradient(episode_loss, agent.trainable_weights)
-            adam.apply_gradients(zip(gradients, agent.trainable_weights))
+            for loss in batch_losses:
+                gradients = tape.gradient(loss, agent.trainable_weights)
+                adam.apply_gradients(zip(gradients, agent.trainable_weights))
             batch_mean_loss = compute_batch_mean_loss(batch_losses)
             episode_loss += batch_mean_loss
             if batch_mean_loss * STOP_LOSS_MULTIPLE > trailing_stop_loss:
