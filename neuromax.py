@@ -198,6 +198,7 @@ def loss(p):
     kinetic_energy = (p.masses / 2) * (p.velocities ** 2)
     potential_energy = p.forces * -1
     action = kinetic_energy - potential_energy
+    action = tf.reduce_sum(action, axis = -1)
     return tf.reduce_sum([position_error, shape_error, action])
 
 
@@ -206,7 +207,7 @@ def run_episode(adam, agent, batch):
         loss(p) for p in batch])
     episode_loss = False, 0
     with tf.GradientTape() as tape:
-        for step in MAX_STEPS:
+        for step in range(MAX_STEPS):
             batch = [step_agent_on_protein(agent, p) for p in batch]
             # only do loss/train stuff sometimes to run faster!
             if random.random() > 0.5:
