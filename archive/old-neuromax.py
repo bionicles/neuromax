@@ -636,9 +636,9 @@ def train(compressor_kernel_layers,
 
 def main():
     search_result = skopt.gp_minimize(func=train,
-                            dimensions=dimensions,
-                            acq_func='EI',
-                            x0=default_hyperparameters)
+            dimensions=dimensions,
+            acq_func='EI',
+            x0=default_hyperparameters)
 
     print(search_result)
 
