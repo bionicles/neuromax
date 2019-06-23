@@ -218,8 +218,7 @@ def attrdict_for(p):
 def run_episode(adam, agent, batch):
     initial_batch_losses = [compute_loss(p) for p in batch]
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
-    print("initial batch_mean_loss", initial_batch_mean_loss)
-    trailing_stop_loss = initial_batch_mean_loss * 1.04
+    stop = initial_batch_mean_loss * 1.04
     episode_loss = 0
     for step in range(MAX_STEPS):
         with tf.GradientTape() as tape:
@@ -228,14 +227,16 @@ def run_episode(adam, agent, batch):
             gradients = tape.gradient(batch_losses, agent.trainable_weights)
             adam.apply_gradients(zip(gradients, agent.trainable_weights))
         batch_mean_loss = compute_batch_mean_loss(batch_losses)
-        print('step', step, 'trailing_stop_loss', trailing_stop_loss, 'batch_mean_loss', batch_mean_loss)
+        print(step, 'stop', int(stop), 'loss', int(batch_mean_loss))
         episode_loss += batch_mean_loss
-        if batch_mean_loss > trailing_stop_loss:
+        if batch_mean_loss > stop:
             break
-        if batch_mean_loss * STOP_LOSS_MULTIPLE < trailing_stop_loss:
-            print('new trailing stop:', batch_mean_loss * STOP_LOSS_MULTIPLE)
-            trailing_stop_loss = batch_mean_loss * STOP_LOSS_MULTIPLE
-
+        if batch_mean_loss * STOP_LOSS_MULTIPLE < stop:
+            stop = batch_mean_loss * STOP_LOSS_MULTIPLE
+    change = (batch_mean_loss - initial_batch_mean_loss)
+    change /= initial_batch_mean_loss
+    change *= 100
+    print('\n', change, "% change (lower is better)")
     return agent, episode_loss
 
 
@@ -257,7 +258,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         if len(batch) < BATCH_SIZE:
             batch.append(attrdict_for(protein))
         else:
-            print('batch', batch_number)
+            print('\nbatch', batch_number)
             agent, episode_loss = run_episode(adam, agent, batch)
             trial_loss += episode_loss
             batch_number += 1
