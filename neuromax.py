@@ -85,7 +85,8 @@ class ConvPair(L.Layer):
         self.kernel = get_mlp(features, outputs, layers, units)
 
     def call(self, inputs):
-        return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(lambda atom2: self.kernel(
+        return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(
+            lambda atom2: self.kernel(
             tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
 
@@ -199,27 +200,22 @@ def loss(p):
     return tf.reduce_sum([position_error, shape_error, action])
 
 
-def step_agent_on_batch(adam, agent, batch):
-    with tf.GradientTape() as tape:
-        batch = [step_agent_on_protein(agent, p) for p in batch]
-        batch_error = tf.reduce_sum([loss(protein) for protein in batch])
-        gradients = tape.gradient(batch_error, agent.trainable_weights)
-        adam.apply_gradients(zip(gradients, agent.trainable_weights))
-    return batch, agent, batch_error
-
-
 def run_episode(adam, agent, batch):
     [print(p) for p in batch]
     trailing_stop_loss = STOP_LOSS_MULTIPLE * tf.reduce_sum([
         loss(p) for p in batch])
     episode_loss = False, 0
-    for step in MAX_STEPS:
-        batch, agent, step_loss = step_agent_on_batch(adam, agent, batch)
-        episode_loss += step_loss
-        if step_loss * STOP_LOSS_MULTIPLE < trailing_stop_loss:
-            trailing_stop_loss = step_loss * STOP_LOSS_MULTIPLE
-        elif step_loss > trailing_stop_loss:
-            break
+    with tf.GradientTape() as tape:
+        for step in MAX_STEPS:
+            batch = [step_agent_on_protein(agent, p) for p in batch]
+            batch_error = tf.reduce_sum([loss(p) for p in batch])
+            episode_loss += batch_error
+            if batch_error * STOP_LOSS_MULTIPLE < trailing_stop_loss:
+                trailing_stop_loss = batch_error * STOP_LOSS_MULTIPLE
+            elif batch_error > trailing_stop_loss:
+                break
+        gradients = tape.gradient(episode_loss, agent.trainable_weights)
+        adam.apply_gradients(zip(gradients, agent.trainable_weights))
     return episode_loss
 
 
