@@ -236,7 +236,7 @@ def run_episode(adam, agent, batch):
     change = (batch_mean_loss - initial_batch_mean_loss)
     change /= initial_batch_mean_loss
     change *= 100
-    print('\n', change, "% change (lower is better)")
+    print('\n', round(change, 1), "% change (lower is better)")
     return agent, episode_loss
 
 
