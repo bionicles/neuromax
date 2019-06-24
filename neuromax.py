@@ -231,68 +231,60 @@ def make_plot(changes):
 
 
 @tf.function
-def compute_loss(p):
+def compute_loss(initial_positions, positions, num_atoms):
     print('tracing compute_loss')
     position_error = K.losses.mean_squared_error(
-        p.initial_positions, p.positions) / p.num_atoms
+        initial_positions, positions) / num_atoms
     # shape_error = K.losses.mean_squared_error(
     #     p.initial_distances, compute_distances(p.positions)) / p.num_atoms_squared
-    shape_error = tf.losses.mean_pairwise_squared_error(p.initial_positions, p.positions)
+    shape_error = tf.losses.mean_pairwise_squared_error(initial_positions, positions)
     return position_error + shape_error
 
 
 @tf.function
-def compute_batch_mean_loss(batch_losses):
+def compute_mean_loss(data_list):
     print('tracing compute_batch_mean_loss')
     return tf.reduce_mean(tf.convert_to_tensor(
-        [tf.reduce_sum(loss) for loss in batch_losses]))
+        tf.reduce_sum(data_list)))
 
 
-def step_agent_on_protein(agent, p):
+def step_agent_on_protein(agent, protein):
+    initial_positions, positions, features, masses, forces, velocities, num_atoms, num_atoms_squared, pdb_id = protein
     print('tracing step_agent_on_protein')
-    atoms = tf.concat([p.positions, p.features], axis=-1)
-    noise = tf.random.normal(p.positions.shape)
+    atoms = tf.concat([positions, features], axis=-1)
+    noise = tf.random.normal(positions.shape)
     forces = agent([atoms, noise])
-    new_velocities = p.velocities + (forces / p.masses)
-    new_positions = p.positions + new_velocities
-    return AttrDict({
-        'initial_positions': p.initial_positions,
-        # 'initial_distances': p.initial_distances,
-        'features': p.features,
-        'positions': new_positions,
-        'velocities': new_velocities,
-        'num_atoms_squared': p.num_atoms_squared,
-        'num_atoms': p.num_atoms,
-        'forces': forces,
-        'masses': p.masses,
-        'pdb_id': p.pdb_id
-    })
+    new_velocities = velocities + (forces / masses)
+    new_positions = positions + new_velocities
+    return  initial_positions, new_positions,features, masses, forces,new_velocities, num_atoms, num_atoms_squared, pdb_id
 
-
-def run_episode(adam, agent, batch, invoke):
+@tf.function
+def run_episode(adam, agent, protein, invoke):
     print('tracing run_episode')
-    initial_batch_losses = [compute_loss(p) for p in batch]
-    initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
-    stop = initial_batch_mean_loss * 1.04
-    batch_mean_loss = tf.cast(0, tf.float32)
+    initial_positions, positions, features, masses, forces, velocities, num_atoms, num_atoms_squared, pdb_id = protein
+    loss = compute_loss(initial_positions, positions, num_atoms)
+    initial_mean_loss = compute_mean_loss(loss)
+    stop = initial_mean_loss * 1.04
+    mean_loss = tf.cast(0, tf.float32)
     for step in tf.range(MAX_STEPS):
         with tf.GradientTape() as tape:
-            batch = [invoke(agent, p) for p in batch]
-            batch_losses = [compute_loss(p) for p in batch]
-        gradients = tape.gradient(batch_losses, agent.trainable_weights)
+            protein = invoke(agent, list(protein))
+            initial_positions, positions, features, masses, forces, velocities, num_atoms, num_atoms_squared, pdb_id = protein
+            losses = compute_loss(initial_positions, positions, num_atoms)
+        gradients = tape.gradient(losses, agent.trainable_weights)
         adam.apply_gradients(zip(gradients, agent.trainable_weights),
                              global_step=tf.train.get_or_create_global_step())
-        batch_mean_loss = compute_batch_mean_loss(batch_losses)
+        mean_loss = compute_mean_loss(losses)
         tf.print('  ', step,
                  'stop', tf.math.round(stop),
-                 'loss', tf.math.round(batch_mean_loss))
-        if tf.math.greater(batch_mean_loss, stop):
+                 'loss', tf.math.round(mean_loss))
+        if tf.math.greater(mean_loss, stop):
             break
-        new_stop = batch_mean_loss * STOP_LOSS_MULTIPLE
+        new_stop = mean_loss * STOP_LOSS_MULTIPLE
         if tf.math.less(new_stop, stop):
             stop = new_stop
-    change = (batch_mean_loss - initial_batch_mean_loss)
-    change /= initial_batch_mean_loss
+    change = (mean_loss - initial_mean_loss)
+    change /= initial_mean_loss
     change *= 100
     tf.print('\n', tf.math.round(change), "% change (lower is better)")
     return change
@@ -310,34 +302,27 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
                        blocks, stddev)
     invoke = tf.function(step_agent_on_protein)
-    current_agent_episode_graph = tf.function(run_episode)
     total_change, batch_number, batch = 0, 0, []
     proteins = read_shards()
     for protein in proteins:
-        if batch_number is BATCHES_PER_TRIAL:
-            break
-        if len(batch) < BATCH_SIZE:
-            batch.append(attrdict_for(protein))
-        else:
-            print('\n  batch', batch_number, 'LR', adam._lr().numpy())
-            [tf.print(p.pdb_id, p.num_atoms) for p in batch]
-            print(
-                '\n  compressor_kernel_layers', compressor_kernel_layers,
-                '\n  compressor_kernel_units', compressor_kernel_units,
-                '\n  pair_kernel_layers', pair_kernel_layers,
-                '\n  pair_kernel_units', pair_kernel_units,
-                '\n  learning_rate', learning_rate, '\n  decay', decay,
-                '\n  stddev', stddev, '\n')
-            try:
-                loss_change = current_agent_episode_graph(adam, agent, batch, invoke)
-                total_change = total_change + loss_change.numpy().item()
-                # changes.append(loss_change.numpy().item(0))
-                # # make_plot(changes)
-            except Exception as e:
-                total_change += 10
-                print(e)
-            batch_number += 1
-            batch = []
+        print('\n  batch', batch_number, 'LR', adam._lr().numpy())
+        [tf.print(p.pdb_id, p.num_atoms) for p in batch]
+        print(
+            '\n  compressor_kernel_layers', compressor_kernel_layers,
+            '\n  compressor_kernel_units', compressor_kernel_units,
+            '\n  pair_kernel_layers', pair_kernel_layers,
+            '\n  pair_kernel_units', pair_kernel_units,
+            '\n  learning_rate', learning_rate, '\n  decay', decay,
+            '\n  stddev', stddev, '\n')
+        try:
+            loss_change = run_episode(adam, agent, protein, invoke)
+            total_change = total_change + loss_change.numpy().item()
+        except Exception as e:
+            total_change += 10
+            print(e)
+            # changes.append(loss_change.numpy().item(0))
+            # # make_plot(changes)
+
 
     global best
     if total_change < best:
