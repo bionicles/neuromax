@@ -8,7 +8,7 @@ import time
 import os
 import seaborn as sns
 sns.set()
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.ERROR)
 tf.compat.v1.enable_eager_execution()
@@ -19,7 +19,7 @@ best = 0
 # training parameters
 STOP_LOSS_MULTIPLE = 1.04
 PLOT_MODEL = True
-BATCHES_PER_TRIAL = 5
+BATCHES_PER_TRIAL = 2
 MAX_STEPS = 100
 BATCH_SIZE = 2
 # hyperparameters
@@ -27,10 +27,10 @@ d_compressor_kernel_layers = skopt.space.Integer(
                                     2, 4, name='compressor_kernel_layers')
 d_compressor_kernel_units = skopt.space.Integer(
                                     16, 1024, name='compressor_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(2, 8, name='pair_kernel_layers')
+d_pair_kernel_layers = skopt.space.Integer(2, 4, name='pair_kernel_layers')
 d_pair_kernel_units = skopt.space.Integer(16, 2048, name='pair_kernel_units')
 d_blocks = skopt.space.Integer(1, 8, name='blocks')
-d_block_layers = skopt.space.Integer(1, 10, name='block_layers')
+d_block_layers = skopt.space.Integer(1, 2, name='block_layers')
 d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
 d_decay = skopt.space.Real(0.99, 0.99999, name='decay')
 d_stddev = skopt.space.Real(0.001, 0.1, name='stddev')
@@ -48,8 +48,8 @@ default_hyperparameters = [
     2,  # compressor layers
     512,  # compressor units
     2,  # pair kernel layers
-    2048,  # pair kernel units
-    4,  # blocks
+    1024,  # pair kernel units
+    2,  # blocks
     1,  # block layers
     0.01,  # LR
     0.999,  # decay
@@ -57,29 +57,32 @@ default_hyperparameters = [
 
 
 # begin model
-class NoisyDropConnectDense(L.Dense):
-    def __init__(self, *args, **kwargs):
-        self.stddev = kwargs.pop('stddev')
-        super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
-
-    def call(self, x):
-        kernel = self.kernel + tf.random.truncated_normal(self.kernel.shape,
-                                                          stddev=self.stddev)
-        kernel = B.dropout(kernel, 0.5)
-        bias = self.bias + tf.random.truncated_normal(self.bias.shape,
-                                                      stddev=self.stddev)
-        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
+# class NoisyDropConnectDense(L.Dense):
+#     def __init__(self, *args, **kwargs):
+#         self.stddev = kwargs.pop('stddev')
+#         super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
+#
+#     @tf.function
+#     def call(self, x):
+#         kernel = self.kernel + tf.random.truncated_normal(tf.shape(self.kernel),
+#                                                           stddev=self.stddev)
+#         kernel = tf.nn.dropout(kernel, 0.5)
+#         bias = self.bias + tf.random.truncated_normal(tf.shape(self.bias),
+#                                                       stddev=self.stddev)
+#         return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
 
 
 def get_layer(units, stddev):
-    return NoisyDropConnectDense(units, stddev=stddev, activation='tanh')
+    return L.Dense(units, activation='tanh')
 
 
 def get_mlp(features, outputs, layers, units, stddev):
     input = K.Input((features, ))
     output = get_layer(units, stddev)(input)
+    # output = L.Dropout(0.5)(output)
     for layer in range(layers - 1):
         output = get_layer(units, stddev)(output)
+        # output = L.Dropout(0.5)(output)
     output = get_layer(outputs, stddev)(output)
     return K.Model(input, output)
 
@@ -142,6 +145,7 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
 
 
 # begin data
+@tf.function
 def parse_protein(example):
     context_features = {'protein': tf.io.FixedLenFeature([], dtype=tf.string)}
     sequence_features = {
@@ -165,7 +169,26 @@ def parse_protein(example):
     features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
     initial_distances = compute_distances(initial_positions)
-    return initial_positions, positions, features, masses, initial_distances
+    velocities = tf.random.normal(tf.shape(positions))
+    forces = tf.zeros(tf.shape(positions))
+    num_atoms = tf.cast(tf.shape(positions)[0], tf.float32)
+    num_atoms_squared = tf.math.square(num_atoms)
+    return (initial_positions, positions, features, masses, initial_distances,
+            forces, velocities, num_atoms, num_atoms_squared)
+
+
+def attrdict_for(p):
+    return AttrDict({
+        'initial_positions': p[0],
+        'positions': p[1],
+        'features': p[2],
+        'masses': p[3],
+        'initial_distances': p[4],
+        'forces': p[5],
+        'velocities': p[6],
+        'num_atoms': p[7],
+        'num_atoms_squared': p[8]
+    })
 
 
 def read_shards():
@@ -245,35 +268,22 @@ def step_agent_on_protein(agent, p):
     })
 
 
-def attrdict_for(p):
-    # initial_positions, positions, features, masses, initial_distances
-    num_atoms = tf.dtypes.cast(p[0].shape[1], dtype=tf.float32)
-    return AttrDict({
-        'num_atoms': num_atoms,
-        'num_atoms_squared': tf.square(num_atoms),
-        'initial_distances': p[4],
-        'velocities': tf.random.normal(p[1].shape),
-        'forces': tf.zeros_like(p[0]),
-        'initial_positions': p[0],
-        'positions': p[1],
-        'features': p[2],
-        'masses': p[3],
-    })
-
-
 def run_episode(adam, agent, batch):
     initial_batch_losses = [compute_loss(p) for p in batch]
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
     stop = initial_batch_mean_loss * 1.04
-    for step in range(MAX_STEPS):
+    batch_mean_loss = tf.cast(0, tf.float32)
+    for step in tf.range(MAX_STEPS):
         with tf.GradientTape() as tape:
             batch = [step_agent_on_protein(agent, p) for p in batch]
             batch_losses = [compute_loss(p) for p in batch]
-            gradients = tape.gradient(batch_losses, agent.trainable_weights)
-            adam.apply_gradients(zip(gradients, agent.trainable_weights),
-                                 global_step=tf.train.get_or_create_global_step())
+        gradients = tape.gradient(batch_losses, agent.trainable_weights)
+        adam.apply_gradients(zip(gradients, agent.trainable_weights),
+                             global_step=tf.train.get_or_create_global_step())
         batch_mean_loss = compute_batch_mean_loss(batch_losses)
-        print(f'  {step:02d} stop {int(stop)} loss {int(batch_mean_loss)}')
+        tf.print('  ', step,
+                 'stop', tf.math.round(stop),
+                 'loss', tf.math.round(batch_mean_loss))
         if tf.math.greater(batch_mean_loss, stop):
             break
         new_stop = batch_mean_loss * STOP_LOSS_MULTIPLE
@@ -282,8 +292,9 @@ def run_episode(adam, agent, batch):
     change = (batch_mean_loss - initial_batch_mean_loss)
     change /= initial_batch_mean_loss
     change *= 100
-    print('\n', round(change.numpy(), 1), "% change (lower is better)")
-    return agent, change
+    tf.print('\n', tf.math.round(change), "% change (lower is better)")
+    del initial_batch_losses, initial_batch_mean_loss, batch_mean_loss
+    return change
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -297,17 +308,15 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                        compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
                        blocks, block_layers, stddev)
-
-    batch_number, total_change, batch, changes = 0, 0, [], []
+    current_agent_episode_graph = tf.function(run_episode)
+    batch_number, batch, changes = 0, [], []
+    total_change = 0
     proteins = read_shards()
     for protein in proteins:
-        if batch_number == BATCHES_PER_TRIAL:
+        if batch_number is BATCHES_PER_TRIAL:
             break
         if len(batch) < BATCH_SIZE:
-            try:
-                batch.append(attrdict_for(protein))
-            except Exception as e:
-                print(e)
+            batch.append(attrdict_for(protein))
         else:
             print('\n  batch', batch_number, 'LR', adam._lr().numpy())
             print(
@@ -319,10 +328,10 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                 '\n  learning_rate', learning_rate, '\n  decay', decay,
                 '\n  stddev', stddev, '\n')
             try:
-                agent, loss_change = run_episode(adam, agent, batch)
-                total_change += loss_change
-                changes.append(loss_change.numpy().item(0))
-                make_plot(changes)
+                loss_change = current_agent_episode_graph(adam, agent, batch)
+                total_change = total_change + loss_change.numpy().item()
+                # changes.append(loss_change.numpy().item(0))
+                # # make_plot(changes)
             except Exception as e:
                 total_change += 10
                 print(e)
@@ -336,8 +345,9 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         tf.saved_model.save(agent, "agents/" + str(time.time()) + ".h5")
         best = total_change
 
+    tf.reset_default_graph()
     B.clear_session()
-    del agent
+    del agent, adam
 
     return total_change
 # end training
