@@ -227,8 +227,7 @@ def make_plot(changes):
 @tf.function
 def compute_distances(positions):
     positions = tf.squeeze(positions)
-    distances = tf.reduce_sum(positions * positions, 1)
-    distances = tf.reshape(distances, [-1, 1])
+    distances = tf.reshape(tf.reduce_sum(positions * positions, 1), [-1, 1])
     return distances - 2 * tf.matmul(
         positions, tf.transpose(positions)) + tf.transpose(distances)
 
@@ -237,18 +236,15 @@ def compute_distances(positions):
 def compute_loss(p):
     position_error = K.losses.mean_squared_error(
         p.initial_positions, p.positions) / p.num_atoms
-    distances = compute_distances(p.positions)
     shape_error = K.losses.mean_squared_error(
-        p.initial_distances, distances)
-    shape_error /= p.num_atoms_squared
+        p.initial_distances, compute_distances(p.positions)) / p.num_atoms_squared
     return position_error + shape_error
 
 
 @tf.function
 def compute_batch_mean_loss(batch_losses):
-    batch_mean_loss_tensor = tf.reduce_mean(tf.convert_to_tensor(
+    return tf.reduce_mean(tf.convert_to_tensor(
         [tf.reduce_sum(loss) for loss in batch_losses]))
-    return batch_mean_loss_tensor
 
 
 @tf.function
