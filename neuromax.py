@@ -18,10 +18,8 @@ K = tf.keras
 best = 0
 # training parameters
 STOP_LOSS_MULTIPLE = 1.2
-BATCHES_PER_TRIAL = 10000
 PLOT_MODEL = True
 MAX_STEPS = 100
-BATCH_SIZE = 2
 # HAND TUNED MODEL PARAMETERS (BAD BION!)
 USE_NOISY_DROPCONNECT = True
 ACTIVATION = 'tanh'
@@ -199,7 +197,7 @@ def read_shards():
     dataset = dataset.shuffle(buffer_size=len(recordpaths))
     dataset = dataset.map(map_func=parse_protein)
     dataset = dataset.batch(1)
-    return dataset.prefetch(buffer_size=BATCH_SIZE)
+    return dataset.prefetch(buffer_size=1)
 # end data
 
 
@@ -243,7 +241,7 @@ def compute_loss(initial_positions, positions, num_atoms):
 
 @tf.function
 def compute_mean_loss(data_list):
-    print('tracing compute_batch_mean_loss')
+    print('tracing compute_mean_loss')
     return tf.reduce_mean(tf.convert_to_tensor(
         tf.reduce_sum(data_list)))
 
@@ -302,11 +300,10 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
                        blocks, stddev)
     invoke = tf.function(step_agent_on_protein)
-    total_change, batch_number, batch = 0, 0, []
+    total_change,  = 0,
     proteins = read_shards()
     for protein in proteins:
-        print('\n  batch', batch_number, 'LR', adam._lr().numpy())
-        [tf.print(p.pdb_id, p.num_atoms) for p in batch]
+        print('\n ', 'LR', adam._lr().numpy())
         print(
             '\n  compressor_kernel_layers', compressor_kernel_layers,
             '\n  compressor_kernel_units', compressor_kernel_units,
