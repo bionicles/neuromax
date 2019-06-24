@@ -18,7 +18,7 @@ K = tf.keras
 best = 0
 # training parameters
 USE_NOISY_DROPCONNECT = True
-STOP_LOSS_MULTIPLE = 1.04
+STOP_LOSS_MULTIPLE = 1.2
 BATCHES_PER_TRIAL = 10000
 PLOT_MODEL = True
 MAX_STEPS = 100
@@ -31,7 +31,6 @@ d_compressor_kernel_units = skopt.space.Integer(
 d_pair_kernel_layers = skopt.space.Integer(2, 4, name='pair_kernel_layers')
 d_pair_kernel_units = skopt.space.Integer(16, 2048, name='pair_kernel_units')
 d_blocks = skopt.space.Integer(1, 8, name='blocks')
-d_block_layers = skopt.space.Integer(1, 2, name='block_layers')
 d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
 d_decay = skopt.space.Real(0.99, 0.99999, name='decay')
 d_stddev = skopt.space.Real(0.001, 0.1, name='stddev')
@@ -41,7 +40,6 @@ dimensions = [
     d_pair_kernel_layers,
     d_pair_kernel_units,
     d_blocks,
-    d_block_layers,
     d_learning_rate,
     d_decay,
     d_stddev]
@@ -50,8 +48,7 @@ default_hyperparameters = [
     512,  # compressor units
     2,  # pair kernel layers
     1024,  # pair kernel units
-    4,  # blocks
-    1,  # block layers
+    2,  # blocks
     0.01,  # LR
     0.999,  # decay
     0.01]  # noise
@@ -64,12 +61,10 @@ class NoisyDropConnectDense(L.Dense):
         super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
 
     def call(self, x):
-        kernel = self.kernel + tf.random.truncated_normal(tf.shape(self.kernel),
-                                                          stddev=self.stddev)
-        kernel = tf.nn.dropout(kernel, 0.5)
-        bias = self.bias + tf.random.truncated_normal(tf.shape(self.bias),
-                                                      stddev=self.stddev)
-        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
+        return self.activation(tf.nn.bias_add(B.dot(x, tf.nn.dropout(self.kernel + tf.random.truncated_normal(tf.shape(self.kernel),
+                                                          stddev=self.stddev), 0.5)),
+            self.bias + tf.random.truncated_normal(tf.shape(self.bias),
+                                                      stddev=self.stddev)))
 
 
 def get_layer(units, stddev):
@@ -92,7 +87,7 @@ def get_mlp(features, outputs, layers, units, stddev):
 
 class ConvKernel(L.Layer):
     def __init__(self,
-                 features=16, outputs=5, layers=2, units=128, stddev=0.01):
+                 features=13, outputs=5, layers=2, units=128, stddev=0.01):
         super(ConvKernel, self).__init__()
         self.kernel = get_mlp(features, outputs, layers, units, stddev)
 
@@ -107,18 +102,14 @@ class ConvPair(L.Layer):
         self.kernel = get_mlp(features, outputs, layers, units, stddev)
 
     def call(self, inputs):
-        return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(
+        return tf.map_fn(lambda atom1: tf.reduce_sum(tf.vectorized_map(
             lambda atom2: self.kernel(
                 tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
 
-def make_block(features, noise_or_output, block_layers,
+def make_block(features, noise_or_output,
                pair_kernel_layers, pair_kernel_units, stddev):
     block_output = L.Concatenate(2)([features, noise_or_output])
-    for layer_n in range(block_layers - 1):
-        block_output = ConvPair(layers=pair_kernel_layers,
-                                units=pair_kernel_units)(block_output)
-        block_output = L.Concatenate(2)([features, block_output])
     block_output = ConvPair(layers=pair_kernel_layers,
                             units=pair_kernel_units)(block_output)
     return L.Add()([block_output, noise_or_output])
@@ -126,17 +117,17 @@ def make_block(features, noise_or_output, block_layers,
 
 def make_agent(name, d_in, d_out, compressor_kernel_layers,
                compressor_kernel_units, pair_kernel_layers,
-               pair_kernel_units, blocks, block_layers, stddev):
+               pair_kernel_units, blocks, stddev):
     features = K.Input((None, d_in))
     noise = K.Input((None, d_out))
     compressed_features = ConvKernel(
         layers=compressor_kernel_layers,
         units=compressor_kernel_units,
         stddev=stddev)(features)
-    output = make_block(compressed_features, noise, block_layers,
+    output = make_block(compressed_features, noise,
                         pair_kernel_layers, pair_kernel_units, stddev)
     for i in range(blocks - 1):
-        output = make_block(compressed_features, output, block_layers,
+        output = make_block(compressed_features, output,
                             pair_kernel_layers, pair_kernel_units, stddev)
     output *= -1
     resnet = K.Model([features, noise], output)
@@ -161,6 +152,7 @@ def parse_protein(example):
     context, sequence = tf.io.parse_single_sequence_example(
         example,
         context_features=context_features, sequence_features=sequence_features)
+    pdb_id = context['protein']
     initial_positions = tf.reshape(tf.io.parse_tensor(
         sequence['initial_positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(
@@ -177,7 +169,7 @@ def parse_protein(example):
     num_atoms = tf.cast(tf.shape(positions)[0], tf.float32)
     num_atoms_squared = tf.math.square(num_atoms)
     return (initial_positions, positions, features, masses, initial_distances,
-            forces, velocities, num_atoms, num_atoms_squared)
+            forces, velocities, num_atoms, num_atoms_squared, pdb_id)
 
 
 def attrdict_for(p):
@@ -190,7 +182,8 @@ def attrdict_for(p):
         'forces': p[5],
         'velocities': p[6],
         'num_atoms': p[7],
-        'num_atoms_squared': p[8]
+        'num_atoms_squared': p[8],
+        'pdb_id': p[9]
     })
 
 
@@ -249,7 +242,7 @@ def compute_batch_mean_loss(batch_losses):
 
 @tf.function
 def step_agent_on_protein(agent, p):
-    atoms = tf.concat([p.positions, p.velocities, p.features], axis=-1)
+    atoms = tf.concat([p.positions, p.features], axis=-1)
     noise = tf.random.normal(p.positions.shape)
     forces = agent([atoms, noise])
     new_velocities = p.velocities + (forces / p.masses)
@@ -263,10 +256,12 @@ def step_agent_on_protein(agent, p):
         'num_atoms_squared': p.num_atoms_squared,
         'num_atoms': p.num_atoms,
         'forces': forces,
-        'masses': p.masses
+        'masses': p.masses,
+        'pdb_id': p.pdb_id
     })
 
 
+@tf.function
 def run_episode(adam, agent, batch):
     initial_batch_losses = [compute_loss(p) for p in batch]
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
@@ -298,18 +293,17 @@ def run_episode(adam, agent, batch):
 
 @skopt.utils.use_named_args(dimensions=dimensions)
 def trial(compressor_kernel_layers, compressor_kernel_units,
-          pair_kernel_layers, pair_kernel_units, blocks, block_layers,
+          pair_kernel_layers, pair_kernel_units, blocks,
           learning_rate, decay, stddev):
     lr_decayed = tf.train.exponential_decay(
         learning_rate, tf.train.get_or_create_global_step(), 1, decay)
     adam = tf.train.AdamOptimizer(lr_decayed)
-    agent = make_agent('agent', 16, 3,
+    agent = make_agent('agent', 13, 3,
                        compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
-                       blocks, block_layers, stddev)
+                       blocks, stddev)
     current_agent_episode_graph = tf.function(run_episode)
-    batch_number, batch, changes = 0, [], []
-    total_change = 0
+    total_change, batch_number, batch = 0, 0, []
     proteins = read_shards()
     for protein in proteins:
         if batch_number is BATCHES_PER_TRIAL:
@@ -318,12 +312,12 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
             batch.append(attrdict_for(protein))
         else:
             print('\n  batch', batch_number, 'LR', adam._lr().numpy())
+            [tf.print(p.pdb_id, p.num_atoms) for p in batch]
             print(
                 '\n  compressor_kernel_layers', compressor_kernel_layers,
                 '\n  compressor_kernel_units', compressor_kernel_units,
                 '\n  pair_kernel_layers', pair_kernel_layers,
                 '\n  pair_kernel_units', pair_kernel_units,
-                '\n  blocks', blocks, '\n  block_layers', block_layers,
                 '\n  learning_rate', learning_rate, '\n  decay', decay,
                 '\n  stddev', stddev, '\n')
             try:
