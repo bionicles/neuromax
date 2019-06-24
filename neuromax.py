@@ -69,9 +69,9 @@ class NoisyDropConnectDense(L.Dense):
 
 def get_layer(units, stddev):
     if USE_NOISY_DROPCONNECT:
-        return NoisyDropConnectDense(units, stddev=stddev, activation='tanh')
+        return NoisyDropConnectDense(units, stddev=stddev, activation='relu')
     else:
-        return L.Dense(units, activation='tanh')
+        return L.BatchNormalization()(L.Dense(units, activation='relu'))
 
 
 def get_mlp(features, outputs, layers, units, stddev):
