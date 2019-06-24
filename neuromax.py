@@ -17,9 +17,10 @@ L = tf.keras.layers
 K = tf.keras
 best = 0
 # training parameters
+USE_NOISY_DROPCONNECT = True
 STOP_LOSS_MULTIPLE = 1.04
+BATCHES_PER_TRIAL = 10000
 PLOT_MODEL = True
-BATCHES_PER_TRIAL = 2
 MAX_STEPS = 100
 BATCH_SIZE = 2
 # hyperparameters
@@ -49,7 +50,7 @@ default_hyperparameters = [
     512,  # compressor units
     2,  # pair kernel layers
     1024,  # pair kernel units
-    2,  # blocks
+    4,  # blocks
     1,  # block layers
     0.01,  # LR
     0.999,  # decay
@@ -57,23 +58,25 @@ default_hyperparameters = [
 
 
 # begin model
-# class NoisyDropConnectDense(L.Dense):
-#     def __init__(self, *args, **kwargs):
-#         self.stddev = kwargs.pop('stddev')
-#         super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
-#
-#     @tf.function
-#     def call(self, x):
-#         kernel = self.kernel + tf.random.truncated_normal(tf.shape(self.kernel),
-#                                                           stddev=self.stddev)
-#         kernel = tf.nn.dropout(kernel, 0.5)
-#         bias = self.bias + tf.random.truncated_normal(tf.shape(self.bias),
-#                                                       stddev=self.stddev)
-#         return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
+class NoisyDropConnectDense(L.Dense):
+    def __init__(self, *args, **kwargs):
+        self.stddev = kwargs.pop('stddev')
+        super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
+
+    def call(self, x):
+        kernel = self.kernel + tf.random.truncated_normal(tf.shape(self.kernel),
+                                                          stddev=self.stddev)
+        kernel = tf.nn.dropout(kernel, 0.5)
+        bias = self.bias + tf.random.truncated_normal(tf.shape(self.bias),
+                                                      stddev=self.stddev)
+        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
 
 
 def get_layer(units, stddev):
-    return L.Dense(units, activation='tanh')
+    if USE_NOISY_DROPCONNECT:
+        return NoisyDropConnectDense(units, stddev=stddev, activation='tanh')
+    else:
+        return L.Dense(units, activation='tanh')
 
 
 def get_mlp(features, outputs, layers, units, stddev):
