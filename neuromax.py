@@ -17,12 +17,14 @@ L = tf.keras.layers
 K = tf.keras
 best = 0
 # training parameters
-USE_NOISY_DROPCONNECT = True
 STOP_LOSS_MULTIPLE = 1.2
 BATCHES_PER_TRIAL = 10000
 PLOT_MODEL = True
 MAX_STEPS = 100
 BATCH_SIZE = 2
+# HAND TUNED MODEL PARAMETERS (BAD BION!)
+USE_NOISY_DROPCONNECT = True
+ACTIVATION = 'tanh'
 # hyperparameters
 d_compressor_kernel_layers = skopt.space.Integer(
                                     2, 4, name='compressor_kernel_layers')
@@ -61,7 +63,10 @@ class NoisyDropConnectDense(L.Dense):
         super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
 
     def call(self, x):
-        return self.activation(tf.nn.bias_add(B.dot(x, tf.nn.dropout(self.kernel + tf.random.truncated_normal(tf.shape(self.kernel),
+        return self.activation(tf.nn.bias_add(B.dot(x,
+                                                    tf.nn.dropout(
+                                                        self.kernel + tf.random.truncated_normal(
+                                                            tf.shape(self.kernel),
                                                           stddev=self.stddev), 0.5)),
             self.bias + tf.random.truncated_normal(tf.shape(self.bias),
                                                       stddev=self.stddev)))
@@ -69,9 +74,9 @@ class NoisyDropConnectDense(L.Dense):
 
 def get_layer(units, stddev):
     if USE_NOISY_DROPCONNECT:
-        return NoisyDropConnectDense(units, stddev=stddev, activation='relu')
+        return NoisyDropConnectDense(units, stddev=stddev, activation=ACTIVATION)
     else:
-        return L.BatchNormalization()(L.Dense(units, activation='relu'))
+        return L.Dense(units, activation=ACTIVATION)
 
 
 def get_mlp(features, outputs, layers, units, stddev):
@@ -163,12 +168,12 @@ def parse_protein(example):
         sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
-    initial_distances = compute_distances(initial_positions)
+    # initial_distances = compute_distances(initial_positions)
     velocities = tf.random.normal(tf.shape(positions))
     forces = tf.zeros(tf.shape(positions))
     num_atoms = tf.cast(tf.shape(positions)[0], tf.float32)
     num_atoms_squared = tf.math.square(num_atoms)
-    return (initial_positions, positions, features, masses, initial_distances,
+    return (initial_positions, positions, features, masses,
             forces, velocities, num_atoms, num_atoms_squared, pdb_id)
 
 
@@ -178,12 +183,12 @@ def attrdict_for(p):
         'positions': p[1],
         'features': p[2],
         'masses': p[3],
-        'initial_distances': p[4],
-        'forces': p[5],
-        'velocities': p[6],
-        'num_atoms': p[7],
-        'num_atoms_squared': p[8],
-        'pdb_id': p[9]
+        # 'initial_distances': p[4],
+        'forces': p[4],
+        'velocities': p[5],
+        'num_atoms': p[6],
+        'num_atoms_squared': p[7],
+        'pdb_id': p[8]
     })
 
 
@@ -217,31 +222,34 @@ def make_plot(changes):
     plt.savefig('changes.png')
 
 
-@tf.function
-def compute_distances(positions):
-    positions = tf.squeeze(positions)
-    distances = tf.reshape(tf.reduce_sum(positions * positions, 1), [-1, 1])
-    return distances - 2 * tf.matmul(
-        positions, tf.transpose(positions)) + tf.transpose(distances)
+# @tf.function
+# def compute_distances(positions):
+#     positions = tf.squeeze(positions)
+#     distances = tf.reshape(tf.reduce_sum(positions * positions, 1), [-1, 1])
+#     return distances - 2 * tf.matmul(
+#         positions, tf.transpose(positions)) + tf.transpose(distances)
 
 
 @tf.function
 def compute_loss(p):
+    print('tracing compute_loss')
     position_error = K.losses.mean_squared_error(
         p.initial_positions, p.positions) / p.num_atoms
-    shape_error = K.losses.mean_squared_error(
-        p.initial_distances, compute_distances(p.positions)) / p.num_atoms_squared
+    # shape_error = K.losses.mean_squared_error(
+    #     p.initial_distances, compute_distances(p.positions)) / p.num_atoms_squared
+    shape_error = tf.losses.mean_pairwise_squared_error(p.initial_positions, p.positions)
     return position_error + shape_error
 
 
 @tf.function
 def compute_batch_mean_loss(batch_losses):
+    print('tracing compute_batch_mean_loss')
     return tf.reduce_mean(tf.convert_to_tensor(
         [tf.reduce_sum(loss) for loss in batch_losses]))
 
 
-@tf.function
 def step_agent_on_protein(agent, p):
+    print('tracing step_agent_on_protein')
     atoms = tf.concat([p.positions, p.features], axis=-1)
     noise = tf.random.normal(p.positions.shape)
     forces = agent([atoms, noise])
@@ -249,7 +257,7 @@ def step_agent_on_protein(agent, p):
     new_positions = p.positions + new_velocities
     return AttrDict({
         'initial_positions': p.initial_positions,
-        'initial_distances': p.initial_distances,
+        # 'initial_distances': p.initial_distances,
         'features': p.features,
         'positions': new_positions,
         'velocities': new_velocities,
@@ -261,15 +269,15 @@ def step_agent_on_protein(agent, p):
     })
 
 
-@tf.function
-def run_episode(adam, agent, batch):
+def run_episode(adam, agent, batch, invoke):
+    print('tracing run_episode')
     initial_batch_losses = [compute_loss(p) for p in batch]
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
     stop = initial_batch_mean_loss * 1.04
     batch_mean_loss = tf.cast(0, tf.float32)
     for step in tf.range(MAX_STEPS):
         with tf.GradientTape() as tape:
-            batch = [step_agent_on_protein(agent, p) for p in batch]
+            batch = [invoke(agent, p) for p in batch]
             batch_losses = [compute_loss(p) for p in batch]
         gradients = tape.gradient(batch_losses, agent.trainable_weights)
         adam.apply_gradients(zip(gradients, agent.trainable_weights),
@@ -287,7 +295,6 @@ def run_episode(adam, agent, batch):
     change /= initial_batch_mean_loss
     change *= 100
     tf.print('\n', tf.math.round(change), "% change (lower is better)")
-    del initial_batch_losses, initial_batch_mean_loss, batch_mean_loss
     return change
 
 
@@ -302,6 +309,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                        compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
                        blocks, stddev)
+    invoke = tf.function(step_agent_on_protein)
     current_agent_episode_graph = tf.function(run_episode)
     total_change, batch_number, batch = 0, 0, []
     proteins = read_shards()
@@ -321,7 +329,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                 '\n  learning_rate', learning_rate, '\n  decay', decay,
                 '\n  stddev', stddev, '\n')
             try:
-                loss_change = current_agent_episode_graph(adam, agent, batch)
+                loss_change = current_agent_episode_graph(adam, agent, batch, invoke)
                 total_change = total_change + loss_change.numpy().item()
                 # changes.append(loss_change.numpy().item(0))
                 # # make_plot(changes)
