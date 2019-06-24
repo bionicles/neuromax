@@ -222,21 +222,11 @@ def make_plot(changes):
     plt.savefig('changes.png')
 
 
-# @tf.function
-# def compute_distances(positions):
-#     positions = tf.squeeze(positions)
-#     distances = tf.reshape(tf.reduce_sum(positions * positions, 1), [-1, 1])
-#     return distances - 2 * tf.matmul(
-#         positions, tf.transpose(positions)) + tf.transpose(distances)
-
-
 @tf.function
 def compute_loss(p):
     print('tracing compute_loss')
     position_error = K.losses.mean_squared_error(
-        p.initial_positions, p.positions) / p.num_atoms
-    # shape_error = K.losses.mean_squared_error(
-    #     p.initial_distances, compute_distances(p.positions)) / p.num_atoms_squared
+        p.initial_positions, p.positions)
     shape_error = tf.losses.mean_pairwise_squared_error(p.initial_positions, p.positions)
     return position_error + shape_error
 
@@ -309,7 +299,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                        compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
                        blocks, stddev)
-    invoke = tf.function(step_agent_on_protein)
+    # invoke = tf.function(step_agent_on_protein)
     current_agent_episode_graph = tf.function(run_episode)
     total_change, batch_number, batch = 0, 0, []
     proteins = read_shards()
@@ -329,7 +319,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                 '\n  learning_rate', learning_rate, '\n  decay', decay,
                 '\n  stddev', stddev, '\n')
             try:
-                loss_change = current_agent_episode_graph(adam, agent, batch, invoke)
+                loss_change = current_agent_episode_graph(adam, agent, batch, step_agent_on_protein)
                 total_change = total_change + loss_change.numpy().item()
                 # changes.append(loss_change.numpy().item(0))
                 # # make_plot(changes)
