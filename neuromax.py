@@ -19,20 +19,21 @@ best = 0
 # training parameters
 STOP_LOSS_MULTIPLE = 1.04
 PLOT_MODEL = True
+BATCHES_PER_TRIAL = 5
 MAX_STEPS = 100
-BATCH_SIZE = 4
+BATCH_SIZE = 2
 # hyperparameters
 d_compressor_kernel_layers = skopt.space.Integer(
-                                    1, 4, name='compressor_kernel_layers')
+                                    2, 4, name='compressor_kernel_layers')
 d_compressor_kernel_units = skopt.space.Integer(
                                     16, 1024, name='compressor_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(1, 4, name='pair_kernel_layers')
-d_pair_kernel_units = skopt.space.Integer(1, 2048, name='pair_kernel_units')
-d_blocks = skopt.space.Integer(1, 4, name='blocks')
-d_block_layers = skopt.space.Integer(1, 4, name='block_layers')
+d_pair_kernel_layers = skopt.space.Integer(2, 8, name='pair_kernel_layers')
+d_pair_kernel_units = skopt.space.Integer(16, 2048, name='pair_kernel_units')
+d_blocks = skopt.space.Integer(1, 8, name='blocks')
+d_block_layers = skopt.space.Integer(1, 10, name='block_layers')
 d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
-d_decay = skopt.space.Real(0.00001, 0.01, name='decay')
-d_stddev = skopt.space.Real(0.00001, 1, name='stddev')
+d_decay = skopt.space.Real(0.99, 0.99999, name='decay')
+d_stddev = skopt.space.Real(0.001, 0.1, name='stddev')
 dimensions = [
     d_compressor_kernel_layers,
     d_compressor_kernel_units,
@@ -45,14 +46,14 @@ dimensions = [
     d_stddev]
 default_hyperparameters = [
     2,  # compressor layers
-    1024,  # compressor units
+    512,  # compressor units
     2,  # pair kernel layers
-    1024,  # pair kernel units
-    2,  # blocks
-    2,  # block layers
-    0.001,  # LR
-    0.0001,  # decay
-    0.01]  # noise
+    2048,  # pair kernel units
+    4,  # blocks
+    1,  # block layers
+    0.01,  # LR
+    0.999,  # decay
+    0.02]  # noise
 
 
 # begin model
@@ -171,7 +172,7 @@ def read_shards():
     path = os.path.join('.', 'tfrecords')
     recordpaths = [os.path.join(path, name) for name in os.listdir(path)]
     dataset = tf.data.TFRecordDataset(recordpaths, 'ZLIB')
-    dataset = dataset.shuffle(42)
+    dataset = dataset.shuffle(buffer_size=len(recordpaths))
     dataset = dataset.map(map_func=parse_protein)
     dataset = dataset.batch(1)
     return dataset.prefetch(buffer_size=BATCH_SIZE)
@@ -179,6 +180,24 @@ def read_shards():
 
 
 # begin training
+def compute_running_mean(x, N):
+    cumsum = np.cumsum(np.insert(x, 0, 0))
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+
+def make_plot(changes):
+    plt.clf()
+    N = len(changes)
+    x = [i for i in range(N)]
+    running_mean = pd.Series(x).rolling(window=N).mean().iloc[N-1:].values
+    plt.plot(running_mean, 'r-')
+    plt.scatter(x, changes)
+    plt.xlabel('batch')
+    plt.ylabel('% change (lower is better)')
+    plt.title('neuromax')
+    plt.savefig('changes.png')
+
+
 @tf.function
 def compute_distances(positions):
     positions = tf.squeeze(positions)
@@ -199,24 +218,26 @@ def compute_loss(p):
     return position_error + shape_error
 
 
+@tf.function
 def compute_batch_mean_loss(batch_losses):
     batch_mean_loss_tensor = tf.reduce_mean(tf.convert_to_tensor(
         [tf.reduce_sum(loss) for loss in batch_losses]))
-    return batch_mean_loss_tensor.numpy()
+    return batch_mean_loss_tensor
 
 
+@tf.function
 def step_agent_on_protein(agent, p):
     atoms = tf.concat([p.positions, p.velocities, p.features], axis=-1)
     noise = tf.random.normal(p.positions.shape)
     forces = agent([atoms, noise])
-    p.velocities += (forces / p.masses)
-    p.positions += p.velocities
+    new_velocities = p.velocities + (forces / p.masses)
+    new_positions = p.positions + new_velocities
     return AttrDict({
         'initial_positions': p.initial_positions,
         'initial_distances': p.initial_distances,
         'features': p.features,
-        'positions': p.positions,
-        'velocities': p.velocities,
+        'positions': new_positions,
+        'velocities': new_velocities,
         'num_atoms_squared': p.num_atoms_squared,
         'num_atoms': p.num_atoms,
         'forces': forces,
@@ -244,43 +265,25 @@ def run_episode(adam, agent, batch):
     initial_batch_losses = [compute_loss(p) for p in batch]
     initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
     stop = initial_batch_mean_loss * 1.04
-    episode_loss = 0
     for step in range(MAX_STEPS):
         with tf.GradientTape() as tape:
             batch = [step_agent_on_protein(agent, p) for p in batch]
             batch_losses = [compute_loss(p) for p in batch]
             gradients = tape.gradient(batch_losses, agent.trainable_weights)
-            adam.apply_gradients(zip(gradients, agent.trainable_weights))
+            adam.apply_gradients(zip(gradients, agent.trainable_weights),
+                                 global_step=tf.train.get_or_create_global_step())
         batch_mean_loss = compute_batch_mean_loss(batch_losses)
         print(f'  {step:02d} stop {int(stop)} loss {int(batch_mean_loss)}')
-        episode_loss += batch_mean_loss
-        if batch_mean_loss > stop:
+        if tf.math.greater(batch_mean_loss, stop):
             break
-        if batch_mean_loss * STOP_LOSS_MULTIPLE < stop:
-            stop = batch_mean_loss * STOP_LOSS_MULTIPLE
+        new_stop = batch_mean_loss * STOP_LOSS_MULTIPLE
+        if tf.math.less(new_stop, stop):
+            stop = new_stop
     change = (batch_mean_loss - initial_batch_mean_loss)
     change /= initial_batch_mean_loss
     change *= 100
-    print('\n', round(change, 1), "% change (lower is better)")
+    print('\n', round(change.numpy(), 1), "% change (lower is better)")
     return agent, change
-
-
-def compute_running_mean(x, N):
-    cumsum = np.cumsum(np.insert(x, 0, 0))
-    return (cumsum[N:] - cumsum[:-N]) / float(N)
-
-
-def make_plot(changes):
-    plt.clf()
-    N = len(changes)
-    x = [i for i in range(N)]
-    running_mean = pd.Series(x).rolling(window=N).mean().iloc[N-1:].values
-    plt.plot(running_mean, 'r-')
-    plt.scatter(x, changes)
-    plt.xlabel('batch')
-    plt.ylabel('% change (lower is better)')
-    plt.title('neuromax')
-    plt.savefig('changes.png')
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -288,46 +291,59 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
           pair_kernel_layers, pair_kernel_units, blocks, block_layers,
           learning_rate, decay, stddev):
     lr_decayed = tf.train.exponential_decay(
-        learning_rate, tf.train.get_or_create_global_step(), 1000, decay)
-    adam = K.optimizers.Adam(lr_decayed)
+        learning_rate, tf.train.get_or_create_global_step(), 1, decay)
+    adam = tf.train.AdamOptimizer(lr_decayed)
     agent = make_agent('agent', 16, 3,
                        compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
                        blocks, block_layers, stddev)
 
-    batch_number, trial_loss, batch, changes = 0, 0, [], []
+    batch_number, total_change, batch, changes = 0, 0, [], []
     proteins = read_shards()
     for protein in proteins:
+        if batch_number == BATCHES_PER_TRIAL:
+            break
         if len(batch) < BATCH_SIZE:
             try:
                 batch.append(attrdict_for(protein))
             except Exception as e:
                 print(e)
         else:
-            print('\n  batch', batch_number)
+            print('\n  batch', batch_number, 'LR', adam._lr().numpy())
+            print(
+                '\n  compressor_kernel_layers', compressor_kernel_layers,
+                '\n  compressor_kernel_units', compressor_kernel_units,
+                '\n  pair_kernel_layers', pair_kernel_layers,
+                '\n  pair_kernel_units', pair_kernel_units,
+                '\n  blocks', blocks, '\n  block_layers', block_layers,
+                '\n  learning_rate', learning_rate, '\n  decay', decay,
+                '\n  stddev', stddev, '\n')
             try:
                 agent, loss_change = run_episode(adam, agent, batch)
-                trial_loss += loss_change
-                changes.append(loss_change.item(0))
+                total_change += loss_change
+                changes.append(loss_change.numpy().item(0))
                 make_plot(changes)
             except Exception as e:
+                total_change += 10
                 print(e)
             batch_number += 1
             batch = []
 
     global best
-    if trial_loss < best:
+    if total_change < best:
         if not os.path.exists("agents"):
             os.makedirs("agents")
-        agent.save_model("agents/" + str(time.time()) + ".h5")
-        best = trial_loss
+        tf.saved_model.save(agent, "agents/" + str(time.time()) + ".h5")
+        best = total_change
 
     B.clear_session()
     del agent
 
-    return trial_loss
+    return total_change
 # end training
 
 
 if __name__ == '__main__':
-    skopt.gp_minimize(trial, dimensions, x0=default_hyperparameters)
+    results = skopt.gp_minimize(trial, dimensions,
+                                x0=default_hyperparameters, verbose=True)
+    print(results)
