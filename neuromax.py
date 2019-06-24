@@ -54,7 +54,7 @@ default_hyperparameters = [
     1,  # block layers
     0.01,  # LR
     0.999,  # decay
-    0.02]  # noise
+    0.01]  # noise
 
 
 # begin model
