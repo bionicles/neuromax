@@ -26,10 +26,10 @@ ACTIVATION = 'tanh'
 d_compressor_kernel_layers = skopt.space.Integer(
                                     1, 4, name='compressor_kernel_layers')
 d_compressor_kernel_units = skopt.space.Integer(
-                                    1, 512, name='compressor_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(1, 4, name='pair_kernel_layers')
-d_pair_kernel_units = skopt.space.Integer(1, 2048, name='pair_kernel_units')
-d_blocks = skopt.space.Integer(1, 8, name='blocks')
+                                    128, 512, name='compressor_kernel_units')
+d_pair_kernel_layers = skopt.space.Integer(2, 4, name='pair_kernel_layers')
+d_pair_kernel_units = skopt.space.Integer(128, 2048, name='pair_kernel_units')
+d_blocks = skopt.space.Integer(3, 8, name='blocks')
 d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
 d_decay = skopt.space.Real(0.99, 0.99999, name='decay')
 d_stddev = skopt.space.Real(0.001, 0.1, name='stddev')
@@ -43,11 +43,11 @@ dimensions = [
     d_decay,
     d_stddev]
 default_hyperparameters = [
-    1,  # compressor layers
-    1,  # compressor units
-    1,  # pair kernel layers
-    1,  # pair kernel units
-    1,  # blocks
+    2,  # compressor layers
+    128,  # compressor units
+    2,  # pair kernel layers
+    128,  # pair kernel units
+    4,  # blocks
     0.01,  # LR
     0.999,  # decay
     0.01]  # noise
@@ -138,7 +138,9 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
         resnet.summary()
     return resnet
 # end model
-
+@tf.function
+def normalize(tensor):
+    return tf.nn.batch_normalization(tensor,mean = 0, variance = 0.1, scale = None, offset = None, variance_epsilon = 0.001 )
 
 # begin data
 @tf.function
@@ -154,17 +156,17 @@ def parse_protein(example):
     context, sequence = tf.io.parse_single_sequence_example(
         example,
         context_features=context_features, sequence_features=sequence_features)
-    initial_positions = tf.reshape(tf.io.parse_tensor(
-        sequence['initial_positions'][0], tf.float32), [-1, 3])
-    features = tf.reshape(tf.io.parse_tensor(
-        sequence['features'][0], tf.float32), [-1, 9])
+    initial_positions = normalize(tf.reshape(tf.io.parse_tensor(
+        sequence['initial_positions'][0], tf.float32), [-1, 3]))
+    features = normalize(tf.reshape(tf.io.parse_tensor(
+        sequence['features'][0], tf.float32), [-1, 9]))
     masses = tf.reshape(tf.io.parse_tensor(
         sequence['masses'][0], tf.float32), [-1, 1])
-    positions = tf.reshape(tf.io.parse_tensor(
-        sequence['positions'][0], tf.float32), [-1, 3])
-    features = tf.concat([masses, features], 1)
+    positions = normalize(tf.reshape(tf.io.parse_tensor(
+        sequence['positions'][0], tf.float32), [-1, 3]))
+    features = normalize(tf.concat([masses, features], 1))
     masses = tf.concat([masses, masses, masses], 1)
-    velocities = tf.random.normal(tf.shape(positions))
+    velocities = normalize(tf.random.normal(tf.shape(positions)))
     forces = tf.zeros(tf.shape(positions))
     return initial_positions, positions, features, masses, forces, velocities
 
