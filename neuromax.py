@@ -14,8 +14,11 @@ tf.compat.v1.enable_eager_execution()
 B = tf.keras.backend
 L = tf.keras.layers
 K = tf.keras
+best_time_string = ''
+best = 0.
 # training parameters
 STOP_LOSS_MULTIPLE = 1.07
+EPISODES_PER_TRIAL = 10000
 PLOT_MODEL = True
 MAX_STEPS = 420
 # HAND TUNED MODEL PARAMETERS (BAD BION!)
@@ -23,11 +26,11 @@ USE_NOISY_DROPCONNECT = False
 ACTIVATION = 'tanh'
 # hyperparameters
 d_compressor_kernel_layers = skopt.space.Integer(
-                                    2, 4, name='compressor_kernel_layers')
+                                    1, 4, name='compressor_kernel_layers')
 d_compressor_kernel_units = skopt.space.Integer(
-                                    16, 1024, name='compressor_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(2, 4, name='pair_kernel_layers')
-d_pair_kernel_units = skopt.space.Integer(16, 2048, name='pair_kernel_units')
+                                    1, 512, name='compressor_kernel_units')
+d_pair_kernel_layers = skopt.space.Integer(1, 4, name='pair_kernel_layers')
+d_pair_kernel_units = skopt.space.Integer(1, 2048, name='pair_kernel_units')
 d_blocks = skopt.space.Integer(1, 8, name='blocks')
 d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
 d_decay = skopt.space.Real(0.99, 0.99999, name='decay')
@@ -42,11 +45,11 @@ dimensions = [
     d_decay,
     d_stddev]
 default_hyperparameters = [
-    2,  # compressor layers
-    32,  # compressor units
-    2,  # pair kernel layers
-    257,  # pair kernel units
-    2,  # blocks
+    1,  # compressor layers
+    1,  # compressor units
+    1,  # pair kernel layers
+    1,  # pair kernel units
+    1,  # blocks
     0.01,  # LR
     0.999,  # decay
     0.01]  # noise
@@ -59,13 +62,14 @@ class NoisyDropConnectDense(L.Dense):
         super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
 
     def call(self, x):
-        return self.activation(tf.nn.bias_add(B.dot(x,
-                                                    tf.nn.dropout(
-                                                        self.kernel + tf.random.truncated_normal(
-                                                            tf.shape(self.kernel),
-                                                          stddev=self.stddev), 0.5)),
-            self.bias + tf.random.truncated_normal(tf.shape(self.bias),
-                                                      stddev=self.stddev)))
+        with tf.device('/GPU:0'):
+            return self.activation(tf.nn.bias_add(B.dot(x,
+                                                        tf.nn.dropout(
+                                                            self.kernel + tf.random.truncated_normal(
+                                                                tf.shape(self.kernel),
+                                                              stddev=self.stddev), 0.5)),
+                self.bias + tf.random.truncated_normal(tf.shape(self.bias),
+                                                          stddev=self.stddev)))
 
 
 def get_layer(units, stddev):
@@ -103,7 +107,7 @@ class ConvPair(L.Layer):
         self.kernel = get_mlp(features, outputs, layers, units, stddev)
 
     def call(self, inputs):
-        return tf.vectorized_map(lambda atom1: tf.reduce_sum(tf.vectorized_map(
+        return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(
             lambda atom2: self.kernel(
                 tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
@@ -207,26 +211,12 @@ def compute_loss(initial_positions, positions):
 
 
 @tf.function
-def run_step(agent, adam, initial_positions, positions, features, masses, forces, velocities):
-    with tf.GradientTape() as tape:
-        forces = agent([tf.concat([positions, features], axis=-1),
-                        tf.random.normal(tf.shape(positions))])
-        velocities = velocities + (forces / masses)
-        positions = positions + velocities
-        loss = compute_loss(initial_positions, positions)
-    gradients = tape.gradient(loss, agent.trainable_weights)
-    adam.apply_gradients(zip(gradients, agent.trainable_weights),
-                         global_step=tf.train.get_or_create_global_step())
-    return positions, velocities, loss
-
-
-@tf.function
-def run_episode(agent, adam, initial_positions, positions, features, masses, forces, velocities):
+def run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
     initial_loss = compute_loss(initial_positions, positions)
     stop = initial_loss * 1.04
     loss = 0.
     for step in tf.range(MAX_STEPS):
-        positions, velocities, loss = run_step(agent, adam, initial_positions, positions, features, masses, forces, velocities)
+        positions, velocities, loss = run_step(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
         tf.print('  ', step,
                  'stop', tf.math.round(stop),
                  'loss', tf.math.round(loss))
@@ -239,12 +229,16 @@ def run_episode(agent, adam, initial_positions, positions, features, masses, for
 
 
 @tf.function
-def train(agent, adam, proteins):
+def train(agent, optimizer, proteins):
     total_change = 0.
+    step = 0
     for initial_positions, positions, features, masses, forces, velocities in proteins:
-        change = run_episode(agent, adam, initial_positions, positions, features, masses, forces, velocities)
+        if step > EPISODES_PER_TRIAL:
+            break
+        change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
         tf.print('\n', tf.math.round(change), "% change (lower is better)\n")
         total_change = total_change + change
+        step = step + 1
     return total_change
 
 
@@ -261,16 +255,36 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         '\n  stddev', stddev, '\n')
     lr_decayed = tf.train.exponential_decay(
         learning_rate, tf.train.get_or_create_global_step(), 1, decay)
-    adam = tf.train.AdamOptimizer(lr_decayed)
+    optimizer = tf.train.AdamOptimizer(lr_decayed)
     agent = make_agent('agent', 13, 3,
                        compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
                        blocks, stddev)
 
-    proteins = read_shards()
-    total_change = train(agent, adam, proteins)
+    global run_step
+    @tf.function
+    def run_step(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
+        with tf.GradientTape() as tape:
+            forces = agent([tf.concat([positions, features], axis=-1),
+                            tf.random.normal(tf.shape(positions))])
+            velocities = velocities + (forces / masses)
+            positions = positions + velocities
+            loss = compute_loss(initial_positions, positions)
+        gradients = tape.gradient(loss, agent.trainable_weights)
+        optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+        return positions, velocities, loss
 
-    global best
+    proteins = read_shards()
+    try:
+        total_change = train(agent, optimizer, proteins)
+        total_change = total_change.numpy().item(0)
+        print('total change:', total_change, '%')
+        print('total change:', type(total_change))
+    except Exception as e:
+        total_change = 100 * STOP_LOSS_MULTIPLE
+        print(e)
+
+    global best, best_time_string
     if tf.math.less(total_change, best):
         if not os.path.exists("agents"):
             os.makedirs("agents")
@@ -278,11 +292,11 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         tf.saved_model.save(agent, "agents/" + time_string + ".h5")
         best = total_change
         best_time_string = time_string
-    return best_time_string
+    print(best_time_string)
 
-    tf.reset_default_graph()
-    B.clear_session()
-    del agent, adam
+    # tf.reset_default_graph()
+    # B.clear_session()
+    del agent
 
     return total_change
 # end training
