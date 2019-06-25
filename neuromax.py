@@ -169,7 +169,7 @@ def parse_protein(example):
     features = normalize(tf.concat([masses, features], 1))
     masses = tf.concat([masses, masses, masses], 1)
     velocities = normalize(tf.random.normal(tf.shape(positions)))
-    forces = (tf.zeros(tf.shape(positions))
+    forces = tf.zeros(tf.shape(positions))
     return initial_positions, positions, features, masses, forces, velocities
 
 
