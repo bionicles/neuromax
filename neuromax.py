@@ -107,7 +107,7 @@ class ConvPair(L.Layer):
         self.kernel = get_mlp(features, outputs, layers, units, stddev)
 
     def call(self, inputs):
-        return tf.map_fn(lambda atom1: tf.reduce_sum(tf.map_fn(
+        return tf.vectorized_map(lambda atom1: tf.reduce_sum(tf.vectorized_map(
             lambda atom2: self.kernel(
                 tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
