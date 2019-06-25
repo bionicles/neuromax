@@ -1,12 +1,10 @@
 # experiment.py: why? simplify
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
+from tensorboard import program
+import webbrowser
+import datetime
 import skopt
 import time
 import os
-import seaborn as sns
-sns.set()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -184,24 +182,6 @@ def read_shards():
 
 
 # begin training
-def compute_running_mean(x, N):
-    cumsum = np.cumsum(np.insert(x, 0, 0))
-    return (cumsum[N:] - cumsum[:-N]) / float(N)
-
-
-def make_plot(changes):
-    plt.clf()
-    N = len(changes)
-    x = [i for i in range(N)]
-    running_mean = pd.Series(x).rolling(window=N).mean().iloc[N-1:].values
-    plt.plot(running_mean, 'r-')
-    plt.scatter(x, changes)
-    plt.xlabel('batch')
-    plt.ylabel('% change (lower is better)')
-    plt.title('neuromax')
-    plt.savefig('changes.png')
-
-
 @tf.function
 def compute_loss(initial_positions, positions):
     print('tracing compute_loss')
@@ -217,9 +197,10 @@ def run_episode(agent, optimizer, initial_positions, positions, features, masses
     loss = 0.
     for step in tf.range(MAX_STEPS):
         positions, velocities, loss = run_step(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
-        tf.print('  ', step,
-                 'stop', tf.math.round(stop),
-                 'loss', tf.math.round(loss))
+        # tf.print('  ', step,
+        #          'stop', tf.math.round(stop),
+        #          'loss', tf.math.round(loss))
+        # tf.contrib.summary.scalar('loss', loss)
         if tf.math.greater(loss, stop):
             break
         new_stop = loss * STOP_LOSS_MULTIPLE
@@ -236,7 +217,8 @@ def train(agent, optimizer, proteins):
         if step > EPISODES_PER_TRIAL:
             break
         change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
-        tf.print('\n', tf.math.round(change), "% change (lower is better)\n")
+        tf.print('\n', 'protein', step, tf.math.round(change), "% change (lower is better)\n")
+        tf.contrib.summary.scalar('change', change)
         total_change = total_change + change
         step = step + 1
     return total_change
@@ -253,6 +235,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         '\n  pair_kernel_units', pair_kernel_units,
         '\n  learning_rate', learning_rate, '\n  decay', decay,
         '\n  stddev', stddev, '\n')
+
     lr_decayed = tf.train.exponential_decay(
         learning_rate, tf.train.get_or_create_global_step(), 1, decay)
     optimizer = tf.train.AdamOptimizer(lr_decayed)
@@ -262,6 +245,7 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                        blocks, stddev)
 
     global run_step
+
     @tf.function
     def run_step(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
         with tf.GradientTape() as tape:
@@ -271,7 +255,8 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
             positions = positions + velocities
             loss = compute_loss(initial_positions, positions)
         gradients = tape.gradient(loss, agent.trainable_weights)
-        optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+        optimizer.apply_gradients(zip(gradients, agent.trainable_weights),
+                                  global_step=tf.train.get_or_create_global_step(),)
         return positions, velocities, loss
 
     proteins = read_shards()
@@ -279,7 +264,6 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         total_change = train(agent, optimizer, proteins)
         total_change = total_change.numpy().item(0)
         print('total change:', total_change, '%')
-        print('total change:', type(total_change))
     except Exception as e:
         total_change = 100 * STOP_LOSS_MULTIPLE
         print(e)
@@ -303,6 +287,16 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
 
 
 if __name__ == '__main__':
-    results = skopt.gp_minimize(trial, dimensions,
-                                x0=default_hyperparameters, verbose=True)
-    print(results)
+    global writer
+    log_dir = "runs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    writer = tf.contrib.summary.create_file_writer(log_dir)
+    tb = program.TensorBoard()
+    tb.configure(argv=[None, '--logdir', log_dir])
+    url = tb.launch()
+    webbrowser.get(using='google-chrome').open(url+'#scalars', new=2)
+    print(url)
+    with writer.as_default(), tf.contrib.summary.always_record_summaries():
+
+        results = skopt.gp_minimize(trial, dimensions,
+                                    x0=default_hyperparameters, verbose=True)
+        print(results)
