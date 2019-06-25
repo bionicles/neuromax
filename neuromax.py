@@ -207,20 +207,26 @@ def compute_loss(initial_positions, positions):
 
 
 @tf.function
+def run_step(agent, adam, initial_positions, positions, features, masses, forces, velocities):
+    with tf.GradientTape() as tape:
+        forces = agent([tf.concat([positions, features], axis=-1),
+                        tf.random.normal(tf.shape(positions))])
+        velocities = velocities + (forces / masses)
+        positions = positions + velocities
+        loss = compute_loss(initial_positions, positions)
+    gradients = tape.gradient(loss, agent.trainable_weights)
+    adam.apply_gradients(zip(gradients, agent.trainable_weights),
+                         global_step=tf.train.get_or_create_global_step())
+    return positions, velocities, loss
+
+
+@tf.function
 def run_episode(agent, adam, initial_positions, positions, features, masses, forces, velocities):
     initial_loss = compute_loss(initial_positions, positions)
     stop = initial_loss * 1.04
     loss = 0.
     for step in tf.range(MAX_STEPS):
-        with tf.GradientTape() as tape:
-            forces = agent([tf.concat([positions, features], axis=-1),
-                            tf.random.normal(tf.shape(positions))])
-            velocities = velocities + (forces / masses)
-            positions = positions + velocities
-            loss = compute_loss(initial_positions, positions)
-        gradients = tape.gradient(loss, agent.trainable_weights)
-        adam.apply_gradients(zip(gradients, agent.trainable_weights),
-                             global_step=tf.train.get_or_create_global_step())
+        positions, velocities, loss = run_step(agent, adam, initial_positions, positions, features, masses, forces, velocities)
         tf.print('  ', step,
                  'stop', tf.math.round(stop),
                  'loss', tf.math.round(loss))
