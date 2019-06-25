@@ -138,9 +138,12 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
         resnet.summary()
     return resnet
 # end model
+
+
 @tf.function
 def normalize(tensor):
     return tf.nn.batch_normalization(tensor,mean = 0, variance = 0.1, scale = None, offset = None, variance_epsilon = 0.001 )
+
 
 # begin data
 @tf.function
