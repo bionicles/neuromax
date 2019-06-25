@@ -28,10 +28,10 @@ ACTIVATION = 'tanh'
 d_compressor_kernel_layers = skopt.space.Integer(
                                     1, 4, name='compressor_kernel_layers')
 d_compressor_kernel_units = skopt.space.Integer(
-                                    1, 512, name='compressor_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(1, 4, name='pair_kernel_layers')
-d_pair_kernel_units = skopt.space.Integer(1, 2048, name='pair_kernel_units')
-d_blocks = skopt.space.Integer(1, 8, name='blocks')
+                                    128, 512, name='compressor_kernel_units')
+d_pair_kernel_layers = skopt.space.Integer(2, 4, name='pair_kernel_layers')
+d_pair_kernel_units = skopt.space.Integer(128, 2048, name='pair_kernel_units')
+d_blocks = skopt.space.Integer(3, 8, name='blocks')
 d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
 d_decay = skopt.space.Real(0.99, 0.99999, name='decay')
 d_stddev = skopt.space.Real(0.001, 0.1, name='stddev')
@@ -45,11 +45,11 @@ dimensions = [
     d_decay,
     d_stddev]
 default_hyperparameters = [
-    1,  # compressor layers
-    1,  # compressor units
-    1,  # pair kernel layers
-    1,  # pair kernel units
-    1,  # blocks
+    2,  # compressor layers
+    128,  # compressor units
+    2,  # pair kernel layers
+    128,  # pair kernel units
+    4,  # blocks
     0.01,  # LR
     0.999,  # decay
     0.01]  # noise
