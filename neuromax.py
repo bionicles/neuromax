@@ -1,6 +1,5 @@
 # experiment.py: why? simplify
 import matplotlib.pyplot as plt
-from attrdict import AttrDict
 import pandas as pd
 import numpy as np
 import skopt
@@ -15,15 +14,12 @@ tf.compat.v1.enable_eager_execution()
 B = tf.keras.backend
 L = tf.keras.layers
 K = tf.keras
-best = 0
 # training parameters
-STOP_LOSS_MULTIPLE = 1.2
-BATCHES_PER_TRIAL = 10000
+STOP_LOSS_MULTIPLE = 1.07
 PLOT_MODEL = True
-MAX_STEPS = 100
-BATCH_SIZE = 2
+MAX_STEPS = 420
 # HAND TUNED MODEL PARAMETERS (BAD BION!)
-USE_NOISY_DROPCONNECT = True
+USE_NOISY_DROPCONNECT = False
 ACTIVATION = 'tanh'
 # hyperparameters
 d_compressor_kernel_layers = skopt.space.Integer(
@@ -47,9 +43,9 @@ dimensions = [
     d_stddev]
 default_hyperparameters = [
     2,  # compressor layers
-    512,  # compressor units
+    32,  # compressor units
     2,  # pair kernel layers
-    1024,  # pair kernel units
+    257,  # pair kernel units
     2,  # blocks
     0.01,  # LR
     0.999,  # decay
@@ -107,7 +103,7 @@ class ConvPair(L.Layer):
         self.kernel = get_mlp(features, outputs, layers, units, stddev)
 
     def call(self, inputs):
-        return tf.map_fn(lambda atom1: tf.reduce_sum(tf.vectorized_map(
+        return tf.vectorized_map(lambda atom1: tf.reduce_sum(tf.vectorized_map(
             lambda atom2: self.kernel(
                 tf.concat([atom1, atom2], 1)), inputs), axis=0), inputs)
 
@@ -134,7 +130,6 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
     for i in range(blocks - 1):
         output = make_block(compressed_features, output,
                             pair_kernel_layers, pair_kernel_units, stddev)
-    output *= -1
     resnet = K.Model([features, noise], output)
     if PLOT_MODEL:
         K.utils.plot_model(resnet, name + '.png', show_shapes=True)
@@ -157,7 +152,6 @@ def parse_protein(example):
     context, sequence = tf.io.parse_single_sequence_example(
         example,
         context_features=context_features, sequence_features=sequence_features)
-    pdb_id = context['protein']
     initial_positions = tf.reshape(tf.io.parse_tensor(
         sequence['initial_positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(
@@ -168,38 +162,20 @@ def parse_protein(example):
         sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
-    # initial_distances = compute_distances(initial_positions)
     velocities = tf.random.normal(tf.shape(positions))
     forces = tf.zeros(tf.shape(positions))
-    num_atoms = tf.cast(tf.shape(positions)[0], tf.float32)
-    num_atoms_squared = tf.math.square(num_atoms)
-    return (initial_positions, positions, features, masses,
-            forces, velocities, num_atoms, num_atoms_squared, pdb_id)
-
-
-def attrdict_for(p):
-    return AttrDict({
-        'initial_positions': p[0],
-        'positions': p[1],
-        'features': p[2],
-        'masses': p[3],
-        # 'initial_distances': p[4],
-        'forces': p[4],
-        'velocities': p[5],
-        'num_atoms': p[6],
-        'num_atoms_squared': p[7],
-        'pdb_id': p[8]
-    })
+    return initial_positions, positions, features, masses, forces, velocities
 
 
 def read_shards():
     path = os.path.join('.', 'tfrecords')
-    recordpaths = [os.path.join(path, name) for name in os.listdir(path)]
-    dataset = tf.data.TFRecordDataset(recordpaths, 'ZLIB')
-    dataset = dataset.shuffle(buffer_size=len(recordpaths))
-    dataset = dataset.map(map_func=parse_protein)
+    filenames = [os.path.join(path, name) for name in os.listdir(path)]
+    dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
+    dataset = dataset.shuffle(buffer_size=1237)
+    dataset = dataset.map(map_func=parse_protein,
+                          num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1)
-    return dataset.prefetch(buffer_size=BATCH_SIZE)
+    return dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 # end data
 
 
@@ -223,75 +199,60 @@ def make_plot(changes):
 
 
 @tf.function
-def compute_loss(p):
+def compute_loss(initial_positions, positions):
     print('tracing compute_loss')
-    position_error = K.losses.mean_squared_error(
-        p.initial_positions, p.positions)
-    shape_error = tf.losses.mean_pairwise_squared_error(p.initial_positions, p.positions)
-    return position_error + shape_error
+    return tf.reduce_sum([
+        tf.reduce_sum(K.losses.mean_squared_error(initial_positions, positions)),
+        tf.losses.mean_pairwise_squared_error(initial_positions, positions)])
 
 
 @tf.function
-def compute_batch_mean_loss(batch_losses):
-    print('tracing compute_batch_mean_loss')
-    return tf.reduce_mean(tf.convert_to_tensor(
-        [tf.reduce_sum(loss) for loss in batch_losses]))
-
-
-def step_agent_on_protein(agent, p):
-    print('tracing step_agent_on_protein')
-    atoms = tf.concat([p.positions, p.features], axis=-1)
-    noise = tf.random.normal(p.positions.shape)
-    forces = agent([atoms, noise])
-    new_velocities = p.velocities + (forces / p.masses)
-    new_positions = p.positions + new_velocities
-    return AttrDict({
-        'initial_positions': p.initial_positions,
-        # 'initial_distances': p.initial_distances,
-        'features': p.features,
-        'positions': new_positions,
-        'velocities': new_velocities,
-        'num_atoms_squared': p.num_atoms_squared,
-        'num_atoms': p.num_atoms,
-        'forces': forces,
-        'masses': p.masses,
-        'pdb_id': p.pdb_id
-    })
-
-
-def run_episode(adam, agent, batch, invoke):
-    print('tracing run_episode')
-    initial_batch_losses = [compute_loss(p) for p in batch]
-    initial_batch_mean_loss = compute_batch_mean_loss(initial_batch_losses)
-    stop = initial_batch_mean_loss * 1.04
-    batch_mean_loss = tf.cast(0, tf.float32)
+def run_episode(agent, adam, initial_positions, positions, features, masses, forces, velocities):
+    initial_loss = compute_loss(initial_positions, positions)
+    stop = initial_loss * 1.04
+    loss = 0.
     for step in tf.range(MAX_STEPS):
         with tf.GradientTape() as tape:
-            batch = [invoke(agent, p) for p in batch]
-            batch_losses = [compute_loss(p) for p in batch]
-        gradients = tape.gradient(batch_losses, agent.trainable_weights)
+            forces = agent([tf.concat([positions, features], axis=-1),
+                            tf.random.normal(tf.shape(positions))])
+            velocities = velocities + (forces / masses)
+            positions = positions + velocities
+            loss = compute_loss(initial_positions, positions)
+        gradients = tape.gradient(loss, agent.trainable_weights)
         adam.apply_gradients(zip(gradients, agent.trainable_weights),
                              global_step=tf.train.get_or_create_global_step())
-        batch_mean_loss = compute_batch_mean_loss(batch_losses)
         tf.print('  ', step,
                  'stop', tf.math.round(stop),
-                 'loss', tf.math.round(batch_mean_loss))
-        if tf.math.greater(batch_mean_loss, stop):
+                 'loss', tf.math.round(loss))
+        if tf.math.greater(loss, stop):
             break
-        new_stop = batch_mean_loss * STOP_LOSS_MULTIPLE
+        new_stop = loss * STOP_LOSS_MULTIPLE
         if tf.math.less(new_stop, stop):
             stop = new_stop
-    change = (batch_mean_loss - initial_batch_mean_loss)
-    change /= initial_batch_mean_loss
-    change *= 100
-    tf.print('\n', tf.math.round(change), "% change (lower is better)")
-    return change
+    return ((loss - initial_loss) / initial_loss) * 100
+
+
+@tf.function
+def train(agent, adam, proteins):
+    total_change = 0.
+    for initial_positions, positions, features, masses, forces, velocities in proteins:
+        change = run_episode(agent, adam, initial_positions, positions, features, masses, forces, velocities)
+        tf.print('\n', tf.math.round(change), "% change (lower is better)\n")
+        total_change = total_change + change
+    return total_change
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
 def trial(compressor_kernel_layers, compressor_kernel_units,
           pair_kernel_layers, pair_kernel_units, blocks,
           learning_rate, decay, stddev):
+    print(
+        '\n  compressor_kernel_layers', compressor_kernel_layers,
+        '\n  compressor_kernel_units', compressor_kernel_units,
+        '\n  pair_kernel_layers', pair_kernel_layers,
+        '\n  pair_kernel_units', pair_kernel_units,
+        '\n  learning_rate', learning_rate, '\n  decay', decay,
+        '\n  stddev', stddev, '\n')
     lr_decayed = tf.train.exponential_decay(
         learning_rate, tf.train.get_or_create_global_step(), 1, decay)
     adam = tf.train.AdamOptimizer(lr_decayed)
@@ -299,42 +260,19 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
                        compressor_kernel_layers, compressor_kernel_units,
                        pair_kernel_layers, pair_kernel_units,
                        blocks, stddev)
-    # invoke = tf.function(step_agent_on_protein)
-    current_agent_episode_graph = tf.function(run_episode)
-    total_change, batch_number, batch = 0, 0, []
+
     proteins = read_shards()
-    for protein in proteins:
-        if batch_number is BATCHES_PER_TRIAL:
-            break
-        if len(batch) < BATCH_SIZE:
-            batch.append(attrdict_for(protein))
-        else:
-            print('\n  batch', batch_number, 'LR', adam._lr().numpy())
-            [tf.print(p.pdb_id, p.num_atoms) for p in batch]
-            print(
-                '\n  compressor_kernel_layers', compressor_kernel_layers,
-                '\n  compressor_kernel_units', compressor_kernel_units,
-                '\n  pair_kernel_layers', pair_kernel_layers,
-                '\n  pair_kernel_units', pair_kernel_units,
-                '\n  learning_rate', learning_rate, '\n  decay', decay,
-                '\n  stddev', stddev, '\n')
-            try:
-                loss_change = current_agent_episode_graph(adam, agent, batch, step_agent_on_protein)
-                total_change = total_change + loss_change.numpy().item()
-                # changes.append(loss_change.numpy().item(0))
-                # # make_plot(changes)
-            except Exception as e:
-                total_change += 10
-                print(e)
-            batch_number += 1
-            batch = []
+    total_change = train(agent, adam, proteins)
 
     global best
-    if total_change < best:
+    if tf.math.less(total_change, best):
         if not os.path.exists("agents"):
             os.makedirs("agents")
-        tf.saved_model.save(agent, "agents/" + str(time.time()) + ".h5")
+        time_string = str(time.time())
+        tf.saved_model.save(agent, "agents/" + time_string + ".h5")
         best = total_change
+        best_time_string = time_string
+    return best_time_string
 
     tf.reset_default_graph()
     B.clear_session()
