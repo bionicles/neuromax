@@ -199,10 +199,6 @@ def run_episode(agent, optimizer, initial_positions, positions, features, masses
     loss = 0.
     for step in tf.range(MAX_STEPS):
         positions, velocities, loss = run_step(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
-        # tf.print('  ', step,
-        #          'stop', tf.math.round(stop),
-        #          'loss', tf.math.round(loss))
-        # tf.contrib.summary.scalar('loss', loss)
         if tf.math.greater(loss, stop):
             break
         new_stop = loss * STOP_LOSS_MULTIPLE
@@ -280,8 +276,6 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         best_time_string = time_string
     print(best_time_string)
 
-    # tf.reset_default_graph()
-    # B.clear_session()
     del agent
 
     return total_change
