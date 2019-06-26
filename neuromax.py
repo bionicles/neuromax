@@ -139,12 +139,6 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
     return resnet
 # end model
 
-
-@tf.function
-def normalize(tensor):
-    return tf.nn.batch_normalization(tensor,mean = 0, variance = 0.1, scale = None, offset = None, variance_epsilon = 0.001 )
-
-
 # begin data
 @tf.function
 def parse_protein(example):
@@ -159,17 +153,17 @@ def parse_protein(example):
     context, sequence = tf.io.parse_single_sequence_example(
         example,
         context_features=context_features, sequence_features=sequence_features)
-    initial_positions = normalize(tf.reshape(tf.io.parse_tensor(
-        sequence['initial_positions'][0], tf.float32), [-1, 3]))
-    features = normalize(tf.reshape(tf.io.parse_tensor(
-        sequence['features'][0], tf.float32), [-1, 9]))
+    initial_positions = tf.reshape(tf.io.parse_tensor(
+        sequence['initial_positions'][0], tf.float32), [-1, 3])
+    features = tf.reshape(tf.io.parse_tensor(
+        sequence['features'][0], tf.float32), [-1, 9])
     masses = tf.reshape(tf.io.parse_tensor(
         sequence['masses'][0], tf.float32), [-1, 1])
-    positions = normalize(tf.reshape(tf.io.parse_tensor(
-        sequence['positions'][0], tf.float32), [-1, 3]))
-    features = normalize(tf.concat([masses, features], 1))
+    positions = tf.reshape(tf.io.parse_tensor(
+        sequence['positions'][0], tf.float32), [-1, 3])
+    features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
-    velocities = normalize(tf.random.normal(tf.shape(positions)))
+    velocities = tf.random.normal(tf.shape(positions))
     forces = tf.zeros(tf.shape(positions))
     return initial_positions, positions, features, masses, forces, velocities
 
