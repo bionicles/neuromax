@@ -12,27 +12,31 @@ tf.compat.v1.enable_eager_execution()
 B = tf.keras.backend
 L = tf.keras.layers
 K = tf.keras
-best_time_string = ''
-best = 0.
+# globals
+trial_number = 0
+best_trial = ''
+best_args = []
+best = 10000000000000
 # training parameters
 STOP_LOSS_MULTIPLE = 1.07
-EPISODES_PER_TRIAL = 10000
+EPISODES_PER_TRIAL = 100
+TENSORBOARD = False
 PLOT_MODEL = True
 MAX_STEPS = 420
 # HAND TUNED MODEL PARAMETERS (BAD BION!)
-USE_NOISY_DROPCONNECT = False
 ACTIVATION = 'tanh'
 # hyperparameters
 d_compressor_kernel_layers = skopt.space.Integer(
                                     1, 4, name='compressor_kernel_layers')
 d_compressor_kernel_units = skopt.space.Integer(
-                                    128, 512, name='compressor_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(2, 4, name='pair_kernel_layers')
-d_pair_kernel_units = skopt.space.Integer(128, 2048, name='pair_kernel_units')
-d_blocks = skopt.space.Integer(3, 8, name='blocks')
-d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
-d_decay = skopt.space.Real(0.99, 0.99999, name='decay')
+                                    1, 512, name='compressor_kernel_units')
+d_pair_kernel_layers = skopt.space.Integer(1, 4, name='pair_kernel_layers')
+d_pair_kernel_units = skopt.space.Integer(1, 2048, name='pair_kernel_units')
+d_blocks = skopt.space.Integer(1, 8, name='blocks')
+d_learning_rate = skopt.space.Real(0.00001, 0.01, name='learning_rate')
 d_stddev = skopt.space.Real(0.001, 0.1, name='stddev')
+d_use_noisy_dropconnect = skopt.space.Categorical([True, False],
+                                                  name='use_noisy_dropconnect')
 dimensions = [
     d_compressor_kernel_layers,
     d_compressor_kernel_units,
@@ -40,17 +44,26 @@ dimensions = [
     d_pair_kernel_units,
     d_blocks,
     d_learning_rate,
-    d_decay,
-    d_stddev]
-default_hyperparameters = [
+    d_stddev,
+    d_use_noisy_dropconnect]
+tuned_hyperpriors = [
     2,  # compressor layers
-    128,  # compressor units
+    177,  # compressor units
     2,  # pair kernel layers
-    128,  # pair kernel units
-    4,  # blocks
-    0.01,  # LR
-    0.999,  # decay
-    0.01]  # noise
+    928,  # pair kernel units
+    2,  # blocks
+    0.0026608101595377116,  # LR
+    0.03605158074321749,  # stddev
+    True]  # use_noisy_dropconnect
+default_hyperpriors = [
+    1,  # compressor layers
+    1,  # compressor units
+    1,  # pair kernel layers
+    1,  # pair kernel units
+    1,  # blocks
+    0.001,  # LR
+    0.01,  # stddev
+    False]  # use_noisy_dropconnect
 
 
 # begin model
@@ -123,26 +136,54 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
                pair_kernel_units, blocks, stddev):
     features = K.Input((None, d_in))
     noise = K.Input((None, d_out))
+    normalized = tf.expand_dims(L.BatchNormalization()(tf.squeeze(features, 0)), 0)
     compressed_features = ConvKernel(
         layers=compressor_kernel_layers,
         units=compressor_kernel_units,
-        stddev=stddev)(features)
+        stddev=stddev)(normalized)
     output = make_block(compressed_features, noise,
                         pair_kernel_layers, pair_kernel_units, stddev)
     for i in range(blocks - 1):
         output = make_block(compressed_features, output,
                             pair_kernel_layers, pair_kernel_units, stddev)
-    resnet = K.Model([features, noise], output)
-    if PLOT_MODEL:
-        K.utils.plot_model(resnet, name + '.png', show_shapes=True)
-        resnet.summary()
-    return resnet
+    return K.Model([features, noise], output)
+
+
+def make_linear_baseline(name, d_in, d_out):
+    features = K.Input((None, d_in))
+    normalized = tf.expand_dims(L.BatchNormalization()(tf.squeeze(features, 0)), 0)
+    output = L.Dense(d_out)(normalized)
+    return K.Model(features, output, name=name)
+
+
+def make_deep_baseline(name, d_in, d_out):
+    features = K.Input((None, d_in))
+    normalized = tf.expand_dims(L.BatchNormalization()(tf.squeeze(features, 0)), 0)
+    output = L.Dense(d_out, 'tanh')(normalized)
+    output = L.Dense(d_out, 'tanh')(output)
+    output = L.Dense(d_out)(output)
+    return K.Model(features, output, name=name)
+
+
+def make_wide_and_deep_baseline(name, d_in, d_out):
+    features = K.Input((None, d_in))
+    normalized = tf.expand_dims(L.BatchNormalization()(tf.squeeze(features, 0)), 0)
+    wide = L.Dense(d_out)(normalized)
+    deep = L.Dense(d_in, 'tanh')(normalized)
+    deep = L.Dense(d_in, 'tanh')(deep)
+    deep = L.Dense(d_out, 'tanh')(deep)
+    output = L.Add()([wide, deep])
+    return K.Model(features, output, name=name)
+
+
+def make_baseline(name, d_in, d_out):
+    if use_baseline is 'linear':
+        return make_linear_baseline('linear', d_in, d_out)
+    elif use_baseline is 'deep':
+        return make_deep_baseline('deep', d_in, d_out)
+    else:
+        return make_wide_and_deep_baseline('wide_and_deep', d_in, d_out)
 # end model
-
-
-@tf.function
-def normalize(tensor):
-    return tf.nn.batch_normalization(tensor,mean = 0, variance = 0.1, scale = None, offset = None, variance_epsilon = 0.001 )
 
 
 # begin data
@@ -159,17 +200,17 @@ def parse_protein(example):
     context, sequence = tf.io.parse_single_sequence_example(
         example,
         context_features=context_features, sequence_features=sequence_features)
-    initial_positions = normalize(tf.reshape(tf.io.parse_tensor(
-        sequence['initial_positions'][0], tf.float32), [-1, 3]))
-    features = normalize(tf.reshape(tf.io.parse_tensor(
-        sequence['features'][0], tf.float32), [-1, 9]))
+    initial_positions = tf.reshape(tf.io.parse_tensor(
+        sequence['initial_positions'][0], tf.float32), [-1, 3])
+    features = tf.reshape(tf.io.parse_tensor(
+        sequence['features'][0], tf.float32), [-1, 9])
     masses = tf.reshape(tf.io.parse_tensor(
         sequence['masses'][0], tf.float32), [-1, 1])
-    positions = normalize(tf.reshape(tf.io.parse_tensor(
-        sequence['positions'][0], tf.float32), [-1, 3]))
-    features = normalize(tf.concat([masses, features], 1))
+    positions = tf.reshape(tf.io.parse_tensor(
+        sequence['positions'][0], tf.float32), [-1, 3])
+    features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
-    velocities = normalize(tf.random.normal(tf.shape(positions)))
+    velocities = tf.random.normal(tf.shape(positions))
     forces = tf.zeros(tf.shape(positions))
     return initial_positions, positions, features, masses, forces, velocities
 
@@ -218,6 +259,8 @@ def train(agent, optimizer, proteins):
         if step > EPISODES_PER_TRIAL:
             break
         change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
+        if tf.math.is_nan(change):
+            change = 1.618 * STOP_LOSS_MULTIPLE * 1000
         tf.print('\n', 'protein', step, tf.math.round(change), "% change (lower is better)\n")
         tf.contrib.summary.scalar('change', change)
         total_change = total_change + change
@@ -228,23 +271,47 @@ def train(agent, optimizer, proteins):
 @skopt.utils.use_named_args(dimensions=dimensions)
 def trial(compressor_kernel_layers, compressor_kernel_units,
           pair_kernel_layers, pair_kernel_units, blocks,
-          learning_rate, decay, stddev):
-    print(
-        '\n  compressor_kernel_layers', compressor_kernel_layers,
-        '\n  compressor_kernel_units', compressor_kernel_units,
-        '\n  pair_kernel_layers', pair_kernel_layers,
-        '\n  pair_kernel_units', pair_kernel_units,
-        '\n  learning_rate', learning_rate, '\n  decay', decay,
-        '\n  stddev', stddev, '\n')
+          learning_rate, stddev, use_noisy_dropconnect):
+    global trial_number, writer, USE_NOISY_DROPCONNECT
+    if use_baseline is False:
+        trial_name = f'trial:{str(trial_number)}-compressor_kernel_layers:{compressor_kernel_layers}-compressor_kernel_units:{compressor_kernel_units}-pair_kernel_layers:{pair_kernel_layers}-pair_kernel_units:{pair_kernel_units}-blocks:{blocks}-learning_rate:{learning_rate}-stddev:{stddev}-use_noisy_dropconnect:{use_noisy_dropconnect}'
+    else:
+        trial_name = f'trial:{str(trial_number)}-{use_baseline}'
+    trial_log_path = os.path.join(log_dir, trial_name)
+    writer = tf.contrib.summary.create_file_writer(trial_log_path)
 
-    lr_decayed = tf.train.exponential_decay(
-        learning_rate, tf.train.get_or_create_global_step(), 1, decay)
-    optimizer = tf.train.AdamOptimizer(lr_decayed)
-    agent = make_agent('agent', 13, 3,
-                       compressor_kernel_layers, compressor_kernel_units,
-                       pair_kernel_layers, pair_kernel_units,
-                       blocks, stddev)
+    global_step = tf.train.get_or_create_global_step()
+    tf.assign(global_step, 0)
 
+    learning_rate = tf.cast(learning_rate, tf.float32)
+    lr_decayed = tf.train.cosine_decay_restarts(
+        learning_rate, global_step, 1000)
+    optimizer = tf.keras.optimizers.Adam(lr_decayed, amsgrad=True)
+
+    if use_baseline:
+        agent = make_baseline('bob', 13, 3)
+    else:
+        USE_NOISY_DROPCONNECT = use_noisy_dropconnect
+        agent = make_agent('agent', 13, 3,
+                           compressor_kernel_layers, compressor_kernel_units,
+                           pair_kernel_layers, pair_kernel_units,
+                           blocks, stddev)
+        print(
+            '\n  compressor_kernel_layers', compressor_kernel_layers,
+            '\n  compressor_kernel_units', compressor_kernel_units,
+            '\n  pair_kernel_layers', pair_kernel_layers,
+            '\n  pair_kernel_units', pair_kernel_units,
+            '\n  blocks', blocks,
+            '\n  learning_rate', learning_rate.numpy().item(0),
+            '\n  stddev', stddev,
+            '\n  use_noisy_dropconnect', use_noisy_dropconnect, '\n')
+
+    if PLOT_MODEL:
+        name = use_baseline if use_baseline else 'agent'
+        K.utils.plot_model(agent, name + '.png', show_shapes=True)
+        agent.summary()
+    ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+    averages = ema.apply(agent.weights)
     global run_step
 
     @tf.function
@@ -256,46 +323,75 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
             positions = positions + velocities
             loss = compute_loss(initial_positions, positions)
         gradients = tape.gradient(loss, agent.trainable_weights)
-        optimizer.apply_gradients(zip(gradients, agent.trainable_weights),
-                                  global_step=tf.train.get_or_create_global_step(),)
+        optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+        tf.assign_add(tf.train.get_or_create_global_step(), 1)
+        averages = ema.apply(agent.weights)
         return positions, velocities, loss
 
-    proteins = read_shards()
-    try:
-        total_change = train(agent, optimizer, proteins)
-        total_change = total_change.numpy().item(0)
-        print('total change:', total_change, '%')
-    except Exception as e:
-        total_change = 100 * STOP_LOSS_MULTIPLE
-        print(e)
+    with writer.as_default(), tf.contrib.summary.always_record_summaries():
+        try:
+            total_change = train(agent, optimizer, proteins)
+            total_change = total_change.numpy().item(0)
+            print('total change:', total_change, '%')
+        except Exception as e:
+            total_change = 100 * STOP_LOSS_MULTIPLE
+            print(e)
 
-    global best, best_time_string
+    global best, best_trial, best_args
     if tf.math.less(total_change, best):
-        if not os.path.exists("agents"):
-            os.makedirs("agents")
-        time_string = str(time.time())
-        tf.saved_model.save(agent, "agents/" + time_string + ".h5")
+        averages = [ema.average(weight).numpy() for weight in agent.weights]
+        agent.set_weights(averages)
+        tf.saved_model.save(agent, os.path.join(log_dir, trial_name + ".h5"))
+        best_trial = trial_name
         best = total_change
-        best_time_string = time_string
-    print(best_time_string)
+        if use_baseline is False:
+            best_args = ['compressor_kernel_layers', compressor_kernel_layers,
+                        'compressor_kernel_units', compressor_kernel_units,
+                        'pair_kernel_layers', pair_kernel_layers,
+                        'pair_kernel_units', pair_kernel_units,
+                        'blocks', blocks,
+                        'learning_rate', learning_rate.numpy().item(0),
+                        'stddev', stddev,
+                        'use_noisy_dropconnect', use_noisy_dropconnect]
+        else:
+            best_args = [use_baseline]
+    print('best_trial', best_trial)
+    print('best_args', best_args)
+    print('best', best)
 
-    del agent
-
+    del agent, writer
+    trial_number += 1
     return total_change
 # end training
 
 
-if __name__ == '__main__':
-    global writer
-    log_dir = "runs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    writer = tf.contrib.summary.create_file_writer(log_dir)
+def main():
+    global log_dir, use_baseline, proteins
+    log_dir = "runs/" + str(time.time())
+    os.makedirs(log_dir)
     tb = program.TensorBoard()
     tb.configure(argv=[None, '--logdir', log_dir])
     url = tb.launch()
     webbrowser.get(using='google-chrome').open(url+'#scalars', new=2)
-    print(url)
-    with writer.as_default(), tf.contrib.summary.always_record_summaries():
 
-        results = skopt.gp_minimize(trial, dimensions,
-                                    x0=default_hyperparameters, verbose=True)
-        print(results)
+    proteins = read_shards()
+
+    use_baseline = 'linear'
+    linear_baseline_results = trial(default_hyperpriors)
+    use_baseline = 'deep'
+    deep_baseline_results = trial(default_hyperpriors)
+    use_baseline = 'wide_and_deep'
+    wide_and_deep_baseline_results = trial(default_hyperpriors)
+
+    use_baseline = False
+
+    results = skopt.gp_minimize(trial, dimensions,
+                                x0=tuned_hyperpriors, verbose=True)
+    print(results)
+    print('linear_baseline_results', linear_baseline_results)
+    print('deep_baseline_results', deep_baseline_results)
+    print('wide_and_deep_baseline_results', wide_and_deep_baseline_results)
+
+
+if __name__ == '__main__':
+    main()
