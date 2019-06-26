@@ -127,6 +127,7 @@ def make_agent(name, d_in, d_out, compressor_kernel_layers,
         layers=compressor_kernel_layers,
         units=compressor_kernel_units,
         stddev=stddev)(features)
+    compressed_features = L.BatchNormalization()(compressed_features)
     output = make_block(compressed_features, noise,
                         pair_kernel_layers, pair_kernel_units, stddev)
     for i in range(blocks - 1):
