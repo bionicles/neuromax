@@ -166,6 +166,15 @@ def make_deep_baseline(name, d_in, d_out):
     output = L.Dense(d_out)(output)
     return K.Model(features, output, name=name)
 
+def make_resnet_baseline(name, d_in, d_out):
+    features = K.Input((None, d_in))
+    normalized = tf.expand_dims(L.BatchNormalization()(tf.squeeze(features, 0)), 0)
+    output = L.Dense(d_out, 'tanh')(normalized)
+    output1 = output = L.Dense(d_out, 'tanh')(normalized)
+    output = L.Dense(d_out, 'tanh')(output)
+    output = L.add([output, output1])
+    output = L.Dense(d_out)(output)
+    return K.Model(features, output, name=name)
 
 def make_wide_and_deep_baseline(name, d_in, d_out):
     features = K.Input((None, d_in))
@@ -183,6 +192,8 @@ def make_baseline(name, d_in, d_out):
         return make_linear_baseline('linear', d_in, d_out)
     elif use_baseline is 'deep':
         return make_deep_baseline('deep', d_in, d_out)
+    elif use_baseline is 'resnet':
+        return make_resnet_baseline("resnet", d_in, d_out)
     else:
         return make_wide_and_deep_baseline('wide_and_deep', d_in, d_out)
 # end model
@@ -318,7 +329,6 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         agent.summary()
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     global run_step
-
     @tf.function
     def run_step(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
         with tf.GradientTape() as tape:
