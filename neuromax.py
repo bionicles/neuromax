@@ -24,6 +24,7 @@ EPISODES_PER_TRIAL = 100
 TENSORBOARD = False
 PLOT_MODEL = True
 MAX_STEPS = 420
+USE_EMA = True
 # HAND TUNED MODEL PARAMETERS (BAD BION!)
 ACTIVATION = 'tanh'
 # hyperparameters
@@ -342,8 +343,9 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
 
     global best, best_trial, best_args
     if tf.math.less(total_change, best):
-        average_weights = get_EMA_weights(ema, agent)
-        agent.set_weights(average_weights)
+        if USE_EMA:
+            average_weights = get_EMA_weights(ema, agent)
+            agent.set_weights(average_weights)
         tf.saved_model.save(agent, os.path.join(log_dir, trial_name + ".h5"))
         best_trial = trial_name
         best = total_change
