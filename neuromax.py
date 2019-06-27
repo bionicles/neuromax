@@ -7,6 +7,7 @@ import time
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
+import numpy as np
 tf.logging.set_verbosity(tf.logging.ERROR)
 tf.compat.v1.enable_eager_execution()
 B = tf.keras.backend
@@ -267,6 +268,10 @@ def train(agent, optimizer, proteins):
         step = step + 1
     return total_change
 
+def get_EMA_weights(ema, agent):
+    averages = ema.apply(agent.weights)
+    average_weights = [np.array(ema.average(weight).numpy()) for weight in agent.weights]
+    return average_weights
 
 @skopt.utils.use_named_args(dimensions=dimensions)
 def trial(compressor_kernel_layers, compressor_kernel_units,
@@ -311,7 +316,6 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         K.utils.plot_model(agent, name + '.png', show_shapes=True)
         agent.summary()
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-    averages = ema.apply(agent.weights)
     global run_step
 
     @tf.function
@@ -325,7 +329,6 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
         gradients = tape.gradient(loss, agent.trainable_weights)
         optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
         tf.assign_add(tf.train.get_or_create_global_step(), 1)
-        averages = ema.apply(agent.weights)
         return positions, velocities, loss
 
     with writer.as_default(), tf.contrib.summary.always_record_summaries():
@@ -339,8 +342,8 @@ def trial(compressor_kernel_layers, compressor_kernel_units,
 
     global best, best_trial, best_args
     if tf.math.less(total_change, best):
-        averages = [ema.average(weight).numpy() for weight in agent.weights]
-        agent.set_weights(averages)
+        average_weights = get_EMA_weights(ema, agent)
+        agent.set_weights(average_weights)
         tf.saved_model.save(agent, os.path.join(log_dir, trial_name + ".h5"))
         best_trial = trial_name
         best = total_change
