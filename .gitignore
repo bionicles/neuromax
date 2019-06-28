@@ -8,3 +8,4 @@ tfrecords/
 runs/
 agents/
 *.png
+*.mpg
