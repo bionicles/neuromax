@@ -217,10 +217,9 @@ def trial(**kwargs):
     tf.assign(global_step, 0)
     optimizer = tf.keras.optimizers.Adam(tf.train.cosine_decay_restarts(tf.cast(hp.lr, tf.float32), global_step, hp.decay), amsgrad=True)
 
-    trial_log_path = os.path.join(log_dir, trial_name)
-    writer = tf.contrib.summary.create_file_writer(trial_log_path)
+    writer = tf.contrib.summary.create_file_writer(log_dir)
     if PLOT_MODEL:
-        plot_path = os.path.join(trial_log_path, 'agent.png')
+        plot_path = os.path.join('.', 'runs', trial_name + '.png')
         K.utils.plot_model(agent, plot_path, show_shapes=True)
         agent.summary()
 
@@ -241,7 +240,7 @@ def trial(**kwargs):
         stop = initial_loss * 1.04
         loss = 0.
         for step in tf.range(MAX_STEPS):
-            with tf.GradientTape(persistent=True) as tape:
+            with tf.GradientTape() as tape:
                 positions, velocities = run_step(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
                 position_loss, shape_loss = get_losses(initial_positions, positions)
             gradients = tape.gradient([position_loss, shape_loss], agent.trainable_weights)
@@ -315,17 +314,19 @@ def trial(**kwargs):
 
 
 def experiment():
-    global log_dir, agent_type, dimensions, proteins
-    log_dir = "runs/" + str(time.time())
-    os.makedirs(log_dir)
-    tb = program.TensorBoard()
-    tb.configure(argv=[None, '--logdir', log_dir])
+    global log_dir, proteins
+    log_dir = os.path.join('.', 'runs')
+
     if TENSORBOARD:
+        tb = program.TensorBoard()
+        tb.configure(argv=[None, '--logdir', log_dir])
         webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
+
     proteins = read_shards()
-    checkpointer = skopt.callbacks.CheckpointSaver('./checkpoint.pkl')
+    checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
+    checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
     try:
-        res = skopt.load('./checkpoint.pkl')
+        res = skopt.load(checkpoint_path)
         x0 = res.x_iters
         y0 = res.func_vals
         results = skopt.gp_minimize(trial, dimensions, x0=x0, y0=y0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer])
