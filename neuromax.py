@@ -248,7 +248,7 @@ def trial(**kwargs):
             ema.apply(agent.weights)
             loss = tf.reduce_sum(position_loss) + tf.reduce_sum(shape_loss)
             tf.print(step, 'stop', stop, 'loss', loss)
-            if tf.math.greater(loss, stop):
+            if tf.math.greater(loss, stop) or tf.math.is_nan(loss):
                 break
             new_stop = loss * STOP_LOSS_MULTIPLE
             if tf.math.less(new_stop, stop):

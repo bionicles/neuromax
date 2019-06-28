@@ -4,6 +4,10 @@
 # chmod +x forever
 # ./forever neuromax.py
 
+# to stop it:
+# add alias kp='killall -v python neuromax.py'
+# to bashrc, then type kp, (or just run killall -v python neuromax.py)
+
 from subprocess import Popen
 import sys
 
