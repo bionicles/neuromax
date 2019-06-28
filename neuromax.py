@@ -106,10 +106,8 @@ class ConvPair(L.Layer):
         self.kernel = get_kernel(hp.p_kernel, hp.p_layers, hp.p_units, hp, (d_features + d_output), d_output, pair=True)
 
     def call(self, inputs):
-        return tf.vectorized_map(
-            lambda a1: tf.reduce_sum(tf.vectorized_map(
-                lambda a2: self.kernel([a1, a2]), inputs), axis=0),
-        inputs)
+        return tf.vectorized_map(lambda a1: tf.reduce_sum(tf.vectorized_map(
+                lambda a2: self.kernel([a1, a2]), inputs), axis=0), inputs)
 
 
 def get_kernel(kernel_type, layers, units, hp, d_features, d_output, pair=False):
@@ -198,12 +196,6 @@ def read_shards():
     return dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
 
-# @tf.function
-# def get_distances(xyz):
-#     r = tf.reshape(tf.reduce_sum(xyz * xyz, 1), [-1, 1])
-#     return r - 2 * tf.matmul(xyz, xyz, transpose_b=True) + tf.transpose(r)
-
-
 @tf.function
 def get_losses(initial_positions, positions):
     position_loss = tf.sqrt(K.losses.mean_squared_error(initial_positions, positions))
@@ -244,7 +236,6 @@ def trial(**kwargs):
 
     @tf.function
     def run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
-        # initial_distances = get_distances(initial_positions)
         initial_position_loss, initial_shape_loss = get_losses(initial_positions, positions)
         initial_loss = tf.reduce_sum(initial_position_loss) + tf.reduce_sum(initial_shape_loss)
         stop = initial_loss * 1.04
