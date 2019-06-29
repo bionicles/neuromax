@@ -45,7 +45,6 @@ dimensions = [
     skopt.space.Categorical([False, True], name='noise'),
     skopt.space.Categorical([False, True], name='drop'),
     skopt.space.Categorical(['none', 'first', 'all'], name='norm'),
-    skopt.space.Categorical(['linear', 'tanh', 'elu'], name='act'),
     skopt.space.Real(0.00001, 0.01, name='lr'),
     skopt.space.Integer(10, 1000000, name='decay'),
     skopt.space.Real(0.1, 1000, name='kMass')]  # major factor in step size
@@ -64,7 +63,6 @@ hyperpriors = [
     True,  # noise
     True,  # dropconnect
     'first',  # norm
-    'tanh',  # activation
     0.0068,  # lr
     56606,  # decay_steps
     10]  # kMass
@@ -108,9 +106,9 @@ class NoisyDropConnectDense(L.Dense):
 
 def get_layer(units, hp):
     if hp.tfp:
-        return tfp.layers.DenseReparameterization(units, activation=hp.act)
+        return tfp.layers.DenseReparameterization(units, activation="tanh")
     else:
-        return NoisyDropConnectDense(units, activation=hp.act, noise=hp.noise, drop=hp.drop, stddev=hp.stddev)
+        return NoisyDropConnectDense(units, activation="tanh", noise=hp.noise, drop=hp.drop, stddev=hp.stddev)
 
 
 class ConvKernel(L.Layer):
