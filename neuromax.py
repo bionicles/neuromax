@@ -1,4 +1,5 @@
 # experiment.py: why? simplify
+import tensorflow_probability as tfp
 from tensorboard import program
 from attrdict import AttrDict
 import numpy as np
@@ -21,11 +22,10 @@ best_args = []
 best = 12345678900
 # training parameters
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
-PRINT_LOSS_EVERY_STEP = True
+PRINT_LOSS_EVERY_STEP = False
 STOP_LOSS_MULTIPLE = 1.04
-EPISODES_PER_TRIAL = 100
+EPISODES_PER_TRIAL = 42
 REPEATS_PER_TRIAL = 5
-MASS_COEFFICIENT = 0.1
 TENSORBOARD = False
 PLOT_MODEL = True
 MAX_STEPS = 420
@@ -35,60 +35,82 @@ dimensions = [
     skopt.space.Categorical(['res', 'k_conv'], name="c"),
     skopt.space.Categorical(['deep', 'wide_deep'], name='c_kernel'),
     skopt.space.Integer(1, 4, name='c_layers'),
-    skopt.space.Integer(1, 512, name='c_units'),
+    skopt.space.Integer(1, 2048, name='c_units'),
     skopt.space.Integer(0, 8, name='p_blocks'),
     skopt.space.Categorical(['deep', 'wide_deep'], name='p_kernel'),
     skopt.space.Integer(1, 4, name='p_layers'),
     skopt.space.Integer(1, 2048, name='p_units'),
-    skopt.space.Real(0.001, 0.1, name='noise'),
-    skopt.space.Categorical(['dense', 'dropconnect', 'noisy_dropconnect'], name='layer'),
+    skopt.space.Real(0.001, 0.1, name='stddev'),
+    skopt.space.Categorical([False, False], name='tfp'),  # WARNING: OFF
+    skopt.space.Categorical([False, True], name='noise'),
+    skopt.space.Categorical([False, True], name='drop'),
     skopt.space.Categorical(['none', 'first', 'all'], name='norm'),
     skopt.space.Categorical(['linear', 'tanh', 'elu'], name='act'),
     skopt.space.Real(0.00001, 0.01, name='lr'),
-    skopt.space.Integer(10, 1000000, name='decay')]
+    skopt.space.Integer(10, 1000000, name='decay'),
+    skopt.space.Real(0.1, 1000, name='kMass')]  # major factor in step size
 hyperpriors = [
-    1,  # compressor_blocks,
-    'k_conv',  # compressor
-    'wide_deep',  # compressor_kernel
+    2,  # compressor_blocks,
+    'res',  # compressor
+    'deep',  # compressor_kernel
     1,  # compressor_layers
-    1,  # compressor_units
+    237,  # compressor_units
     1,  # pair_blocks
-    'wide_deep',  # pair_kernel
-    1,  # pair_layers
-    1,  # pair_kernel_units,
-    0.03605158074321749,  # stddev
-    'dropconnect',  # dense
-    'all',  # batch norm after which layers
+    'deep',  # pair_kernel
+    2,  # pair_layers
+    678,  # pair_units,
+    0.0657,  # stddev
+    False,  # tfp
+    True,  # noise
+    True,  # dropconnect
+    'first',  # norm
     'tanh',  # activation
-    0.0026608101595377116,  # lr
-    1000]  # decay_steps
+    0.0068,  # lr
+    56606,  # decay_steps
+    10]  # kMass
 
 
 # begin agent
 class NoisyDropConnectDense(L.Dense):
     def __init__(self, *args, **kwargs):
-        self.noise = kwargs.pop('noise')
+        noise, drop = kwargs.pop('noise'), kwargs.pop('drop')
+        self.stddev = kwargs.pop('stddev')
         super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
+        if noise and drop:
+            self.call = self.call_noise_drop
+        elif drop and not noise:
+            self.call = self.call_drop
+        elif noise and not drop:
+            self.call = self.call_noise
+        else:
+            self.call = self.normal_call
 
-    def call(self, x):
-        return self.activation(tf.nn.bias_add(B.dot(x, tf.nn.dropout(self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.noise), 0.5)), self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.noise)))
+    def add_noise(self):
+        kernel = self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.stddev)
+        bias = self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.stddev)
+        return kernel, bias
 
+    def call_noise_drop(self, x):
+        kernel, bias = self.add_noise()
+        kernel = tf.nn.dropout(kernel, 0.5)
+        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
 
-class DropConnectDense(L.Dense):
-    def __init__(self, *args, **kwargs):
-        super(DropConnectDense, self).__init__(*args, **kwargs)
-
-    def call(self, x):
+    def call_drop(self, x):
         return self.activation(tf.nn.bias_add(B.dot(x, tf.nn.dropout(self.kernel, 0.5)), self.bias))
+
+    def call_noise(self, x):
+        kernel, bias = self.add_noise()
+        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
+
+    def normal_call(self, x):
+        return self.activation(tf.nn.bias_add(B.dot(x, self.kernel), self.bias))
 
 
 def get_layer(units, hp):
-    if hp.layer is 'dense':
-        return L.Dense(units, activation=hp.act)
-    elif hp.layer is 'dropconnect':
-        return DropConnectDense(units, activation=hp.act)
+    if hp.tfp:
+        return tfp.layers.DenseReparameterization(units, activation=hp.act)
     else:
-        return NoisyDropConnectDense(units, noise=hp.noise, activation=hp.act)
+        return NoisyDropConnectDense(units, activation=hp.act, noise=hp.noise, drop=hp.drop, stddev=hp.stddev)
 
 
 class ConvKernel(L.Layer):
@@ -145,7 +167,7 @@ def get_block(block_type, hp, features, prior):
 
 def get_agent(trial_number, d_in, d_compressed, d_out, hp):
     print('\ntrial', trial_number, '\n')
-    [print(f'{k}={v}') for k, v in hp.items()]
+    [print(f'   {k}={v}') for k, v in hp.items()]
     features = K.Input((None, d_in))
     compressed_noise = K.Input((None, d_compressed))
     output_noise = K.Input((None, d_out))
@@ -180,27 +202,25 @@ def parse_protein(example):
     positions = tf.reshape(tf.io.parse_tensor(
         sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.concat([masses, features], 1)
-    masses = tf.concat([masses, masses, masses], 1) * MASS_COEFFICIENT
+    masses = tf.concat([masses, masses, masses], 1)
     velocities = tf.random.normal(tf.shape(positions))
     forces = tf.zeros(tf.shape(positions))
-    return initial_positions, positions, features, masses, forces, velocities
+    return initial_positions, positions, features, masses, forces, velocities, context['protein'], tf.shape(positions)[0]
 
 
 def read_shards():
     path = os.path.join('.', 'tfrecords')
     filenames = [os.path.join(path, name) for name in os.listdir(path)]
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
-    dataset = dataset.shuffle(buffer_size=1237)
     dataset = dataset.map(map_func=parse_protein, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    dataset = dataset.batch(1)
-    return dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+    return dataset.batch(1)
 
 
 @tf.function
-def get_losses(initial_positions, positions):
-    position_loss = tf.sqrt(K.losses.mean_squared_error(initial_positions, positions))
+def get_losses(initial_positions, positions, masses, velocities, forces, tfp, agent):
     shape_loss = tf.sqrt(tf.losses.mean_pairwise_squared_error(initial_positions, positions))
-    return position_loss, shape_loss
+    hamiltonian = (tf.square(velocities) * masses * 0.5) + forces
+    return [shape_loss, hamiltonian, agent.losses] if tfp else [shape_loss, hamiltonian]
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -235,19 +255,21 @@ def trial(**kwargs):
 
     @tf.function
     def run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
-        initial_position_loss, initial_shape_loss = get_losses(initial_positions, positions)
-        initial_loss = tf.reduce_sum(initial_position_loss) + tf.reduce_sum(initial_shape_loss)
+        masses = masses * hp.kMass
+        initial_losses = get_losses(initial_positions, positions, masses, velocities, forces, hp.tfp, agent)
+        initial_loss = tf.reduce_sum([tf.reduce_sum(loss) for loss in initial_losses])
         stop = initial_loss * 1.04
         loss = 0.
         for step in tf.range(MAX_STEPS):
             with tf.GradientTape() as tape:
                 positions, velocities = run_step(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
-                position_loss, shape_loss = get_losses(initial_positions, positions)
-            gradients = tape.gradient([position_loss, shape_loss], agent.trainable_weights)
+                losses = get_losses(initial_positions, positions, masses, velocities, forces, hp.tfp, agent)
+            gradients = tape.gradient(losses, agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
-            loss = tf.reduce_sum(position_loss) + tf.reduce_sum(shape_loss)
-            tf.print(step, 'stop', stop, 'loss', loss)
+            loss = tf.reduce_sum([tf.reduce_sum(loss) for loss in losses])
+            if PRINT_LOSS_EVERY_STEP:
+                tf.print(step, 'stop', stop, 'loss', loss)
             if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
                 break
             new_stop = loss * STOP_LOSS_MULTIPLE
@@ -257,15 +279,17 @@ def trial(**kwargs):
 
     @tf.function
     def train(agent, optimize, proteins):
+        proteins = proteins.shuffle(buffer_size=1237)
+        proteins = proteins.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
         total_change = 0.
         episode = 0
-        for initial_positions, positions, features, masses, forces, velocities in proteins:
+        for initial_positions, positions, features, masses, forces, velocities, pdb_id, n_atoms in proteins:
             if episode >= EPISODES_PER_TRIAL:
                 break
             change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
             if tf.math.is_nan(change):
                 change = 12345678900.
-            tf.print('\n', 'protein', episode, tf.math.round(change), "% change (lower is better)\n")
+            tf.print('\n', '^^^ episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', tf.math.round(change), "% change (lower is better)\n")
             tf.contrib.summary.scalar('change', change)
             total_change = total_change + change
             episode = episode + 1
