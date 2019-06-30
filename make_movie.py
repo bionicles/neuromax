@@ -2,8 +2,8 @@ from pymol import cmd, util, movie
 import random
 import numpy as np
 axis = ['x', 'y', 'z']
-pdb_name = '4lgp'
-def prepare_pymol():
+
+def prepare_pymol(pdb_name):
     # setup PyMOL for movies
     cmd.reinitialize()
     cmd.set('matrix_mode', 1)
@@ -46,8 +46,8 @@ def unfold():
     np.array([unfold_index(name, index) for name, index in
               cmd.index('byca (chain {})'.format('AA'))])
 
-def generate_movie(length, movie_name, start_after = 1):
-    chains = prepare_pymol()
+def generate_movie(length, movie_name, pdb_name, start_after = 1):
+    chains = prepare_pymol(pdb_name)
     cmd.mset("1x"+str(30*length))
     cmd.zoom("all", buffer=42, state=-1)
     cmd.frame(1)
@@ -73,4 +73,4 @@ def generate_movie(length, movie_name, start_after = 1):
     movie.produce(filename = movie_name+'.mpg')
 
 if __name__=='__main__':
-    generate_movie(9, 'neuromax')
+    generate_movie(9, 'neuromax', pdb_name ='4lgp')
