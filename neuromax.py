@@ -22,7 +22,7 @@ best_args = []
 best = 12345678900
 # training parameters
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
-PRINT_LOSS_EVERY_STEP = False
+PRINT_LOSS_EVERY_STEP = True
 STOP_LOSS_MULTIPLE = 1.04
 EPISODES_PER_TRIAL = 42
 REPEATS_PER_TRIAL = 5
@@ -31,15 +31,15 @@ PLOT_MODEL = True
 MAX_STEPS = 420
 # hyperparameters
 dimensions = [
-    skopt.space.Integer(1, 8, name='c_blocks'),
+    skopt.space.Integer(1, 4, name='c_blocks'),
     skopt.space.Categorical(['res', 'k_conv'], name="c"),
     skopt.space.Categorical(['deep', 'wide_deep'], name='c_kernel'),
     skopt.space.Integer(1, 4, name='c_layers'),
-    skopt.space.Integer(1, 2048, name='c_units'),
-    skopt.space.Integer(0, 8, name='p_blocks'),
+    skopt.space.Integer(1, 1024, name='c_units'),
+    skopt.space.Integer(1, 4, name='p_blocks'),
     skopt.space.Categorical(['deep', 'wide_deep'], name='p_kernel'),
     skopt.space.Integer(1, 4, name='p_layers'),
-    skopt.space.Integer(1, 2048, name='p_units'),
+    skopt.space.Integer(1, 4096, name='p_units'),
     skopt.space.Real(0.001, 0.1, name='stddev'),
     skopt.space.Categorical([False, False], name='tfp'),  # WARNING: OFF
     skopt.space.Categorical([False, True], name='noise'),
@@ -47,25 +47,25 @@ dimensions = [
     skopt.space.Categorical(['none', 'first', 'all'], name='norm'),
     skopt.space.Real(0.00001, 0.01, name='lr'),
     skopt.space.Integer(10, 1000000, name='decay'),
-    skopt.space.Real(0.1, 1000, name='kMass')]  # major factor in step size
+    skopt.space.Real(0.1, 10, name='kMass')]  # major factor in step size
 hyperpriors = [
-    2,  # compressor_blocks,
-    'res',  # compressor
-    'deep',  # compressor_kernel
-    1,  # compressor_layers
-    237,  # compressor_units
+    1,  # compressor_blocks,
+    'k_conv',  # compressor
+    'wide_deep',  # compressor_kernel
+    2,  # compressor_layers
+    256,  # compressor_units
     1,  # pair_blocks
-    'deep',  # pair_kernel
+    'wide_deep',  # pair_kernel
     2,  # pair_layers
-    678,  # pair_units,
-    0.0657,  # stddev
+    4096,  # pair_units,
+    0.001,  # stddev
     False,  # tfp
     True,  # noise
     True,  # dropconnect
     'first',  # norm
-    0.0068,  # lr
+    0.001,  # lr
     56606,  # decay_steps
-    10]  # kMass
+    2]  # kMass
 
 
 # begin agent
@@ -217,8 +217,8 @@ def read_shards():
 @tf.function
 def get_losses(initial_positions, positions, masses, velocities, forces, tfp, agent):
     shape_loss = tf.sqrt(tf.losses.mean_pairwise_squared_error(initial_positions, positions))
-    hamiltonian = (tf.square(velocities) * masses * 0.5) + forces
-    return [shape_loss, hamiltonian, agent.losses] if tfp else [shape_loss, hamiltonian]
+    # hamiltonian = (tf.square(velocities) * masses * 0.5) + forces
+    return [shape_loss]  # , hamiltonian, agent.losses] if tfp else [shape_loss, hamiltonian]
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
