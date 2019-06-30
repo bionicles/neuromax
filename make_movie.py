@@ -1,5 +1,6 @@
 from pymol import cmd, util, movie
 import random
+import tensorflow as tf
 import numpy as np
 axis = ['x', 'y', 'z']
 
@@ -46,7 +47,7 @@ def unfold():
     np.array([unfold_index(name, index) for name, index in
               cmd.index('byca (chain {})'.format('AA'))])
 
-def generate_movie(length, movie_name, pdb_name, start_after = 1):
+def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
     chains = prepare_pymol(pdb_name)
     cmd.mset("1x"+str(30*length))
     cmd.zoom("all", buffer=42, state=-1)
@@ -68,9 +69,9 @@ def generate_movie(length, movie_name, pdb_name, start_after = 1):
     cmd.frame(30*2)
     unfold()
     cmd.mview('store', object='all')
-    cmd.frame(30*length)
-    cmd.mview('interpolate', object='all')
+    done = False
+    while not done:
+        new_positions = agent.predict(pdb_featurs)
+        cmd.frame(30*length)
+        move_atoms(new_positions)
     movie.produce(filename = movie_name+'.mpg')
-
-if __name__=='__main__':
-    generate_movie(9, 'neuromax', pdb_name ='4lgp')
