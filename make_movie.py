@@ -1,10 +1,8 @@
 from pymol import cmd, util, movie
 import random
 import numpy as np
-translation = [20, 20, 20]
-rotation = [45, 45, 45]
 axis = ['x', 'y', 'z']
-pdb_name = '1a00'
+pdb_name = '4lgp'
 def prepare_pymol():
     # setup PyMOL for movies
     cmd.reinitialize()
@@ -16,11 +14,13 @@ def prepare_pymol():
     cmd.load(pdb_name+'.pdb')
     cmd.remove("solvent")
     util.cbc()
-    #cmd.show("spheres")
+    cmd.set('max_threads', 16)
+    cmd.show("surface")
     chains = cmd.get_chains()
-    undock_chain = random.choice(chains)
-    cmd.extract('AA', 'c. '+undock_chain)
+    for chain in chains:
+        cmd.extract(chain + chain, 'c. '+chain)
     cmd.remove("all and not (alt '')")  # remove alternate conformations
+    return chains
 
 def unfold_index(name, index):
     selection_string_array = [
@@ -47,25 +47,29 @@ def unfold():
               cmd.index('byca (chain {})'.format('AA'))])
 
 def generate_movie(length, movie_name, start_after = 1):
-    prepare_pymol()
+    chains = prepare_pymol()
     cmd.mset("1x"+str(30*length))
     cmd.zoom("all", buffer=42, state=-1)
     cmd.frame(1)
-    cmd.mview("store", object='AA')
+    cmd.mview("store", object='all')
     cmd.frame(30*start_after) # start animation after start_after
-    cmd.mview("store", object='AA')
+    cmd.mview("store", object='all')
     cmd.frame(30*2) # four seconds of translation
-    cmd.translate(translation, object='AA')
-    cmd.mview('store', object='AA')
+    for chain in chains:
+        translation = [np.random.randint(-50, 50), np.random.randint(-50, 50), np.random.randint(-50, 50)]
+        cmd.translate(translation, object=chain+chain)
+        cmd.mview('store', object='all')
     cmd.frame(30*2) # 4 seconds of rotation
-    for i in range(3):
-        cmd.rotate(axis[i], rotation[i], object="AA")
-    cmd.mview('store', object='AA')
+    for chain in chains:
+        rotation = [np.random.randint(-50, 50), np.random.randint(-50, 50), np.random.randint(-50, 50)]
+        for i in range(3):
+            cmd.rotate(axis[i], rotation[i], object=chain+chain)
+    cmd.mview('store', object='all')
     cmd.frame(30*2)
     unfold()
-    cmd.mview('store', object='AA')
+    cmd.mview('store', object='all')
     cmd.frame(30*length)
-    cmd.mview('interpolate', object='AA')
+    cmd.mview('interpolate', object='all')
     movie.produce(filename = movie_name+'.mpg')
 
 if __name__=='__main__':
