@@ -2,6 +2,7 @@ import tensorflow as tf
 from pymol import cmd, util, movie
 import random
 import numpy as np
+import time
 import os
 axis = ['x', 'y', 'z']
 
@@ -36,13 +37,10 @@ def get_atom_features(atom):
                      atom.partial_charge,
                      atom.vdw,
                      atom.b,
-                     atom.q,
                      atom.get_free_valence(0),
-                     atom.resi,
-                     atom.index,
-                     sum([ord(i)/122 for i in atom.resn]) / len(atom.resn),
-                     sum([ord(i)/122 for i in atom.symbol]) / len(atom.symbol),
-                     sum([ord(i)/122 for i in atom.name]) / len(atom.name)])
+                     sum([ord(i) for i in atom.resi]) / len(atom.resi),
+                     sum([ord(i) for i in atom.resn]) / len(atom.resn),
+                     sum([ord(i) for i in atom.symbol])/ len(atom.symbol)])
 
 def prepare_pymol(pdb_name):
     # setup PyMOL for movies
@@ -116,8 +114,11 @@ def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
     step = 0
     model = cmd.get_model('all', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
+    features = tf.expand_dims(features, axis=0)
+    features = tf.dtypes.cast(features, dtype = tf.float32)
     while (step<max_steps):
         positions = get_positions()
+        positions = tf.expand_dims(positions, axis=0)
         stacked_features = tf.concat([positions, features], axis=-1)
         compressed_noise = tf.random.truncated_normal((1, tf.shape(positions)[1], 5), stddev=0.0001)
         output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=0.0001)
