@@ -55,12 +55,12 @@ def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
     cmd.mview("store", object='all')
     cmd.frame(30*start_after) # start animation after start_after
     cmd.mview("store", object='all')
-    cmd.frame(30*2) # four seconds of translation
+    cmd.frame(30*length*0.3) # four seconds of translation
     for chain in chains:
         translation = [np.random.randint(-50, 50), np.random.randint(-50, 50), np.random.randint(-50, 50)]
         cmd.translate(translation, object=chain+chain)
         cmd.mview('store', object='all')
-    cmd.frame(30*2) # 4 seconds of rotation
+    cmd.frame(30*length*0.3) # 4 seconds of rotation
     for chain in chains:
         rotation = [np.random.randint(-50, 50), np.random.randint(-50, 50), np.random.randint(-50, 50)]
         for i in range(3):
@@ -71,7 +71,7 @@ def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
     cmd.mview('store', object='all')
     done = False
     while not done:
-        new_positions = agent.predict(pdb_featurs)
+        forces = agent(pdb_featurs)
         cmd.frame(30*length)
         move_atoms(new_positions)
     movie.produce(filename = movie_name+'.mpg')
