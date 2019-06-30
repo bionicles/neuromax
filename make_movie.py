@@ -2,6 +2,7 @@ import tensorflow as tf
 from pymol import cmd, util, movie
 import random
 import numpy as np
+import os
 axis = ['x', 'y', 'z']
 
 def move_atom(xyz):
@@ -27,7 +28,7 @@ def translate_atom(vector):
 def get_positions():
     model = cmd.get_model('all', 1)
     positions = np.array(model.get_coord_list())
-    return tf.convert_to_tensor(positions, preferred_dtype=DTYPE)
+    return tf.convert_to_tensor(positions, preferred_dtype=tf.float32)
 
 def get_atom_features(atom):
     return np.array([ord(atom.chain.lower())/122,
@@ -51,9 +52,9 @@ def prepare_pymol(pdb_name):
     cmd.set('scene_buttons', 1)
     cmd.set('cache_frames', 1)
     cmd.config_mouse('three_button_motions', 1)
-    if not os.path.exists("pdbs/" + pdb_name):
-        print('fetching', protein)
-        cmd.fetch(protein, path=os.path.join('.', 'pdbs'), type='pdb')
+    if not os.path.exists("pdbs/" + pdb_name + ".pdb"):
+        print('fetching', pdb_name)
+        cmd.fetch(pdb_name, path=os.path.join('.', 'pdbs'), type='pdb')
     cmd.load("pdbs/" + pdb_name+'.pdb')
     cmd.remove("solvent")
     util.cbc()
@@ -113,6 +114,7 @@ def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
     cmd.mview('store', object='all')
     max_steps = 5
     step = 0
+    model = cmd.get_model('all', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
     while (step<max_steps):
         positions = get_positions()
