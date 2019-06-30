@@ -8,6 +8,7 @@ import skopt
 import math
 import time
 import os
+from make_movie import generate_movie
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -334,6 +335,8 @@ def trial(**kwargs):
         return loss
 # end training
 
+def agent_make_movie(pdb_name, movie_length, agent):
+    return 0
 
 def experiment():
     global log_dir, proteins
