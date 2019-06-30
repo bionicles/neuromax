@@ -4,6 +4,12 @@ import tensorflow as tf
 import numpy as np
 axis = ['x', 'y', 'z']
 
+def moves_atom(xyz):
+    atom_selection_string = 'id ' + str(atom_index)
+    xyz = xyz.numpy().tolist()
+    cmd.translate(xyz, atom_selection_string)
+    atom_index += 1
+
 def prepare_pymol(pdb_name):
     # setup PyMOL for movies
     cmd.reinitialize()
@@ -55,7 +61,7 @@ def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
     cmd.mview("store", object='all')
     cmd.frame(30*start_after) # start animation after start_after
     cmd.mview("store", object='all')
-    cmd.frame(30*length*0.3) 
+    cmd.frame(30*length*0.3)
     for chain in chains:
         translation = [np.random.randint(-50, 50), np.random.randint(-50, 50), np.random.randint(-50, 50)]
         cmd.translate(translation, object=chain+chain)
