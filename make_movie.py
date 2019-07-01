@@ -131,5 +131,6 @@ def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
         forces = agent([stacked_features, compressed_noise, output_noise])
         cmd.frame(30*length)
         translate(forces)
+        cmd.mview('store', object='all')
         step += 1
     movie.produce(filename = movie_name+'.mpg')
