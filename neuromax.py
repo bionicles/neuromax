@@ -25,12 +25,12 @@ best = 12345678900
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
 PRINT_LOSS_EVERY_STEP = True
 STOP_LOSS_MULTIPLE = 1.04
-EPISODES_PER_TRIAL = 42
+EPISODES_PER_TRIAL = 1
 REPEATS_PER_TRIAL = 5
 TENSORBOARD = False
 PLOT_MODEL = True
 MAX_STEPS = 420
-MAKE_MOVIE = False
+MAKE_MOVIE = True
 # hyperparameters
 dimensions = [
     skopt.space.Integer(1, 4, name='c_blocks'),
@@ -294,13 +294,14 @@ def trial(**kwargs):
             total_change = total_change + change
             episode = episode + 1
         return total_change
-    if MAKE_MOVIE:
-        generate_movie(length=15, movie_name ="neuromax", pdb_name='4lgp', agent=agent)
+
     with writer.as_default(), tf.contrib.summary.always_record_summaries():
         changes = []
         for repeat_number in range(REPEATS_PER_TRIAL):
             try:
                 total_change = train(agent, optimizer, proteins)
+                if MAKE_MOVIE:
+                    generate_movie(length=10, movie_name ="neuromax", pdb_name='4lgp', agent=agent)
                 total_change = total_change.numpy().item(0)
                 print('repeat', repeat_number + 1, 'total change:', total_change, '%\n')
                 changes.append(total_change)
