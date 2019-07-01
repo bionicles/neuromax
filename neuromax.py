@@ -30,7 +30,7 @@ REPEATS_PER_TRIAL = 5
 TENSORBOARD = False
 PLOT_MODEL = True
 MAX_STEPS = 420
-MAKE_MOVIE = True
+MAKE_MOVIE = False
 # hyperparameters
 dimensions = [
     skopt.space.Integer(1, 4, name='c_blocks'),
@@ -287,8 +287,6 @@ def trial(**kwargs):
             if episode >= EPISODES_PER_TRIAL:
                 break
             change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
-            if MAKE_MOVIE:
-                generate_movie(length=15, movie_name ="neuromax", pdb_name='4lgp', agent=agent)
             if tf.math.is_nan(change):
                 change = 12345678900.
             tf.print('\n', '^^^ episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', tf.math.round(change), "% change (lower is better)\n")
@@ -296,7 +294,8 @@ def trial(**kwargs):
             total_change = total_change + change
             episode = episode + 1
         return total_change
-
+    if MAKE_MOVIE:
+        generate_movie(length=15, movie_name ="neuromax", pdb_name='4lgp', agent=agent)
     with writer.as_default(), tf.contrib.summary.always_record_summaries():
         changes = []
         for repeat_number in range(REPEATS_PER_TRIAL):
