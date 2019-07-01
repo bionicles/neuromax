@@ -13,18 +13,20 @@ def move_atom(xyz):
     atom_index += 1
 
 def translate(force):
-    model = cmd.get_model('current', 1)
+    force = tf.reduce_sum(force, axis=-1)
+    model = cmd.get_model('all', 1)
     masses = np.array([atom.get_mass() for atom in model.atom])
     velocity = force / masses
     atom_index = 0
-    vectors = np.array([self.translate_atom(xyz) for xyz in velocity])
+    for xyz in velocity:
+        translate_atom(xyz, atom_index)
+        atom_index += 1
 
-def translate_atom(vector):
+def translate_atom(vector, atom_index):
     # print("translate_atom", vector, type(vector), vector.shape)
     movement_vector = list(vector) # list(movement_vector)
     atom_selection_string = "id " + str(atom_index)
     cmd.translate(movement_vector, atom_selection_string)
-    atom_index += 1
 
 def get_positions():
     model = cmd.get_model('all', 1)
@@ -114,14 +116,18 @@ def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
     step = 0
     model = cmd.get_model('all', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
-    features = tf.expand_dims(features, axis=0)
     features = tf.dtypes.cast(features, dtype = tf.float32)
+    masses = np.array([atom.get_mass() for atom in model.atom])
+    masses = tf.expand_dims(masses, axis=1)
+    masses = tf.dtypes.cast(masses, dtype = tf.float32)
+    features = tf.concat([masses, features], -1)
+    features = tf.expand_dims(features, axis=0)
     while (step<max_steps):
         positions = get_positions()
         positions = tf.expand_dims(positions, axis=0)
         stacked_features = tf.concat([positions, features], axis=-1)
-        compressed_noise = tf.random.truncated_normal((1, tf.shape(positions)[1], 5), stddev=0.0001)
-        output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=0.0001)
+        compressed_noise = tf.random.truncated_normal((1, tf.shape(positions)[1], 5), stddev=0.01)
+        output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=0.01)
         forces = agent([stacked_features, compressed_noise, output_noise])
         cmd.frame(30*length)
         translate(forces)
