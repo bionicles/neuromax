@@ -31,7 +31,7 @@ TENSORBOARD = False
 PLOT_MODEL = True
 MAX_STEPS = 420
 MAKE_MOVIE = True
-num_steps_gif = 40
+num_steps_gif = 15
 # hyperparameters
 dimensions = [
     skopt.space.Integer(1, 4, name='c_blocks'),
