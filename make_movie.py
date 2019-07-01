@@ -104,7 +104,7 @@ def make_gif(pdb_name):
         images.append(image)
     print('saving gif to', gif_path)
     imageio.mimsave(gif_path + pdb_name + ".gif", images)
-    shutil.rmtree(pngs_path)
+    #shutil.rmtree(pngs_path)
 
 def generate_movie(movie_name, pdb_name, agent, num_steps_gif):
     chains = prepare_pymol(pdb_name)
@@ -116,7 +116,6 @@ def generate_movie(movie_name, pdb_name, agent, num_steps_gif):
         for i in range(3):
             cmd.rotate(axis[i], rotation[i], object=chain+chain)
     unfold()
-    num_steps_gif = 3
     step = 0
     model = cmd.get_model('all', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
@@ -126,9 +125,11 @@ def generate_movie(movie_name, pdb_name, agent, num_steps_gif):
     masses = tf.dtypes.cast(masses, dtype = tf.float32)
     features = tf.concat([masses, features], -1)
     features = tf.expand_dims(features, axis=0)
-    png_path = "pngs/screenshot"
-    cmd.zoom("all")
+    png_path = png_path = "pngs"
+    if not os.path.exists(png_path):
+        os.makedirs(png_path)
     while (step<num_steps_gif):
+        cmd.zoom("all")
         positions = get_positions()
         positions = tf.expand_dims(positions, axis=0)
         stacked_features = tf.concat([positions, features], axis=-1)
