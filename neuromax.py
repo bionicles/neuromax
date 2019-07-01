@@ -31,6 +31,7 @@ TENSORBOARD = False
 PLOT_MODEL = True
 MAX_STEPS = 420
 MAKE_MOVIE = True
+num_steps_gif = 40
 # hyperparameters
 dimensions = [
     skopt.space.Integer(1, 4, name='c_blocks'),
@@ -301,7 +302,7 @@ def trial(**kwargs):
             try:
                 total_change = train(agent, optimizer, proteins)
                 if MAKE_MOVIE:
-                    generate_movie(length=10, movie_name ="neuromax", pdb_name='4lgp', agent=agent)
+                    generate_movie(movie_name ="neuromax", pdb_name='4lgp', agent=agent, num_steps_gif=num_steps_gif)
                 total_change = total_change.numpy().item(0)
                 print('repeat', repeat_number + 1, 'total change:', total_change, '%\n')
                 changes.append(total_change)

@@ -4,8 +4,10 @@ import random
 import numpy as np
 import time
 import os
+import shutil
+import imageio
 axis = ['x', 'y', 'z']
-
+IMAGE_SIZE = 256
 def move_atom(xyz, atom_index):
     atom_selection_string = 'id ' + str(atom_index)
     xyz = xyz.numpy().tolist()
@@ -44,11 +46,6 @@ def get_atom_features(atom):
 def prepare_pymol(pdb_name):
     # setup PyMOL for movies
     cmd.reinitialize()
-    cmd.set('matrix_mode', 1)
-    cmd.set('movie_panel', 1)
-    cmd.set('scene_buttons', 1)
-    cmd.set('cache_frames', 1)
-    cmd.config_mouse('three_button_motions', 1)
     if not os.path.exists("pdbs/" + pdb_name + ".pdb"):
         print('fetching', pdb_name)
         cmd.fetch(pdb_name, path=os.path.join('.', 'pdbs'), type='pdb')
@@ -87,29 +84,39 @@ def unfold():
     np.array([unfold_index(name, index) for name, index in
               cmd.index('byca (chain {})'.format('AA'))])
 
-def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
+def make_gif(pdb_name):
+    gif_name = '{}.gif'.format(pdb_name)
+    gif_path = os.path.join("gifs", gif_name)
+    imagepaths, images = [], []
+    pngs_path = "./pngs"
+    gif_path = "./gifs/"
+    if not os.path.exists(pngs_path):
+        os.makedirs(pngs_path)
+    if not os.path.exists(gif_path):
+        os.makedirs(gif_path)
+    for stackname in os.listdir(pngs_path):
+        print('processing', stackname)
+        filepath = os.path.join(pngs_path, stackname)
+        imagepaths.append(filepath)
+    imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    for imagepath in imagepaths:
+        image = imageio.imread(imagepath)
+        images.append(image)
+    print('saving gif to', gif_path)
+    imageio.mimsave(gif_path + pdb_name + ".gif", images)
+    shutil.rmtree(pngs_path)
+
+def generate_movie(movie_name, pdb_name, agent, num_steps_gif):
     chains = prepare_pymol(pdb_name)
-    cmd.mset("1x"+str(30*length))
-    cmd.zoom("all", buffer=42, state=-1)
-    cmd.frame(1)
-    cmd.mview("store", object='all')
-    cmd.frame(30*start_after) # start animation after start_after
-    cmd.mview("store", object='all')
-    cmd.frame(30*length*0.3)
     for chain in chains:
         translation = [np.random.randint(-50, 50), np.random.randint(-50, 50), np.random.randint(-50, 50)]
         cmd.translate(translation, object=chain+chain)
-        cmd.mview('store', object='all')
-    cmd.frame(30*length*0.3)
     for chain in chains:
         rotation = [np.random.randint(-50, 50), np.random.randint(-50, 50), np.random.randint(-50, 50)]
         for i in range(3):
             cmd.rotate(axis[i], rotation[i], object=chain+chain)
-    cmd.mview('store', object='all')
-    cmd.frame(30*2)
     unfold()
-    cmd.mview('store', object='all')
-    max_steps = 5
+    num_steps_gif = 3
     step = 0
     model = cmd.get_model('all', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
@@ -119,15 +126,16 @@ def generate_movie(length, movie_name, pdb_name, agent, start_after = 1):
     masses = tf.dtypes.cast(masses, dtype = tf.float32)
     features = tf.concat([masses, features], -1)
     features = tf.expand_dims(features, axis=0)
-    while (step<max_steps):
+    png_path = "pngs/screenshot"
+    cmd.zoom("all")
+    while (step<num_steps_gif):
         positions = get_positions()
         positions = tf.expand_dims(positions, axis=0)
         stacked_features = tf.concat([positions, features], axis=-1)
         compressed_noise = tf.random.truncated_normal((1, tf.shape(positions)[1], 5), stddev=0.01)
         output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=0.01)
         forces = agent([stacked_features, compressed_noise, output_noise])
-        cmd.frame(30*length)
         translate(forces)
-        cmd.mview('store', object='all')
+        cmd.png(png_path + str(step) + ".png", width=IMAGE_SIZE, height=IMAGE_SIZE)
         step += 1
-    movie.produce(filename = movie_name+'.mpg')
+    make_gif(pdb_name)
