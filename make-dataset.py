@@ -42,10 +42,13 @@ def get_atom_features(atom):
                      atom.partial_charge,
                      atom.vdw,
                      atom.b,
+                     atom.q,
                      atom.get_free_valence(0),
-                     sum([ord(i) for i in atom.resi]) / len(atom.resi),
-                     sum([ord(i) for i in atom.resn]) / len(atom.resn),
-                     sum([ord(i) for i in atom.symbol])/ len(atom.symbol)])
+                     atom.resi,
+                     atom.index,
+                     sum([ord(i)/122 for i in atom.resn]) / len(atom.resn),
+                     sum([ord(i)/122 for i in atom.symbol]) / len(atom.symbol),
+                     sum([ord(i)/122 for i in atom.name]) / len(atom.name)])
 
 
 def undock(chains):
@@ -69,11 +72,11 @@ def unfold(chains):
 
 def unfold_index(name, index):
     selection_string_array = [
-        'first (({}`{}) extend 2 and name C)'.format(name, index),  # prev C
-        'first (({}`{}) extend 1 and name N)'.format(name, index),  # this N
-        '({}`{})'.format(name, index),                              # this CA
-        'last (({}`{}) extend 1 and name C)'.format(name, index),   # this C
-        'last (({}`{}) extend 2 and name N)'.format(name, index)]   # next N
+        f'first (({name}`{index}) extend 2 and name C)',  # prev C
+        f'first (({name}`{index}) extend 1 and name N)',  # this N
+        f'({name}`{index})',                              # this CA
+        f'last (({name}`{index}) extend 1 and name C)',   # this C
+        f'last (({name}`{index}) extend 2 and name N)']   # next N
     try:
         cmd.set_dihedral(selection_string_array[0],
                          selection_string_array[1],
@@ -147,7 +150,7 @@ def write_shards(pedagogy):
             writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
             k += 1
         try:
-            data = load(protein)
+            protein = load(protein)
             writer.write(data)
         except Exception as e:
             print('failed on', p, protein)
