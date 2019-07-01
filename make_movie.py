@@ -6,27 +6,24 @@ import time
 import os
 axis = ['x', 'y', 'z']
 
-def move_atom(xyz):
+def move_atom(xyz, atom_index):
     atom_selection_string = 'id ' + str(atom_index)
     xyz = xyz.numpy().tolist()
     cmd.translate(xyz, atom_selection_string)
     atom_index += 1
 
 def translate(force):
-    force = tf.reduce_sum(force, axis=-1)
+    force = tf.squeeze(force, axis=0)
+    force = tf.transpose(force)
     model = cmd.get_model('all', 1)
     masses = np.array([atom.get_mass() for atom in model.atom])
+    masses = [masses, masses, masses]
     velocity = force / masses
+    velocity = tf.transpose(velocity)*100
     atom_index = 0
     for xyz in velocity:
-        translate_atom(xyz, atom_index)
+        move_atom(xyz, atom_index)
         atom_index += 1
-
-def translate_atom(vector, atom_index):
-    # print("translate_atom", vector, type(vector), vector.shape)
-    movement_vector = list(vector) # list(movement_vector)
-    atom_selection_string = "id " + str(atom_index)
-    cmd.translate(movement_vector, atom_selection_string)
 
 def get_positions():
     model = cmd.get_model('all', 1)
