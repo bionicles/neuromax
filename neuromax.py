@@ -23,13 +23,11 @@ best_trial = ''
 best_args = []
 best = 12345678900
 # training parameters
-PRINT_LOSS_EVERY_STEP = False
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
 STOP_LOSS_MULTIPLE = 1.2
 EPISODES_PER_TRIAL = 370
 REPEATS_PER_TRIAL = 5
 TENSORBOARD = False
-PLOT_MODEL = True
 MAX_STEPS = 420
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
@@ -247,8 +245,6 @@ def trial(**kwargs):
         masses = masses * hp.kMass
         initial_loss = get_loss(initial_positions, positions)
         stop = initial_loss * 1.04
-        if tf.math.equal(stop, 0):
-            return 4.
         loss = 0.
         for step in tf.range(MAX_STEPS):
             with tf.GradientTape() as tape:
@@ -258,8 +254,6 @@ def trial(**kwargs):
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
             loss = tf.reduce_sum(loss)
-            if PRINT_LOSS_EVERY_STEP:
-                tf.print(step, 'stop', stop, 'loss', loss)
             if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
                 break
             new_stop = loss * STOP_LOSS_MULTIPLE
@@ -274,7 +268,7 @@ def trial(**kwargs):
         total_change = 0.
         episode = 0
         for initial_positions, positions, features, masses, forces, velocities, pdb_id, n_atoms in proteins:
-            if episode >= EPISODES_PER_TRIAL:
+            if episode >= EPISODES_PER_TRIAL or n_atoms == 0:
                 break
             change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
             if tf.math.is_nan(change):
@@ -307,10 +301,9 @@ def trial(**kwargs):
         loss = 1234567890
 
     if tf.math.less(loss, best):
-        if PLOT_MODEL:
-            plot_path = os.path.join('.', 'runs', trial_name + '.png')
-            K.utils.plot_model(agent, plot_path, show_shapes=True)
-            agent.summary()
+        plot_path = os.path.join('.', 'runs', trial_name + '.png')
+        K.utils.plot_model(agent, plot_path, show_shapes=True)
+        agent.summary()
         averages = [ema.average(weight).numpy() for weight in agent.weights]
         agent.set_weights(averages)
         tf.saved_model.save(agent, os.path.join(log_dir, trial_name + ".h5"))
@@ -367,6 +360,7 @@ def experiment():
         x0 = hyperpriors
         results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
     print(results)
+
 
 if __name__ == '__main__':
     experiment()
