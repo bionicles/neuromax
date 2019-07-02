@@ -37,18 +37,23 @@ def get_positions():
 
 
 def get_atom_features(atom):
-    return np.array([sum([ord(i) for i in atom.chain]),
+    resi = atom.resi
+    try:
+        resi = float(resi)
+    except Exception as e:
+        resi = float(resi[0:-1]) + float(ord(resi[-1])) / 122.
+    return np.array([sum([ord(i) / 122 for i in atom.chain]),
                      atom.formal_charge,
                      atom.partial_charge,
                      atom.vdw,
                      atom.b,
                      atom.q,
                      atom.get_free_valence(0),
-                     atom.resi,
+                     resi,
                      atom.index,
-                     sum([ord(i) for i in atom.resn]),
-                     sum([ord(i) for i in atom.symbol]),
-                     sum([ord(i) for i in atom.name])], dtype=np.float32)
+                     sum([ord(i) / 122 for i in atom.resn]),
+                     sum([ord(i) / 122 for i in atom.symbol]),
+                     sum([ord(i) / 122 for i in atom.name])], dtype=np.float32)
 
 
 def undock(chains):
@@ -103,6 +108,7 @@ def load(pdb_id):
         print('loading', pdb_path)
         cmd.load(pdb_path)
     cmd.remove("all and not (alt '')")  # remove alternate conformations
+    cmd.alter("all", 'alt=""')
     cmd.remove('solvent')
     cmd.select(name='current', selection='all')
     initial_positions = get_positions()
