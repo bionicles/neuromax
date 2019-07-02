@@ -3,12 +3,18 @@ from plots import plot_objective, plot_evaluations
 import matplotlib.pyplot as plt
 from tensorboard import program
 from attrdict import AttrDict
+from pymol import cmd, util
+import multiprocessing
 import numpy as np
 import webbrowser
+import random
+import imageio
+import shutil
 import skopt
 import math
 import time
 import os
+from make_dataset import load_pedagogy, load
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -19,18 +25,22 @@ L = tf.keras.layers
 K = tf.keras
 # globals
 trial_number = 0
+atom_index = 0
 best_trial = ''
 best_args = []
 best = 12345678900
-# training parameters
+# parameters
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
 STOP_LOSS_MULTIPLE = 1.2
-EPISODES_PER_TRIAL = 370
+EPISODES_PER_TRIAL = 512
 REPEATS_PER_TRIAL = 5
 TENSORBOARD = False
 MAX_STEPS = 420
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
+MOVIE_STYLE = "spheres"
+IMAGE_SIZE = 256
+N_MOVIES = 5
 # hyperparameters
 dimensions = [
     skopt.space.Integer(1, 4, name='c_blocks'),
@@ -64,7 +74,6 @@ hyperpriors = [
     0.3622929]  # kMass
 
 
-# begin agent
 class NoisyDropConnectDense(L.Dense):
     def __init__(self, *args, **kwargs):
         layer = kwargs.pop('layer')
@@ -189,7 +198,7 @@ def parse_protein(example):
     initial_positions = tf.reshape(tf.io.parse_tensor(
         sequence['initial_positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(
-        sequence['features'][0], tf.float32), [-1, 9])
+        sequence['features'][0], tf.float32), [-1, 12])
     masses = tf.reshape(tf.io.parse_tensor(
         sequence['masses'][0], tf.float32), [-1, 1])
     positions = tf.reshape(tf.io.parse_tensor(
@@ -220,7 +229,7 @@ def trial(**kwargs):
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
 
-    agent, trial_name = get_agent(trial_number, 13, 5, 3, hp)
+    agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     averages = ema.apply(agent.weights)
 
@@ -268,7 +277,7 @@ def trial(**kwargs):
         total_change = 0.
         episode = 0
         for initial_positions, positions, features, masses, forces, velocities, pdb_id, n_atoms in proteins:
-            if episode >= EPISODES_PER_TRIAL or n_atoms == 0:
+            if episode >= EPISODES_PER_TRIAL:
                 break
             change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
             if tf.math.is_nan(change):
@@ -306,6 +315,7 @@ def trial(**kwargs):
         agent.summary()
         averages = [ema.average(weight).numpy() for weight in agent.weights]
         agent.set_weights(averages)
+        make_gifs(agent, trial_name, hp.stddev, N_MOVIES, IMAGE_SIZE, MAX_STEPS, STOP_LOSS_MULTIPLE)
         tf.saved_model.save(agent, os.path.join(log_dir, trial_name + ".h5"))
         best_trial = trial_name
         best = loss
@@ -321,7 +331,81 @@ def trial(**kwargs):
         return loss, elapsed
     else:
         return loss
-# end training
+
+
+def move_atom(xyz):
+    global atom_index
+    xyz = xyz.tolist()
+    cmd.translate(xyz, f'id {str(atom_index)}')
+    atom_index += 1
+
+
+def move_atoms(velocities):
+    global atom_index
+    atom_index = 0
+    np.array([move_atom(xyz) for xyz in velocities])
+
+
+def prepare_pymol():
+    cmd.set('max_threads', multiprocessing.cpu_count())
+    cmd.show(MOVIE_STYLE)
+    cmd.unpick()
+    util.cbc()
+
+
+def make_gif(pdb_name, trial_name, pngs_path):
+    gif_name = f'{pdb_name}-{trial_name}.gif'
+    gif_path = os.path.join(".", "gifs", gif_name)
+    imagepaths, images = [], []
+    for stackname in os.listdir(pngs_path):
+        print('processing', stackname)
+        filepath = os.path.join(pngs_path, stackname)
+        imagepaths.append(filepath)
+    imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    for imagepath in imagepaths:
+        image = imageio.imread(imagepath)
+        images.append(image)
+    print('saving gif to', gif_path)
+    imageio.mimsave(gif_path + pdb_name + ".gif", images)
+
+
+def make_gifs(agent, trial_name, stddev, n_movies, image_size, max_steps, stop_loss_multiple):
+    pngs_path = os.path.join('.', 'pngs')
+    pedagogy = load_pedagogy()
+    for movie_number in range(n_movies):
+        step = 0
+        try:
+            shutil.rmtree(pngs_path)
+        except Exception as e:
+            print(e)
+        os.makedirs(pngs_path)
+        pdb_id = random.choice(pedagogy)
+        initial_positions, positions, features, masses, forces, velocities, _, n_atoms = parse_protein(load(pdb_id))
+        prepare_pymol()
+        [initial_positions, positions, features, masses, forces, velocities] = [tf.expand_dims(x, 0) for x in [initial_positions, positions, features, masses, forces, velocities]]
+        velocities = tf.random.truncated_normal(tf.shape(positions), stddev=stddev)
+        initial_loss = get_loss(initial_positions, positions)
+        stop_loss = initial_loss * stop_loss_multiple
+        while step < max_steps:
+            stacked_features = tf.concat([positions, features], axis=-1)
+            compressed_noise = tf.random.truncated_normal((1, n_atoms, 5), stddev=stddev)
+            output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=stddev)
+            forces = agent([stacked_features, compressed_noise, output_noise])
+            velocities = velocities + forces / masses
+            positions = positions + velocities
+            loss = get_loss(initial_positions, positions)
+            tf.print("step", step, "loss", loss, "stop", stop_loss)
+            if loss > stop_loss:
+                break
+            new_stop = loss * stop_loss_multiple
+            if new_stop < stop_loss:
+                stop_loss = new_stop
+            move_atoms(tf.squeeze(velocities, 0).numpy())
+            cmd.zoom("all")
+            png_path = os.path.join(pngs_path, f'{str(step)}.png')
+            cmd.png(png_path, width=image_size, height=image_size)
+            step += 1
+        make_gif(pdb_id, trial_name, pngs_path)
 
 
 class PlotCallback(object):

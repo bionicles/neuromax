@@ -17,9 +17,9 @@ PROTEINS_PER_TFRECORD = 8
 DTYPE = tf.float32
 
 
-def load_pedagogy(pedagogy_path):
+def load_pedagogy():
     pedagogy = []
-    with open(pedagogy_path) as csvfile:
+    with open(os.path.join('.', 'csvs', CSV_FILE_NAME)) as csvfile:
         reader = csv.reader(csvfile)
         results = []
         for row in reader:
@@ -37,7 +37,7 @@ def get_positions():
 
 
 def get_atom_features(atom):
-    return np.array([ord(atom.chain.lower())/122,
+    return np.array([sum([ord(i) for i in atom.chain]),
                      atom.formal_charge,
                      atom.partial_charge,
                      atom.vdw,
@@ -46,9 +46,9 @@ def get_atom_features(atom):
                      atom.get_free_valence(0),
                      atom.resi,
                      atom.index,
-                     sum([ord(i)/122 for i in atom.resn]) / len(atom.resn),
-                     sum([ord(i)/122 for i in atom.symbol]) / len(atom.symbol),
-                     sum([ord(i)/122 for i in atom.name]) / len(atom.name)])
+                     sum([ord(i) for i in atom.resn]),
+                     sum([ord(i) for i in atom.symbol]),
+                     sum([ord(i) for i in atom.name])], dtype=np.float32)
 
 
 def undock(chains):
@@ -91,14 +91,14 @@ def unfold_index(name, index):
         print(e)
 
 
-def load(protein):
+def load(pdb_id):
     cmd.delete('all')
-    pdb_file_name = protein + '.pdb'
+    pdb_file_name = pdb_id + '.pdb'
     pdb_path = os.path.join('.', 'pdbs', pdb_file_name)
     print('')
     if not os.path.exists(pdb_path):
-        print('fetching', protein)
-        cmd.fetch(protein, path=os.path.join('.', 'pdbs'), type='pdb')
+        print('fetching', pdb_id)
+        cmd.fetch(pdb_id, path=os.path.join('.', 'pdbs'), type='pdb')
     elif os.path.exists(pdb_path):
         print('loading', pdb_path)
         cmd.load(pdb_path)
@@ -115,7 +115,7 @@ def load(protein):
     undock(chains)
     unfold(chains)
     positions = get_positions()
-    return make_example(protein, initial_positions, positions, features, masses)
+    return make_example(pdb_id, initial_positions, positions, features, masses)
 
 
 def make_example(protein, initial_positions, positions, features, masses):
@@ -150,7 +150,7 @@ def write_shards(pedagogy):
             writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
             k += 1
         try:
-            protein = load(protein)
+            data = load(protein)
             writer.write(data)
         except Exception as e:
             print('failed on', p, protein)
@@ -174,9 +174,7 @@ def main():
     except Exception as e:
         print('os.path.makedirs(tfrecord_path) exception', e)
 
-    pedagogy_path = os.path.join('.', 'csvs', CSV_FILE_NAME)
-    pedagogy = load_pedagogy(pedagogy_path)
-    # p.map(write_shards, pedagogy)
+    pedagogy = load_pedagogy()
     write_shards(pedagogy)
 
 
