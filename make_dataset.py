@@ -6,10 +6,6 @@ import random
 import shutil
 import csv
 import os
-# from multiprocessing import Pool
-# import secrets
-tf.enable_eager_execution()
-# from cpuinfo import get_cpu_info
 
 CSV_FILE_NAME = 'less-than-164kd-9-chains.csv'
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64

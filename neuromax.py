@@ -3,6 +3,7 @@ from plots import plot_objective, plot_evaluations
 import matplotlib.pyplot as plt
 from tensorboard import program
 from attrdict import AttrDict
+from functools import wraps
 from pymol import cmd, util
 import multiprocessing
 import numpy as np
@@ -17,8 +18,6 @@ import os
 from make_dataset import load_pedagogy, load
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
-tf.logging.set_verbosity(tf.logging.ERROR)
-tf.compat.v1.enable_eager_execution()
 plt.set_cmap("viridis")
 B = tf.keras.backend
 L = tf.keras.layers
@@ -34,7 +33,7 @@ ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
 STOP_LOSS_MULTIPLE = 1.2
 EPISODES_PER_TRIAL = 64
 REPEATS_PER_TRIAL = 6
-TENSORBOARD = False
+TENSORBOARD = True
 MAX_STEPS = 420
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
@@ -43,11 +42,11 @@ IMAGE_SIZE = 256
 N_MOVIES = 5
 # hyperparameters
 dimensions = [
-    skopt.space.Integer(1, 6, name='c_blocks'),
+    skopt.space.Integer(1, 4, name='c_blocks'),
     skopt.space.Categorical(['c_res_deep', 'c_res_wide_deep', 'c_conv_deep', 'c_conv_wide_deep'], name="c"),
     skopt.space.Integer(1, 3, name='c_layers'),
     skopt.space.Integer(1, 1024, name='c_units'),
-    skopt.space.Integer(1, 6, name='p_blocks'),
+    skopt.space.Integer(1, 8, name='p_blocks'),
     skopt.space.Categorical(['p_res_deep', 'p_res_wide_deep', 'p_conv_deep', 'p_conv_wide_deep'], name='p'),
     skopt.space.Integer(1, 3, name='p_layers'),
     skopt.space.Integer(1, 1024, name='p_units'),
@@ -58,18 +57,27 @@ dimensions = [
     skopt.space.Integer(10, 1000000, name='decay')]  # major factor in step size
 hyperpriors = [
     2,  # compressor_blocks,
-    'c_conv_deep',  # compressor block type
+    'c_res_deep',  # compressor block type
     1,  # compressor_layers
-    256,  # compressor_units
-    2,  # pair_blocks
-    'p_conv_deep',  # pair block type
+    257,  # compressor_units
+    8,  # pair_blocks
+    'p_conv_wide_deep',  # pair block type
     1,  # pair_layers
-    1024,  # pair_units,
+    257,  # pair_units,
     0.02,  # stddev
     'normal',
     'first',  # norm
     0.004,  # lr
     100000]  # decay_steps
+
+
+def trace_function(fn, *args):
+    tf.summary.trace_on(graph=True, profiler=True)
+    y = fn(*args)
+    with writer.as_default():
+        tf.summary.trace_export(name="trace_function",
+                                step=0, profiler_outdir=log_dir)
+    return y
 
 
 class NoisyDropConnectDense(L.Dense):
@@ -86,7 +94,6 @@ class NoisyDropConnectDense(L.Dense):
         else:
             self.call = self.normal_call
 
-    @tf.function
     def add_noise(self):
         return self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.stddev), self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.stddev)
 
@@ -210,7 +217,6 @@ def parse_protein(example):
 
 def read_shards(filenames):
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
-    dataset = dataset.shuffle(buffer_size=1237)
     dataset = dataset.map(map_func=parse_protein, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1)
     return dataset.prefetch(buffer_size=1)
@@ -237,18 +243,9 @@ def trial(**kwargs):
     agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     averages = ema.apply(agent.weights)
-    global_step = tf.train.get_or_create_global_step()
-    tf.assign(global_step, 0)
-    optimizer = tf.keras.optimizers.Adam(tf.train.cosine_decay_restarts(tf.cast(hp.lr, tf.float32), global_step, hp.decay), amsgrad=True)
-    writer = tf.contrib.summary.create_file_writer(log_dir)
-
-    # @tf.function
-    # def run_step(agent, optimizer, positions, features, masses, forces, velocities):
-    #     stacked_features = tf.concat([positions, features], axis=-1)
-    #     compressed_noise = tf.random.truncated_normal((1, tf.shape(positions)[1], 5), stddev=hp.stddev)
-    #     output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=hp.stddev)
-    #     velocities = velocities + (agent([stacked_features, compressed_noise, output_noise]) / masses)
-    #     return positions + velocities, velocities
+    global_step = 0
+    optimizer = tf.keras.optimizers.Adam(tf.keras.experimental.CosineDecayRestarts(tf.cast(hp.lr, tf.float32), global_step, hp.decay), amsgrad=True)
+    writer = tf.summary.create_file_writer(log_dir)
 
     @tf.function
     def run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
@@ -265,44 +262,46 @@ def trial(**kwargs):
                 velocities = velocities + (agent([stacked_features, compressed_noise, output_noise]) / masses)
                 positions = positions + velocities
                 meta, overlap = get_losses(initial_distances, positions)
+                # tf.print("meta", meta, "overlap", overlap)
             gradients = tape.gradient([meta, overlap], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+            ema.apply(agent.weights)
             loss = tf.reduce_sum(meta) + tf.reduce_sum(overlap)
             new_stop = loss * STOP_LOSS_MULTIPLE
-            if tf.math.logical_or(tf.math.greater(loss, stop), tf.is_nan(loss)):
+            if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
                 break
             elif tf.math.less(new_stop, stop):
                 stop = new_stop
         return ((loss - initial_loss) / initial_loss) * 100
 
-    @tf.function
     def train(agent, optimize, proteins):
+        proteins = proteins.shuffle(buffer_size=1237)
         total_change = 0.
         episode = 0
         for initial_positions, positions, features, masses, forces, velocities, pdb_id, n_atoms in proteins:
             if episode >= EPISODES_PER_TRIAL:
                 break
-            change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
-            ema.apply(agent.weights)
+            change = trace_function(run_episode, agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
+            # change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
+            tf,print("change", change)
             if tf.math.is_nan(change):
                 change = 100.
             tf.print('episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', tf.math.round(change), "% change (lower is better)")
-            tf.contrib.summary.scalar('change', change)
+            tf.summary.scalar('change', change)
             total_change = total_change + change
             episode = episode + 1
         return total_change
 
-    with writer.as_default(), tf.contrib.summary.always_record_summaries():
-        changes = []
-        for repeat_number in range(REPEATS_PER_TRIAL):
-            try:
-                total_change = train(agent, optimizer, proteins)
-                total_change = total_change.numpy().item(0)
-                print('repeat', repeat_number + 1, 'total change:', total_change, '%')
-                changes.append(total_change)
-            except Exception as e:
-                total_change = EPISODES_PER_TRIAL * 100 * STOP_LOSS_MULTIPLE
-                print(e)
+    changes = []
+    for repeat_number in range(REPEATS_PER_TRIAL):
+        try:
+            total_change = train(agent, optimizer, proteins)
+            total_change = total_change.numpy().item(0)
+            print('repeat', repeat_number + 1, 'total change:', total_change, '%')
+            changes.append(total_change)
+        except Exception as e:
+            total_change = EPISODES_PER_TRIAL * 100 * STOP_LOSS_MULTIPLE
+            print(e)
 
     median = np.median(changes)
     stddev = np.std(changes)
@@ -312,7 +311,7 @@ def trial(**kwargs):
     print('objective:', objective)
     if math.isnan(objective):
         objective = 100 * EPISODES_PER_TRIAL
-    if tf.math.less(objective, best):
+    elif tf.math.less(objective, best):
         plot_path = os.path.join('.', 'runs', trial_name + '.png')
         K.utils.plot_model(agent, plot_path, show_shapes=True)
         agent.summary()
