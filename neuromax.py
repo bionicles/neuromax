@@ -23,6 +23,7 @@ B = tf.keras.backend
 L = tf.keras.layers
 K = tf.keras
 # globals
+proteins = None
 trial_number = 0
 atom_index = 0
 best_trial = ''
@@ -57,7 +58,7 @@ dimensions = [
     skopt.space.Integer(10, 1000000, name='decay')]  # major factor in step size
 hyperpriors = [
     2,  # compressor_blocks,
-    'c_res_deep',  # compressor block type
+    'c_conv_wide_deep',  # compressor block type
     1,  # compressor_layers
     257,  # compressor_units
     8,  # pair_blocks
@@ -115,7 +116,6 @@ class NoisyDropConnectDense(L.Dense):
 
 def get_layer(units, hp):
     return NoisyDropConnectDense(units, activation="tanh", layer=hp.layer, stddev=hp.stddev)
-    # return L.Dense(units, activation="tanh")
 
 
 class ConvKernel(L.Layer):
@@ -133,7 +133,7 @@ class ConvPair(L.Layer):
         self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, (d_features + d_output), d_output, pair=True)
 
     def call(self, inputs):
-        return tf.vectorized_map(lambda a1: tf.reduce_sum(tf.vectorized_map(
+        return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(
                 lambda a2: self.kernel([a1, a2]), inputs), axis=0), inputs)
 
 
@@ -235,20 +235,47 @@ def get_distances(xyz):
     return d - 2 * tf.matmul(xyz, xyz, transpose_b=True) + tf.transpose(d)
 
 
+def experiment():
+    global log_dir, proteins
+    log_dir = os.path.join('.', 'runs', str(time.time()))
+
+    if TENSORBOARD:
+        tb = program.TensorBoard()
+        tb.configure(argv=[None, '--logdir', log_dir])
+        webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
+
+    path = os.path.join('.', 'tfrecords')
+    filenames = [os.path.join(path, name) for name in os.listdir(path)]
+    proteins = read_shards(filenames)
+    checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
+    checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
+    plotter = PlotCallback('.')
+    try:
+        res = skopt.load(checkpoint_path)
+        x0 = res.x_iters
+        y0 = res.func_vals
+        results = skopt.gp_minimize(trial, dimensions, x0=x0, y0=y0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
+    except Exception as e:
+        print(e)
+        x0 = hyperpriors
+        results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
+    print(results)
+
+
 @skopt.utils.use_named_args(dimensions=dimensions)
 def trial(**kwargs):
-    global run_step, best, best_trial, best_args, trial_number, writer
+    global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp, proteins
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
     agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     averages = ema.apply(agent.weights)
-    global_step = 0
-    optimizer = tf.keras.optimizers.Adam(tf.keras.experimental.CosineDecayRestarts(tf.cast(hp.lr, tf.float32), global_step, hp.decay), amsgrad=True)
+    optimizer = tf.keras.optimizers.Adam(tf.keras.experimental.CosineDecayRestarts(hp.lr, hp.decay), amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    @tf.function
-    def run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
+    @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 13), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
+    def run_episode(initial_positions, positions, features, masses, forces, velocities):
+        print('tracing run episode')
         initial_distances = get_distances(initial_positions)
         meta, overlap = get_losses(initial_distances, positions)
         initial_loss = tf.reduce_sum(meta) + tf.reduce_sum(overlap)
@@ -262,7 +289,7 @@ def trial(**kwargs):
                 velocities = velocities + (agent([stacked_features, compressed_noise, output_noise]) / masses)
                 positions = positions + velocities
                 meta, overlap = get_losses(initial_distances, positions)
-                # tf.print("meta", meta, "overlap", overlap)
+                print(meta, overlap)
             gradients = tape.gradient([meta, overlap], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
@@ -274,16 +301,19 @@ def trial(**kwargs):
                 stop = new_stop
         return ((loss - initial_loss) / initial_loss) * 100
 
-    def train(agent, optimize, proteins):
-        proteins = proteins.shuffle(buffer_size=1237)
+    @tf.function
+    def train(proteins):
+        print("tracing train")
         total_change = 0.
         episode = 0
+        change = 0.
         for initial_positions, positions, features, masses, forces, velocities, pdb_id, n_atoms in proteins:
             if episode >= EPISODES_PER_TRIAL:
                 break
-            change = trace_function(run_episode, agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
-            # change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
-            tf,print("change", change)
+            elif episode is 2:
+                change = trace_function(run_episode, initial_positions, positions, features, masses, forces, velocities)
+            else:
+                change = run_episode(initial_positions, positions, features, masses, forces, velocities)
             if tf.math.is_nan(change):
                 change = 100.
             tf.print('episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', tf.math.round(change), "% change (lower is better)")
@@ -295,7 +325,8 @@ def trial(**kwargs):
     changes = []
     for repeat_number in range(REPEATS_PER_TRIAL):
         try:
-            total_change = train(agent, optimizer, proteins)
+            proteins = proteins.shuffle(buffer_size=1237)
+            total_change = train(proteins)
             total_change = total_change.numpy().item(0)
             print('repeat', repeat_number + 1, 'total change:', total_change, '%')
             changes.append(total_change)
@@ -421,33 +452,6 @@ class PlotCallback(object):
             plt.savefig(os.path.join(self.path, "evaluations.png"))
             _ = plot_objective(results)
             plt.savefig(os.path.join(self.path, "objective.png"))
-
-
-def experiment():
-    global log_dir, proteins
-    log_dir = os.path.join('.', 'runs')
-
-    if TENSORBOARD:
-        tb = program.TensorBoard()
-        tb.configure(argv=[None, '--logdir', log_dir])
-        webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
-
-    path = os.path.join('.', 'tfrecords')
-    filenames = [os.path.join(path, name) for name in os.listdir(path)]
-    proteins = read_shards(filenames)
-    checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
-    checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
-    plotter = PlotCallback('.')
-    try:
-        res = skopt.load(checkpoint_path)
-        x0 = res.x_iters
-        y0 = res.func_vals
-        results = skopt.gp_minimize(trial, dimensions, x0=x0, y0=y0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
-    except Exception as e:
-        print(e)
-        x0 = hyperpriors
-        results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
-    print(results)
 
 
 if __name__ == '__main__':
