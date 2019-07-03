@@ -289,7 +289,7 @@ def trial(**kwargs):
             episode = episode + 1
         return total_change
 
-    with writer.as_default(), tf.contrib.summary.always_record_summaries():
+    with writer.as_default():
         changes = []
         for repeat_number in range(REPEATS_PER_TRIAL):
             try:
