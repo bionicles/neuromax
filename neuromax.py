@@ -3,6 +3,7 @@ from plots import plot_objective, plot_evaluations
 import matplotlib.pyplot as plt
 from tensorboard import program
 from attrdict import AttrDict
+import tensorflow as tf
 from pymol import cmd, util
 import multiprocessing
 import numpy as np
@@ -16,9 +17,6 @@ import time
 import os
 from make_dataset import load_pedagogy, load
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-import tensorflow as tf
-tf.logging.set_verbosity(tf.logging.ERROR)
-tf.compat.v1.enable_eager_execution()
 plt.set_cmap("viridis")
 B = tf.keras.backend
 L = tf.keras.layers
@@ -237,10 +235,9 @@ def trial(**kwargs):
     agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     averages = ema.apply(agent.weights)
-    global_step = tf.train.get_or_create_global_step()
-    tf.assign(global_step, 0)
-    optimizer = tf.keras.optimizers.Adam(tf.train.cosine_decay_restarts(tf.cast(hp.lr, tf.float32), global_step, hp.decay), amsgrad=True)
-    writer = tf.contrib.summary.create_file_writer(log_dir)
+    global_step = 0
+    optimizer = tf.keras.optimizers.Adam(tf.keras.experimental.CosineDecayRestarts(tf.cast(hp.lr, tf.float32), global_step, hp.decay), amsgrad=True)
+    writer = tf.summary.create_file_writer(log_dir)
 
     # @tf.function
     # def run_step(agent, optimizer, positions, features, masses, forces, velocities):
