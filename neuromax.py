@@ -58,7 +58,7 @@ dimensions = [
     skopt.space.Real(0.00001, 0.01, name='lr'),
     skopt.space.Integer(10, 1000000, name='decay')]  # major factor in step size
 hyperpriors = [
-    1,  # compressor_blocks,
+    1,  # ressor_blocks,
     'c_conv_wide_deep',  # compressor block type
     1,  # compressor_layers
     512,  # compressor_units
@@ -278,11 +278,21 @@ def trial(**kwargs):
     global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp, proteins
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
-    agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
-    ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-    averages = ema.apply(agent.weights)
-    lr = tf.keras.experimental.CosineDecayRestarts(hp.lr, hp.decay)
-    optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
+    try:
+        strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"])
+        print('Number of GPU devices: {}'.format(strategy.num_replicas_in_sync))
+        with strategy.scope():
+            agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
+            ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+            averages = ema.apply(agent.weights)
+            lr = tf.keras.experimental.CosineDecayRestarts(hp.lr, hp.decay)
+            optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
+    except:
+        agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
+        ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+        averages = ema.apply(agent.weights)
+        lr = tf.keras.experimental.CosineDecayRestarts(hp.lr, hp.decay)
+        optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
     @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 13), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
