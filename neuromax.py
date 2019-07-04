@@ -286,6 +286,7 @@ def trial(**kwargs):
     global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp, proteins
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
+    lr = tf.cast(hp.lr, tf.float32)
     try:
         strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"])
         print('Number of GPU devices: {}'.format(strategy.num_replicas_in_sync))
@@ -293,13 +294,13 @@ def trial(**kwargs):
             agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
             ema = tf.train.ExponentialMovingAverage(decay=0.9999)
             averages = ema.apply(agent.weights)
-            lr = tf.keras.experimental.CosineDecayRestarts(hp.lr, hp.decay)
+            lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
             optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     except:
         agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
         ema = tf.train.ExponentialMovingAverage(decay=0.9999)
         averages = ema.apply(agent.weights)
-        lr = tf.keras.experimental.CosineDecayRestarts(hp.lr, hp.decay)
+        lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
         optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
