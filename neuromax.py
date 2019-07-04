@@ -1,9 +1,9 @@
 # experiment.py: why? simplify
+# PROTEINS_IN_DATASET = 9892 - 4
 from plots import plot_objective, plot_evaluations
 import matplotlib.pyplot as plt
 from tensorboard import program
 from attrdict import AttrDict
-from functools import wraps
 import multiprocessing
 import numpy as np
 import webbrowser
@@ -33,15 +33,15 @@ best = 12345678900
 # parameters
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
 STOP_LOSS_MULTIPLE = 1.2
-EPISODES_PER_TRIAL = 128
-REPEATS_PER_TRIAL = 128
+EPISODES_PER_TRIAL = 32
+REPEATS_PER_TRIAL = 2
 TENSORBOARD = True
 MAX_STEPS = 420
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
 MOVIE_STYLE = "spheres"
 IMAGE_SIZE = 256
-N_MOVIES = 5
+N_MOVIES = 1
 # hyperparameters
 dimensions = [
     skopt.space.Integer(1, 4, name='c_blocks'),
@@ -56,21 +56,21 @@ dimensions = [
     skopt.space.Categorical(['normal', 'noise', 'drop', 'noisedrop'], name='layer'),
     skopt.space.Categorical(['first', 'all'], name='norm'),
     skopt.space.Real(0.00001, 0.01, name='lr'),
-    skopt.space.Integer(10, 1000000, name='decay')]  # major factor in step size
+    skopt.space.Integer(10, 10000000, name='decay')]  # major factor in step size
 hyperpriors = [
-    1,  # compressor_blocks,
+    2,  # compressor_blocks,
     'c_conv_wide_deep',  # compressor block type
-    1,  # compressor_layers
+    2,  # compressor_layers
     512,  # compressor_units
-    1,  # pair_blocks
+    4,  # pair_blocks
     'p_conv_wide_deep',  # pair block type
-    1,  # pair_layers
+    2,  # pair_layers
     512,  # pair_units,
     0.02,  # stddev
     'noise',
     'first',  # norm
     0.004,  # lr
-    100000]  # decay_steps
+    10000000]  # decay_steps
 
 
 def trace_function(fn, *args):
@@ -126,7 +126,6 @@ class ConvKernel(L.Layer):
         self.kernel = get_kernel(hp.c, hp.c_layers, hp.c_units, hp, d_features, d_output)
 
     def call(self, inputs):
-        print("tracing convkernel call")
         return tf.map_fn(self.kernel, inputs)
 
 
@@ -136,9 +135,9 @@ class ConvPair(L.Layer):
         self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, d_features, d_output, pair=True)
 
     def call(self, inputs):
-        print("tracing convpair call")
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(
-                lambda a2: self.kernel([a1, a2]), inputs), axis=0), inputs)
+                lambda a2: self.kernel([a1, a2]),
+                inputs), axis=0), inputs)
 
 
 def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
@@ -154,19 +153,28 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
     if 'wide' in block_type:
         output = L.Concatenate(-1)([input, output])
     output = get_layer(d_output, hp)(output)
-    if pair:
-        return K.Model([input, input2], output)
-    return K.Model(input, output)
+    return K.Model([input, input2], output) if pair else K.Model(input, output)
+
+
+# def get_holistic_kernel(d_holistic, hp):
+#     input = K.Input((d_features, ))
+#     attended = L.Attention()(input, input)
+#     added = L.Add()([input, attended])
+#     normalized = L.BatchNormalization()(stacked)
+#     average = L.Average()(normalized)
+#     output = L.Dense(hp.d_holistic, activation="tanh")(average)
+#     return K.Model(input, output)
 
 
 def get_block(block_type, hp, features, prior):
     if isinstance(prior, int):
         block_output = features
+        d_features = block_output.shape[-1]
         d_output = prior
     else:
         block_output = L.Concatenate(-1)([features, prior])
+        d_features = block_output.shape[-1]
         d_output = prior.shape[-1]
-    d_features = features.shape[-1]
     if block_type in ["c_conv_deep", "c_conv_wide_deep"]:
         block_output = ConvKernel(hp, d_features, d_output)(block_output)
     elif block_type in ["p_conv_deep", 'p_conv_wide_deep']:
@@ -228,8 +236,8 @@ def read_shards(filenames):
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
     dataset = dataset.map(map_func=parse_protein, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1)
-    # dataset = dataset.apply(tf.data.experimental.prefetch_to_device('/gpu:0'))
     return dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
 
 @tf.function(input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
 def get_losses(initial, xyz):
@@ -256,7 +264,8 @@ def experiment():
         webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
 
     path = os.path.join('.', 'tfrecords')
-    filenames = [os.path.join(path, name) for name in os.listdir(path)]
+    filenames = [os.path.join('.', 'tfrecords', str(i) + '.tfrecord') for i in range(1, 1237)]
+    [print(filename) for filename in filenames]
     proteins = read_shards(filenames)
     checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
     checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
@@ -281,7 +290,7 @@ def trial(**kwargs):
     agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     averages = ema.apply(agent.weights)
-    lr = tf.keras.experimental.CosineDecayRestarts(hp.lr, hp.decay)
+    lr = tf.keras.experimental.CosineDecay(tf.cast(hp.lr, tf.float32), hp.decay)
     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
@@ -292,7 +301,6 @@ def trial(**kwargs):
         total_meta = tf.reduce_sum(meta)
         total_overlap = tf.reduce_sum(overlap)
         initial_loss = total_meta + total_overlap
-        # tf.print("\ninitial:", (total_meta / initial_loss) * 100, "% meta", (total_overlap / initial_loss) * 100, "% overlap")
         velocities = tf.zeros_like(positions)
         stop = initial_loss * STOP_LOSS_MULTIPLE
         loss = 0.
@@ -303,16 +311,16 @@ def trial(**kwargs):
                 meta, overlap = get_losses(initial_distances, positions)
             gradients = tape.gradient([meta, overlap], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+            ema.apply(agent.weights)
             total_meta = tf.reduce_sum(meta)
             total_overlap = tf.reduce_sum(overlap)
             loss = total_meta + total_overlap
-            # tf.print(step, "loss", loss, (total_meta / loss) * 100, "% meta", (total_overlap / loss) * 100, "% overlap")
             new_stop = loss * STOP_LOSS_MULTIPLE
             if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
                 break
             elif tf.math.less(new_stop, stop):
                 stop = new_stop
-        return ((loss - initial_loss) / initial_loss) * 100
+        return (loss - initial_loss) / initial_loss
 
     @tf.function
     def train(proteins):
@@ -322,10 +330,9 @@ def trial(**kwargs):
         for initial_positions, positions, features, masses, pdb_id, n_atoms in proteins:
             with tf.device('/gpu:0'):
                 change = run_episode(initial_positions, positions, features, masses)
-            ema.apply(agent.weights)
             if tf.math.is_nan(change):
                 change = 100.
-            tf.print('episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', tf.math.round(change), "% change (lower is better)")
+            tf.print('episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
             tf.summary.scalar('change', change)
             total_change = total_change + change
             episode = episode + 1
@@ -336,7 +343,7 @@ def trial(**kwargs):
     changes = []
     for repeat_number in range(REPEATS_PER_TRIAL):
         try:
-            proteins = proteins.shuffle(buffer_size=1237)
+            proteins = proteins if repeat_number is 0 else proteins.shuffle(buffer_size=9288)
             total_change = train(proteins)
             total_change = total_change.numpy().item(0)
             print('repeat', repeat_number + 1, 'total change:', total_change, '%')
@@ -411,6 +418,7 @@ def make_gif(pdb_name, trial_name, pngs_path):
     imageio.mimsave(gif_path + pdb_name + ".gif", images)
 
 
+# TODO: REMOVE THIS!
 def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_steps, stop_loss_multiple):
     pngs_path = os.path.join('.', 'pngs')
     pedagogy = load_pedagogy()
@@ -422,27 +430,33 @@ def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_st
             print(e)
         os.makedirs(pngs_path)
         pdb_id = random.choice(pedagogy)
-        initial_positions, positions, features, masses, _, n_atoms = parse_protein(load(pdb_id))
+        initial_positions, positions, features, masses, _, _ = parse_protein(load(pdb_id))
         prepare_pymol()
-        [initial_positions, positions, features, masses, forces, velocities] = [tf.expand_dims(x, 0) for x in [initial_positions, positions, features, masses, forces, velocities]]
-        velocities = tf.random.truncated_normal(tf.shape(positions), stddev=stddev)
+        [initial_positions, positions, features, masses] = [tf.expand_dims(x, 0) for x in [initial_positions, positions, features, masses]]
         initial_distances = get_distances(initial_positions)
-        stop_loss = stop_loss_multiple * tf.reduce_sum([tf.reduce_sum(l) for l in get_losses(initial_distances, positions)])
+        meta, overlap = get_losses(initial_distances, positions)
+        total_meta = tf.math.sqrt(tf.reduce_sum(meta))
+        total_overlap = tf.reduce_sum(overlap)
+        initial_loss = total_meta + total_overlap
+        stop_loss = initial_loss * stop_loss_multiple
+        velocities = tf.zeros_like(positions)
         while step < max_steps:
             with tf.GradientTape() as tape:
                 velocities = velocities + agent([positions, features]) / masses
                 positions = positions + velocities
-                losses = get_losses(initial_distances, positions)
-            gradients = tape.gradient(losses, agent.trainable_weights)
+                meta, overlap = get_losses(initial_distances, positions)
+            gradients = tape.gradient([meta, overlap], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
-            loss = tf.reduce_sum([tf.reduce_sum(l) for l in losses])
+            total_meta = tf.math.sqrt(tf.reduce_sum(meta))
+            total_overlap = tf.reduce_sum(overlap)
+            loss = total_meta + total_overlap
+            new_stop = loss * stop_loss_multiple
             if loss > stop_loss or tf.math.is_nan(loss):
                 break
-            new_stop = loss * stop_loss_multiple
-            if new_stop < stop_loss:
+            elif new_stop < stop_loss:
                 stop_loss = new_stop
             move_atoms(tf.squeeze(velocities, 0).numpy())
-            cmd.zoom("all")
+            cmd.zoom()
             png_path = os.path.join(pngs_path, f'{str(step)}.png')
             cmd.png(png_path, width=image_size, height=image_size)
             step += 1
