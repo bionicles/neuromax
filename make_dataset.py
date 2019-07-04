@@ -29,7 +29,7 @@ def load_pedagogy():
 def get_positions():
     model = cmd.get_model('all', 1)
     positions = np.array(model.get_coord_list())
-    return tf.convert_to_tensor(positions, dtype=tf.float32)
+    return tf.convert_to_tensor(positions, dtype=DTYPE)
 
 
 def get_atom_features(atom):
@@ -111,9 +111,9 @@ def load(pdb_id):
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
-    features = tf.convert_to_tensor(features, dtype=tf.float32)
+    features = tf.convert_to_tensor(features, dtype=DTYPE)
     masses = np.array([atom.get_mass() for atom in model.atom])
-    masses = tf.convert_to_tensor(masses, dtype=tf.float32)
+    masses = tf.convert_to_tensor(masses, dtype=DTYPE)
     undock(chains)
     unfold(chains)
     positions = get_positions()
