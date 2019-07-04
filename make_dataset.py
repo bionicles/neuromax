@@ -7,7 +7,7 @@ import shutil
 import csv
 import os
 
-CSV_FILE_NAME = 'less-than-164kd-9-chains.csv'
+CSV_FILE_NAME = 'smallbig_less_then_9_chains.csv'
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
 PROTEINS_PER_TFRECORD = 8
 DTYPE = tf.float32
@@ -29,7 +29,7 @@ def load_pedagogy():
 def get_positions():
     model = cmd.get_model('all', 1)
     positions = np.array(model.get_coord_list())
-    return tf.convert_to_tensor(positions, preferred_dtype=DTYPE)
+    return tf.convert_to_tensor(positions, dtype=tf.float32)
 
 
 def get_atom_features(atom):
@@ -94,7 +94,7 @@ def unfold_index(name, index):
 
 def load(pdb_id):
     cmd.delete('all')
-    pdb_file_name = pdb_id + '.pdb'
+    pdb_file_name = pdb_id.lower() + '.pdb'
     pdb_path = os.path.join('.', 'pdbs', pdb_file_name)
     print('')
     if not os.path.exists(pdb_path):
@@ -111,9 +111,9 @@ def load(pdb_id):
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
-    features = tf.convert_to_tensor(features, preferred_dtype=DTYPE)
+    features = tf.convert_to_tensor(features, dtype=tf.float32)
     masses = np.array([atom.get_mass() for atom in model.atom])
-    masses = tf.convert_to_tensor(masses, preferred_dtype=DTYPE)
+    masses = tf.convert_to_tensor(masses, dtype=tf.float32)
     undock(chains)
     unfold(chains)
     positions = get_positions()
