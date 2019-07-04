@@ -25,4 +25,4 @@ data['num_atoms'] = num_atoms
 data = data.nsmallest(data.shape[0], 'num_atoms') # use nlargest for to get the inverse
 data.drop("num_atoms", axis=1, inplace=True)
 data = data.transpose()
-data.to_csv('./csvs/small~>big less then 9 chains.csv')
+data.to_csv('./csvs/small~>big less then 9 chains.csv', index=False)
