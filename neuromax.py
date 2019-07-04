@@ -60,14 +60,14 @@ dimensions = [
 hyperpriors = [
     1,  # compressor_blocks,
     'c_conv_wide_deep',  # compressor block type
-    2,  # compressor_layers
+    1,  # compressor_layers
     512,  # compressor_units
     4,  # pair_blocks
     'p_conv_wide_deep',  # pair block type
-    4,  # pair_layers
-    1024,  # pair_units,
+    1,  # pair_layers
+    512,  # pair_units,
     0.02,  # stddev
-    'noisedrop',
+    'normal',
     'first',  # norm
     0.004,  # lr
     10000000]  # decay_steps
@@ -116,8 +116,7 @@ class NoisyDropConnectDense(L.Dense):
 
 
 def get_layer(units, hp):
-    # return NoisyDropConnectDense(units, activation="tanh", layer=hp.layer, stddev=hp.stddev)
-    return L.Dense(units, activation="tanh")
+    return NoisyDropConnectDense(units, activation="tanh", layer=hp.layer, stddev=hp.stddev)
 
 
 class ConvKernel(L.Layer):
@@ -287,13 +286,6 @@ def trial(**kwargs):
     global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp, proteins
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
-# <<<<<<< HEAD
-#     agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
-#     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-#     averages = ema.apply(agent.weights)
-#     lr = tf.keras.experimental.CosineDecay(tf.cast(hp.lr, tf.float32), hp.decay)
-#     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
-# =======
     try:
         strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"])
         print('Number of GPU devices: {}'.format(strategy.num_replicas_in_sync))
