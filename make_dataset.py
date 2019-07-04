@@ -94,7 +94,7 @@ def unfold_index(name, index):
 
 def load(pdb_id):
     cmd.delete('all')
-    pdb_file_name = pdb_id + '.pdb'
+    pdb_file_name = pdb_id.lower() + '.pdb'
     pdb_path = os.path.join('.', 'pdbs', pdb_file_name)
     print('')
     if not os.path.exists(pdb_path):
