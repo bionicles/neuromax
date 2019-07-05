@@ -9,13 +9,13 @@ def smiles_to_pdb(reaction, path):
     formula_type_index = 0
     for formula in reaction:
         if formula_type_index == 0:
-            formula_type = "_reagent"
+            formula_type = "reagent"
         if formula_type_index == 1:
-            formula_type = "_solvent"
+            formula_type = "solvent"
         if formula == '':
             continue
         if formula_type_index == 2:
-            formula_type = "_product"
+            formula_type = "product"
         mymol = pybel.readstring("smi", formula)
         mymol.make3D()
         mymol.write("pdb", os.path.join(path, formula_type)+'.pdb')
