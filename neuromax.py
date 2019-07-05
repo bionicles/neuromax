@@ -330,7 +330,7 @@ def trial(**kwargs):
                 break
             elif tf.math.less(new_stop, stop):
                 stop = new_stop
-        return (loss - initial_loss) / initial_loss
+        return ((loss - initial_loss) / initial_loss) * 100.
 
     @tf.function
     def train(proteins):
