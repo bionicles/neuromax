@@ -1,6 +1,6 @@
 import pybel
 import os
-
+#https://figshare.com/articles/Chemical_reactions_from_US_patents_1976-Sep2016_/5104873
 pdbs_path = "./reactions"
 reactions = open("rsmi/2001Sep2016USPTOapplicationssmiles.rsmi")
 if not os.path.exists(pdbs_path):
