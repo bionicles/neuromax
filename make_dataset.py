@@ -8,6 +8,8 @@ import csv
 import os
 
 CSV_FILE_NAME = 'smallbig_less_then_9_chains.csv'
+P_UNDOCK = 0.8
+P_UNFOLD = 0.8
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
 PROTEINS_PER_TFRECORD = 8
 DTYPE = tf.float32
@@ -114,8 +116,10 @@ def load(pdb_id):
     features = tf.convert_to_tensor(features, dtype=DTYPE)
     masses = np.array([atom.get_mass() for atom in model.atom])
     masses = tf.convert_to_tensor(masses, dtype=DTYPE)
-    undock(chains)
-    unfold(chains)
+    if random.random() < P_UNDOCK:
+        undock(chains)
+    if random.random() < P_UNFOLD:
+        unfold(chains)
     positions = get_positions()
     return make_example(pdb_id, initial_positions, positions, features, masses)
 
