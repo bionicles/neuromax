@@ -18,7 +18,7 @@ def smiles_to_pdb(reaction, path):
             formula_type = "product"
         mymol = pybel.readstring("smi", formula)
         mymol.make3D()
-        mymol.write("pdb", os.path.join(path, formula_type)+'.pdb')
+        mymol.write("pdb", os.path.join(path, formula_type)+'.pdb', overwrite=True)
         formula_type_index += 1
 
 counter = 0
