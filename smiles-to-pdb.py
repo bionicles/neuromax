@@ -8,17 +8,20 @@ if not os.path.exists(pdbs_path):
 def smiles_to_pdb(reaction, path):
     formula_type_index = 0
     for formula in reaction:
+        write = True
         if formula_type_index == 0:
             formula_type = "reagent"
         if formula_type_index == 1:
             formula_type = "solvent"
         if formula == '':
-            continue
+            write = False
         if formula_type_index == 2:
             formula_type = "product"
-        mymol = pybel.readstring("smi", formula)
-        mymol.make3D()
-        mymol.write("pdb", os.path.join(path, formula_type)+'.pdb', overwrite=True)
+
+        if write:
+            mymol = pybel.readstring("smi", formula)
+            mymol.make3D()
+            mymol.write("pdb", os.path.join(path, formula_type)+'.pdb', overwrite=True)
         formula_type_index += 1
 
 counter = 0
