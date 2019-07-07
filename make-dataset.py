@@ -88,10 +88,10 @@ def unfold_index(name, index):
         print(e)
 
 
-def load(protein):
+def load(id, type):
     cmd.delete('all')
-    pdb_file_name = protein + '.pdb'
-    pdb_path = os.path.join('.', 'pdbs', pdb_file_name)
+    file_name = f'{id}.{type}'
+    path = os.path.join('.', f'{type}s', file_name)
     print('')
     if not os.path.exists(pdb_path):
         print('fetching', protein)
@@ -102,7 +102,8 @@ def load(protein):
     cmd.remove("all and not (alt '')")  # remove alternate conformations
     cmd.remove('solvent')
     cmd.select(name='current', selection='all')
-    initial_positions = get_positions()
+    target_features = get_target_features(path)
+    target_positions = get_positions()
     chains = cmd.get_chains('current')
     model = cmd.get_model('current', 1)
     features = np.array([get_atom_features(atom) for atom in model.atom])
@@ -112,20 +113,21 @@ def load(protein):
     undock(chains)
     unfold(chains)
     positions = get_positions()
-    return make_example(protein, initial_positions, positions, features, masses)
+    return make_example(id, target_positions, positions, features, masses)
 
 
-def make_example(protein, initial_positions, positions, features, masses):
+def make_example(id, target_features, target_positions, positions, features, masses):
     example = tf.train.SequenceExample()
     # non-sequential features
-    example.context.feature["protein"].bytes_list.value.append(bytes(protein, 'utf-8'))
+    example.context.feature["id"].bytes_list.value.append(bytes(id, 'utf-8'))
+    example.context.feature["target_features"].bytes_list.value.append(bytes(target_features, 'utf-8'))
     # sequential features
-    fl_initial_positions = example.feature_lists.feature_list["initial_positions"]
+    fl_target_positions = example.feature_lists.feature_list["target_positions"]
     fl_positions = example.feature_lists.feature_list["positions"]
     fl_features = example.feature_lists.feature_list["features"]
     fl_masses = example.feature_lists.feature_list["masses"]
     # sequential values
-    fl_initial_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(initial_positions).numpy())
+    fl_target_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_positions).numpy())
     fl_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(positions).numpy())
     fl_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(features).numpy())
     fl_masses.feature.add().bytes_list.value.append(tf.io.serialize_tensor(masses).numpy())
