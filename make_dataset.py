@@ -32,7 +32,7 @@ elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 
 
 def load_qm9():
-    path = os.path.join('.', 'datasets', 'qm9')
+    path = os.path.join('.', 'datasets', 'xyz')
     return os.listdir(path)
 
 
@@ -162,6 +162,8 @@ def load(type, id):
     target_features = None
     cmd.delete('all')
     file_name = f'{id}.{type}'
+    if type is not "pdb":
+        file_name = id
     dataset_path = os.path.join('.', 'datasets', type)
     path = os.path.join(dataset_path, file_name)
     # we load the target
@@ -228,7 +230,7 @@ def write_shards(qm9, rxns, pdbs):
     # write qm9 tfrecords
     for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (pdbs, "pdb")]:
         k, p = 0, 0
-        for dataset_item in ProgIter(dataset, verbose=1):
+        for dataset_item in ProgIter(qm9, verbose=1):
             if p % ITEMS_PER_SHARD is 0:
                 try:
                     writer.close()
@@ -241,7 +243,7 @@ def write_shards(qm9, rxns, pdbs):
                 writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
                 k += 1
             try:
-                data = load(type, dataset_item.lower())
+                data = load("xyz", dataset_item.lower())
                 writer.write(data)
             except Exception as e:
                 print('failed on', p, dataset_item)
