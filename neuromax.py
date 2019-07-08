@@ -153,12 +153,11 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
 def get_block(block_type, hp, features, prior):
     if isinstance(prior, int):
         block_output = features
-        d_features = block_output.shape[-1]
         d_output = prior
     else:
         block_output = L.Concatenate(-1)([features, prior])
-        d_features = block_output.shape[-1]
         d_output = prior.shape[-1]
+    d_features = block_output.shape[-1]
     if block_type in ["c_conv_deep", "c_conv_wide_deep"]:
         block_output = ConvKernel(hp, d_features, d_output)(block_output)
     elif block_type in ["p_conv_deep", 'p_conv_wide_deep']:
@@ -207,8 +206,7 @@ def parse_item(example):
     positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 13])
     quantum_target = tf.io.parse_tensor(sequence['quantum_target'][0], tf.float32)
-    elements = features[:, 1]
-    masses = features[:, 0]
+    elements, masses = features[:, 1], features[:, 0]
     masses = tf.concat([masses, masses, masses], 1)
     return (target_positions, positions, features, masses, context['id'],
             tf.shape(positions)[0], target_features, quantum_target)
