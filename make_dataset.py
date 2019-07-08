@@ -4,6 +4,7 @@ from pymol import cmd
 import numpy as np
 import random
 import shutil
+import time
 import csv
 import os
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
@@ -95,12 +96,17 @@ def get_positions(model):
 
 def get_features(model):
     features = np.array([get_atomic_features(atom) for atom in model.atom if atom.symbol != "gdb"])
+    return tf.convert_to_tensor(features, dtype=DTYPE)
+
+
+def get_masses(model):
     masses = np.array([[atom.get_mass()] for atom in model.atom if atom.symbol != "gdb"])
+    return tf.convert_to_tensor(masses, dtype=DTYPE)
+
+
+def get_numbers(model):
     numbers = np.array([[elements[atom.symbol.lower()]] for atom in model.atom if atom.symbol != "gdb"])
-    features = tf.convert_to_tensor(features, dtype=DTYPE)
-    masses = tf.convert_to_tensor(masses, dtype=DTYPE)
-    numbers = tf.convert_to_tensor(numbers, dtype=DTYPE)
-    return features, masses, numbers
+    return tf.convert_to_tensor(numbers, dtype=DTYPE)
 
 
 def get_atomic_features(atom):
@@ -183,7 +189,9 @@ def load(type, id):
     model = cmd.get_model('all', 1)
     target_positions = get_positions(model)
     quantum_target = get_quantum_target(path) if type is "xyz" else None
-    target_features, target_masses, target_elements = get_features(model) if type is "rxn" else None, None, None
+    target_features = get_features(model) if type is "rxn" else None
+    target_masses = get_masses(model) if type is "rxn" else None
+    target_numbers = get_numbers(model) if type is "rxn" else None
     if type is 'rxn':
         cmd.delete('all')
         for reactant in reactants:
@@ -202,15 +210,17 @@ def load(type, id):
         names = cmd.get_names('all')
         undock(names, type)
     positions = get_positions(model)
-    features, masses, numbers = get_features(model)
+    features = get_features(model)
+    masses = get_masses(model)
+    numbers = get_numbers(model)
     return make_example(type, id, target_positions, positions, features,
                         masses, numbers, quantum_target, target_features,
-                        target_masses, target_elements)
+                        target_masses, target_numbers)
 
 
 def make_example(type, id, target_positions, positions, features, masses,
                  numbers, quantum_target=None, target_features=None,
-                 target_masses=None, target_elements=None):
+                 target_masses=None, target_numbers=None):
     example = tf.train.SequenceExample()
     # non-sequential features
     example.context.feature["type"].bytes_list.value.append(bytes(type, 'utf-8'))
