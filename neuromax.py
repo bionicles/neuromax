@@ -3,7 +3,6 @@ from plots import plot_objective, plot_evaluations
 import matplotlib.pyplot as plt
 from tensorboard import program
 from attrdict import AttrDict
-import multiprocessing
 import numpy as np
 import webbrowser
 import random
@@ -16,7 +15,7 @@ import os
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_cpu_global_jit=true'
 import tensorflow as tf
-from make_dataset import load_pedagogy, load
+from make_dataset import load
 from pymol import cmd, util
 plt.set_cmap("viridis")
 B = tf.keras.backend
@@ -32,9 +31,9 @@ best = 12345678900
 # parameters
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
 STOP_LOSS_MULTIPLE = 1.2
-EPISODES_PER_TRIAL = 128
-REPEATS_PER_TRIAL = 5
-TENSORBOARD = True
+EPISODES_PER_TRIAL = 2
+REPEATS_PER_TRIAL = 2
+TENSORBOARD = False
 MAX_STEPS = 420
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
@@ -95,7 +94,8 @@ class NoisyDropConnectDense(L.Dense):
             self.call = self.normal_call
 
     def add_noise(self):
-        return self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.stddev), self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.stddev)
+        return (self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.stddev),
+                self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.stddev))
 
     def call_noise_drop(self, x):
         kernel, bias = self.add_noise()
@@ -219,47 +219,52 @@ def read_shards(filenames):
     return dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
 
-@tf.function(input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
+def move_atom(xyz):
+    global atom_index
+    xyz = xyz.tolist()
+    cmd.translate(xyz, f'id {str(atom_index)}')
+    atom_index += 1
+
+
+def move_atoms(velocities):
+    global atom_index
+    atom_index = 0
+    np.array([move_atom(xyz) for xyz in velocities])
+
+
+def prepare_pymol():
+    cmd.show(GIF_STYLE)
+    cmd.unpick()
+    util.cbc()
+
+
+def make_gif(pdb_name, trial_name, pngs_path):
+    gif_name = f'{pdb_name}-{trial_name}.gif'
+    gif_path = os.path.join(".", "gifs", gif_name)
+    imagepaths, images = [], []
+    for stackname in os.listdir(pngs_path):
+        print('processing', stackname)
+        filepath = os.path.join(pngs_path, stackname)
+        imagepaths.append(filepath)
+    imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    for imagepath in imagepaths:
+        image = imageio.imread(imagepath)
+        images.append(image)
+    print('saving gif to', gif_path)
+    imageio.mimsave(gif_path + pdb_name + ".gif", images)
+
+
+@tf.function(input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.float32),
+                              tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
 def get_losses(initial, xyz):
-    print('tracing get_losses')
-    d = get_distances(xyz)
-    return tf.losses.mean_squared_error(initial, d), tf.math.exp(-d)
+    return tf.math.square(tf.math.subtract(initial, get_distances(xyz))) * 0.5
 
 
 @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
 def get_distances(xyz):
-    print('tracing get_distances')
-    xyz = tf.squeeze(xyz, 0)
-    d = tf.reshape(tf.reduce_sum(xyz * xyz, 1), [-1,1])
+    xyz = tf.cast(tf.squeeze(xyz, 0), tf.float16)
+    d = tf.reshape(tf.reduce_sum(xyz * xyz, 1), [-1, 1])
     return d - 2 * tf.matmul(xyz, xyz, transpose_b=True) + tf.transpose(d)
-
-
-def experiment():
-    global log_dir, proteins
-    log_dir = os.path.join('.', 'runs', str(time.time()))
-
-    if TENSORBOARD:
-        tb = program.TensorBoard()
-        tb.configure(argv=[None, '--logdir', log_dir])
-        webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
-
-    path = os.path.join('.', 'tfrecords')
-    filenames = [os.path.join('.', 'tfrecords', str(i) + '.tfrecord') for i in range(1, 1237)]
-    [print(filename) for filename in filenames]
-    proteins = read_shards(filenames)
-    checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
-    checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
-    plotter = PlotCallback('.')
-    try:
-        res = skopt.load(checkpoint_path)
-        x0 = res.x_iters
-        y0 = res.func_vals
-        results = skopt.gp_minimize(trial, dimensions, x0=x0, y0=y0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
-    except Exception as e:
-        print(e)
-        x0 = hyperpriors
-        results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
-    print(results)
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -268,29 +273,27 @@ def trial(**kwargs):
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
     lr = tf.cast(hp.lr, tf.float32)
-    try:
-        strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"])
-        print('Number of GPU devices: {}'.format(strategy.num_replicas_in_sync))
-        with strategy.scope():
-            agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
-            ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-            averages = ema.apply(agent.weights)
-            lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
-            optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
-    except:
-        agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
-        ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-        averages = ema.apply(agent.weights)
-        lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
-        optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
+    # try:
+    #     strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"])
+    #     print('Number of GPU devices: {}'.format(strategy.num_replicas_in_sync))
+    #     with strategy.scope():
+    #         agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
+    #         ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+    #         averages = ema.apply(agent.weights)
+    #         lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
+    #         optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
+    # except:
+    agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
+    ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+    averages = ema.apply(agent.weights)
+    lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
+    optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    def run_episode(target_positions, positions, features, masses):
+    def run_episode(target_positions, positions, features, masses, gif=False):
         target_distances = get_distances(target_positions)
         meta, overlap = get_losses(target_distances, positions)
-        total_meta = tf.reduce_sum(meta)
-        total_overlap = tf.reduce_sum(overlap)
-        initial_loss = total_meta + total_overlap
+        initial_loss = tf.reduce_sum(meta)
         velocities = tf.zeros_like(positions)
         stop = initial_loss * STOP_LOSS_MULTIPLE
         loss = 0.
@@ -298,8 +301,8 @@ def trial(**kwargs):
             with tf.GradientTape() as tape:
                 velocities = velocities + agent([positions, features]) / masses
                 positions = tf.math.add(positions, velocities)
-                meta, overlap = get_losses(target_distances, positions)
-            gradients = tape.gradient([meta, overlap], agent.trainable_weights)
+                meta = get_losses(target_distances, positions)
+            gradients = tape.gradient([meta], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
             total_meta = tf.reduce_sum(meta)
@@ -313,7 +316,7 @@ def trial(**kwargs):
             if gif:
                 move_atoms(tf.squeeze(velocities, 0).numpy())
                 cmd.zoom()
-                cmd.png(os.path.join(pngs_path, f'{str(step)}.png'), width=image_size, height=image_size)
+                cmd.png(os.path.join(pngs_path, f'{str(step)}.png'), width=IMAGE_SIZE, height=IMAGE_SIZE)
         if gif:
             make_gif(pdb_id, trial_name, pngs_path)
         return ((loss - initial_loss) / initial_loss) * 100.
@@ -393,40 +396,6 @@ def trial(**kwargs):
         return objective
 
 
-def move_atom(xyz):
-    global atom_index
-    xyz = xyz.tolist()
-    cmd.translate(xyz, f'id {str(atom_index)}')
-    atom_index += 1
-
-
-def move_atoms(velocities):
-    global atom_index
-    atom_index = 0
-    np.array([move_atom(xyz) for xyz in velocities])
-
-
-def prepare_pymol():
-    cmd.show(GIF_STYLE)
-    cmd.unpick()
-    util.cbc()
-
-
-def make_gif(pdb_name, trial_name, pngs_path):
-    gif_name = f'{pdb_name}-{trial_name}.gif'
-    gif_path = os.path.join(".", "gifs", gif_name)
-    imagepaths, images = [], []
-    for stackname in os.listdir(pngs_path):
-        filepath = os.path.join(pngs_path, stackname)
-        imagepaths.append(filepath)
-    imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
-    for imagepath in imagepaths:
-        image = imageio.imread(imagepath)
-        images.append(image)
-    print('saving gif to', gif_path)
-    imageio.mimsave(gif_path + pdb_name + ".gif", images)
-
-
 class PlotCallback(object):
     def __init__(self, path):
         self.path = path
@@ -438,6 +407,33 @@ class PlotCallback(object):
             plt.savefig(os.path.join(self.path, "evaluations.png"))
             _ = plot_objective(results)
             plt.savefig(os.path.join(self.path, "objective.png"))
+
+
+def experiment():
+    global log_dir, proteins
+    log_dir = os.path.join('.', 'runs', str(time.time()))
+
+    if TENSORBOARD:
+        tb = program.TensorBoard()
+        tb.configure(argv=[None, '--logdir', log_dir])
+        webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
+
+    path = os.path.join('.', 'tfrecords')
+    filenames = [os.path.join('.', 'tfrecords', str(i) + '.tfrecord') for i in range(1, 1237)]
+    proteins = read_shards(filenames)
+    checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
+    checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
+    plotter = PlotCallback('.')
+    try:
+        res = skopt.load(checkpoint_path)
+        x0 = res.x_iters
+        y0 = res.func_vals
+        results = skopt.gp_minimize(trial, dimensions, x0=x0, y0=y0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
+    except Exception as e:
+        print(e)
+        x0 = hyperpriors
+        results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
+    print(results)
 
 
 if __name__ == '__main__':
