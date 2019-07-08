@@ -213,8 +213,8 @@ def parse_item(example):
 
 
 def read_shards(datatype):
-    n_data_elements = len(os.listdir(dataset_path))
     dataset_path = os.path.join('.', 'datasets', 'tfrecord', datatype)
+    n_data_elements = len(os.listdir(dataset_path))
     filenames = [os.path.join(dataset_path, str(i) + '.tfrecord')
                  for i in range(n_data_elements)]
     dataset = read_shards(filenames)
@@ -424,7 +424,7 @@ def experiment():
         webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
 
     datasets = []
-    for datatype in ['xyz', 'rxn', 'pdb']:
+    for datatype in ['xyz', 'rxn', 'cif']:
         n_data_elements, dataset = read_shards(datatype)
         datasets.append((datatype, n_data_elements, dataset))
     checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
