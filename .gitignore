@@ -18,3 +18,4 @@ agents/
 *.gif
 *.rsmi
 *.txt
+*.tfrecord
