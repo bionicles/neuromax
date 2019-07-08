@@ -6,12 +6,13 @@ import random
 import shutil
 import csv
 import os
-CSV_FILE_NAME = 'smallbig_less_then_9_chains.csv'
+CSV_FILE_NAME = 'sorted-less-than-256.csv'
+SHARDS_PER_DATASET = 8
+ITEMS_PER_SHARD = 8
+DTYPE = tf.float32
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
 P_UNDOCK = 0.8
 P_UNFOLD = 0.8
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
-ITEMS_PER_SHARD = 2
-DTYPE = tf.float32
 
 elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 'f': 9, 'ne': 10, 'na': 11, 'mg': 12, 'al': 13, 'si': 14, 'p': 15, 's': 16,
@@ -152,9 +153,7 @@ def load(type, id):
     quantum_target = []
     target_features = []
     cmd.delete('all')
-    file_name = f'{id}.{type}'
-    if type is not "pdb":
-        file_name = id
+    file_name = f'{id}.{type}' if type is 'pdb' else id
     dataset_path = os.path.join('.', 'datasets', type)
     path = os.path.join(dataset_path, file_name)
     # we load the target
@@ -165,7 +164,6 @@ def load(type, id):
         elif os.path.exists(path):
             cmd.load(path)
     elif type is "xyz":
-        quantum_target = get_quantum_target(path)
         cmd.load(path)
     elif type is "rxn":
         reactants, products = get_reactants_products(path)
@@ -177,8 +175,9 @@ def load(type, id):
     clean_pymol()
     model = cmd.get_model('all', 1)
     target_positions = get_positions(model)
+    quantum_target = get_quantum_target(path) if type is "xyz" else None
+    target_features = get_features(model) if type is "rxn" else None
     if type is 'rxn':
-        target_features = get_features(model)
         cmd.delete('all')
         for reactant in reactants:
             reactant_path = os.path.join('.', 'datasets', 'mol', reactant)
@@ -200,19 +199,19 @@ def load(type, id):
     return make_example(type, id, target_positions, positions, features, quantum_target, target_features)
 
 
-def make_example(type, id, target_positions, positions, features, quantum_target, target_features):
+def make_example(type, id, target_positions, positions, features, quantum_target=None, target_features=None):
     example = tf.train.SequenceExample()
     # non-sequential features
     example.context.feature["type"].bytes_list.value.append(bytes(type, 'utf-8'))
     example.context.feature["id"].bytes_list.value.append(bytes(id, 'utf-8'))
-    if len(quantum_target) > 1:
+    if quantum_target is not None:
         example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy())
     # sequential features
-    if target_features:
-        fl_target_features = example.feature_lists.feature_list["target_positions"]
-        fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
     fl_target_positions = example.feature_lists.feature_list["target_positions"]
     fl_target_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_positions).numpy())
+    if target_features is not None:
+        fl_target_features = example.feature_lists.feature_list["target_positions"]
+        fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
     fl_positions = example.feature_lists.feature_list["positions"]
     fl_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(positions).numpy())
     fl_features = example.feature_lists.feature_list["features"]
@@ -223,14 +222,13 @@ def make_example(type, id, target_positions, positions, features, quantum_target
 
 def write_shards():
     problems = []
-    # write qm9 tfrecords
-    # qm9 = load_folder("xyz")
+    qm9 = load_folder("xyz")
     rxns = load_folder("rxn")
-    # pdbs = load_pdbs()
-    for dataset, type in [(rxns, "rxn")]:
-        k, p = 0, 0
+    pdbs = load_pdbs()
+    for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (pdbs, "pdb")]:
+        shard_number, item_number = 0, 0
         for dataset_item in ProgIter(dataset, verbose=1):
-            if p % ITEMS_PER_SHARD is 0:
+            if item_number % ITEMS_PER_SHARD is 0:
                 try:
                     writer.close()
                 except Exception as e:
@@ -238,20 +236,20 @@ def write_shards():
                 shard_path = os.path.join('.', 'datasets', 'tfrecord', type)
                 if not os.path.exists(shard_path):
                     os.makedirs(shard_path)
-                shard_path = os.path.join(shard_path, str(k) + '.tfrecord')
+                shard_path = os.path.join(shard_path, str(shard_number) + '.tfrecord')
                 writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
-                k += 1
-                if k > 1:
+                shard_number += 1
+                if shard_number > SHARDS_PER_DATASET:
                     break
             try:
                 data = load(type, dataset_item.lower())
                 writer.write(data)
                 print('wrote', dataset_item, 'to', shard_path)
             except Exception as e:
-                print('failed on', p, dataset_item, shard_path)
+                print('failed on', shard_number, dataset_item, shard_path)
                 print(e)
-                problems.append([p, dataset_item, e])
-            p += 1
+                problems.append([shard_number, dataset_item, e])
+            item_number += 1
     print('problem children:')
     [print(problem) for problem in problems]
     print('done!')
