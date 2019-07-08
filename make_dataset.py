@@ -14,6 +14,11 @@ MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
 P_UNDOCK = 0.8
 P_UNFOLD = 0.8
 
+# quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
+# chem -> datasets/rxn: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-rxn.tar.gz
+# chem -> datasets/mol: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-mol.tar.gz
+# pdb datasets use datasets/csv lists of RCSB PDB ids
+
 elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 'f': 9, 'ne': 10, 'na': 11, 'mg': 12, 'al': 13, 'si': 14, 'p': 15, 's': 16,
 'cl': 17, 'ar': 18, 'k': 19, 'ca': 20, 'sc': 21, 'ti': 22, 'v': 23, 'cr': 24,

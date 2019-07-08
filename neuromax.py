@@ -208,15 +208,20 @@ def parse_item(example):
     quantum_target = tf.io.parse_tensor(sequence['quantum_target'][0], tf.float32)
     elements, masses = features[:, 1], features[:, 0]
     masses = tf.concat([masses, masses, masses], 1)
-    return (target_positions, positions, features, masses, context['id'],
+    return (context['type'], context['id'], target_positions, positions, features, elements, masses,
             tf.shape(positions)[0], target_features, quantum_target)
 
 
-def read_shards(filenames):
+def read_shards(datatype):
+    n_data_elements = len(os.listdir(dataset_path))
+    dataset_path = os.path.join('.', 'datasets', 'tfrecord', datatype)
+    filenames = [os.path.join(dataset_path, str(i) + '.tfrecord')
+                 for i in range(n_data_elements)]
+    dataset = read_shards(filenames)
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
     dataset = dataset.map(map_func=parse_item, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1)
-    return dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+    return n_data_elements, dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
 
 def move_atom(xyz):
@@ -418,9 +423,10 @@ def experiment():
         tb.configure(argv=[None, '--logdir', log_dir])
         webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
 
-    path = os.path.join('.', 'tfrecords')
-    filenames = [os.path.join('.', 'tfrecords', str(i) + '.tfrecord') for i in range(1, 1237)]
-    proteins = read_shards(filenames)
+    datasets = []
+    for datatype in ['xyz', 'rxn', 'pdb']:
+        n_data_elements, dataset = read_shards(datatype)
+        datasets.append((datatype, n_data_elements, dataset))
     checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
     checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
     plotter = PlotCallback('.')
