@@ -1,5 +1,4 @@
 # experiment.py: why? simplify
-# PROTEINS_IN_DATASET = 9892 - 4
 from plots import plot_objective, plot_evaluations
 import matplotlib.pyplot as plt
 from tensorboard import program
@@ -39,7 +38,7 @@ TENSORBOARD = True
 MAX_STEPS = 420
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
-MOVIE_STYLE = "spheres"
+GIF_STYLE = "spheres"
 IMAGE_SIZE = 256
 N_MOVIES = 1
 # hyperparameters
@@ -77,8 +76,7 @@ def trace_function(fn, *args):
     tf.summary.trace_on(graph=True, profiler=True)
     y = fn(*args)
     with writer.as_default():
-        tf.summary.trace_export(name="trace_function",
-                                step=0, profiler_outdir=log_dir)
+        tf.summary.trace_export(name="trace_function", step=0, profiler_outdir=log_dir)
     return y
 
 
@@ -101,8 +99,7 @@ class NoisyDropConnectDense(L.Dense):
 
     def call_noise_drop(self, x):
         kernel, bias = self.add_noise()
-        kernel = tf.nn.dropout(kernel, 0.5)
-        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
+        return self.activation(tf.nn.bias_add(B.dot(x, tf.nn.dropout(kernel, 0.5)), bias))
 
     def call_drop(self, x):
         return self.activation(tf.nn.bias_add(B.dot(x, tf.nn.dropout(self.kernel, 0.5)), self.bias))
@@ -134,9 +131,7 @@ class ConvPair(L.Layer):
         self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, d_features, d_output, pair=True)
 
     def call(self, inputs):
-        return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(
-                lambda a2: self.kernel([a1, a2]),
-                inputs), axis=0), inputs)
+        return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: self.kernel([a1, a2]), inputs), axis=0), inputs)
 
 
 def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
@@ -153,16 +148,6 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
         output = L.Concatenate(-1)([input, output])
     output = get_layer(d_output, hp)(output)
     return K.Model([input, input2], output) if pair else K.Model(input, output)
-
-
-# def get_holistic_kernel(d_holistic, hp):
-#     input = K.Input((d_features, ))
-#     attended = L.Attention()(input, input)
-#     added = L.Add()([input, attended])
-#     normalized = L.BatchNormalization()(stacked)
-#     average = L.Average()(normalized)
-#     output = L.Dense(hp.d_holistic, activation="tanh")(average)
-#     return K.Model(input, output)
 
 
 def get_block(block_type, hp, features, prior):
@@ -208,32 +193,30 @@ def get_agent(trial_number, d_in, d_compressed, d_out, hp):
 
 
 @tf.function
-def parse_protein(example):
-    context_features = {'protein': tf.io.FixedLenFeature([], dtype=tf.string)}
-    sequence_features = {
-        'initial_positions': tf.io.FixedLenSequenceFeature(
-            [], dtype=tf.string),
-        'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-        'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-        'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)
-    }
+def parse_item(example):
+    context_features = {'quantum_target': tf.io.FixedLenFeature([], dtype=tf.string),
+                        'type': tf.io.FixedLenFeature([], dtype=tf.string),
+                        'id': tf.io.FixedLenFeature([], dtype=tf.string)}
+    sequence_features = {'target_positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'target_features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
-    initial_positions = tf.reshape(tf.io.parse_tensor(
-        sequence['initial_positions'][0], tf.float32), [-1, 3])
-    features = tf.reshape(tf.io.parse_tensor(
-        sequence['features'][0], tf.float32), [-1, 12])
-    masses = tf.reshape(tf.io.parse_tensor(
-        sequence['masses'][0], tf.float32), [-1, 1])
-    positions = tf.reshape(tf.io.parse_tensor(
-        sequence['positions'][0], tf.float32), [-1, 3])
-    features = tf.concat([masses, features], 1)
+    target_positions = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 3])
+    target_features = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 13])
+    positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
+    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 13])
+    quantum_target = tf.io.parse_tensor(sequence['quantum_target'][0], tf.float32)
+    elements = features[:, 1]
+    masses = features[:, 0]
     masses = tf.concat([masses, masses, masses], 1)
-    return initial_positions, positions, features, masses, context['protein'], tf.shape(positions)[0]
+    return (target_positions, positions, features, masses, context['id'],
+            tf.shape(positions)[0], target_features, quantum_target)
 
 
 def read_shards(filenames):
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
-    dataset = dataset.map(map_func=parse_protein, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.map(map_func=parse_item, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1)
     return dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
@@ -282,7 +265,6 @@ def experiment():
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
-=======
 def trial(**kwargs):
     global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp, proteins
     start_time = time.perf_counter()
@@ -305,10 +287,9 @@ def trial(**kwargs):
         optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 13), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
-    def run_episode(initial_positions, positions, features, masses):
-        initial_distances = get_distances(initial_positions)
-        meta, overlap = get_losses(initial_distances, positions)
+    def run_episode(target_positions, positions, features, masses):
+        target_distances = get_distances(target_positions)
+        meta, overlap = get_losses(target_distances, positions)
         total_meta = tf.reduce_sum(meta)
         total_overlap = tf.reduce_sum(overlap)
         initial_loss = total_meta + total_overlap
@@ -319,7 +300,7 @@ def trial(**kwargs):
             with tf.GradientTape() as tape:
                 velocities = velocities + agent([positions, features]) / masses
                 positions = tf.math.add(positions, velocities)
-                meta, overlap = get_losses(initial_distances, positions)
+                meta, overlap = get_losses(target_distances, positions)
             gradients = tape.gradient([meta, overlap], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
@@ -331,16 +312,28 @@ def trial(**kwargs):
                 break
             elif tf.math.less(new_stop, stop):
                 stop = new_stop
+            if gif:
+                move_atoms(tf.squeeze(velocities, 0).numpy())
+                cmd.zoom()
+                cmd.png(os.path.join(pngs_path, f'{str(step)}.png'), width=image_size, height=image_size)
+        if gif:
+            make_gif(pdb_id, trial_name, pngs_path)
         return ((loss - initial_loss) / initial_loss) * 100.
 
+    run_training_episode = tf.function(run_episode, input_signature=[
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 13), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
+
     @tf.function
-    def train(proteins):
+    def train(qm9, rxns, proteins):
         total_change = 0.
         episode = 0
         change = 0.
-        for initial_positions, positions, features, masses, pdb_id, n_atoms in proteins:
+        for target_positions, positions, features, masses, pdb_id, n_atoms in proteins:
             with tf.device('/gpu:0'):
-                change = run_episode(initial_positions, positions, features, masses)
+                change = run_training_episode(target_positions, positions, features, masses)
             if tf.math.is_nan(change):
                 change = 100.
             tf.print('episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
@@ -367,8 +360,7 @@ def trial(**kwargs):
     stddev = np.std(changes)
     objective = median + stddev  # reward skill and consistency
     print('changes:', changes)
-    print('median:', median, 'stddev:', stddev)
-    print('objective:', objective)
+    print('median:', median, 'stddev:', stddev, 'objective:', objective)
     if math.isnan(objective):
         objective = 100 * EPISODES_PER_TRIAL
     elif tf.math.less(objective, best):
@@ -377,7 +369,17 @@ def trial(**kwargs):
         agent.summary()
         averages = [ema.average(weight).numpy() for weight in agent.weights]
         agent.set_weights(averages)
-        make_gifs(agent, optimizer, trial_name, hp.stddev, N_MOVIES, IMAGE_SIZE, MAX_STEPS, STOP_LOSS_MULTIPLE)
+        for movie_number in range(N_MOVIES):
+            try:
+                pngs_path = os.path.join('.', 'pngs')
+                shutil.rmtree(pngs_path)
+            except Exception as e:
+                print(e)
+            os.makedirs(pngs_path)
+            pdb_id = random.choice(pedagogy)
+            target_positions, positions, features, masses, _, _ = parse_item(load(pdb_id))
+            prepare_pymol()
+            run_episode(target_positions, positions, features, masses)
         tf.saved_model.save(agent, os.path.join(log_dir, trial_name + ".h5"))
         best_trial = trial_name
         best = objective
@@ -407,8 +409,7 @@ def move_atoms(velocities):
 
 
 def prepare_pymol():
-    cmd.set('max_threads', multiprocessing.cpu_count())
-    cmd.show(MOVIE_STYLE)
+    cmd.show(GIF_STYLE)
     cmd.unpick()
     util.cbc()
 
@@ -418,7 +419,6 @@ def make_gif(pdb_name, trial_name, pngs_path):
     gif_path = os.path.join(".", "gifs", gif_name)
     imagepaths, images = [], []
     for stackname in os.listdir(pngs_path):
-        print('processing', stackname)
         filepath = os.path.join(pngs_path, stackname)
         imagepaths.append(filepath)
     imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
@@ -427,51 +427,6 @@ def make_gif(pdb_name, trial_name, pngs_path):
         images.append(image)
     print('saving gif to', gif_path)
     imageio.mimsave(gif_path + pdb_name + ".gif", images)
-
-
-# TODO: REMOVE THIS!
-def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_steps, stop_loss_multiple):
-    pngs_path = os.path.join('.', 'pngs')
-    pedagogy = load_pedagogy()
-    for movie_number in range(n_movies):
-        step = 0
-        try:
-            shutil.rmtree(pngs_path)
-        except Exception as e:
-            print(e)
-        os.makedirs(pngs_path)
-        pdb_id = random.choice(pedagogy)
-        initial_positions, positions, features, masses, _, _ = parse_protein(load(pdb_id))
-        prepare_pymol()
-        [initial_positions, positions, features, masses] = [tf.expand_dims(x, 0) for x in [initial_positions, positions, features, masses]]
-        initial_distances = get_distances(initial_positions)
-        meta, overlap = get_losses(initial_distances, positions)
-        total_meta = tf.math.sqrt(tf.reduce_sum(meta))
-        total_overlap = tf.reduce_sum(overlap)
-        initial_loss = total_meta + total_overlap
-        stop_loss = initial_loss * stop_loss_multiple
-        velocities = tf.zeros_like(positions)
-        while step < max_steps:
-            with tf.GradientTape() as tape:
-                velocities = velocities + agent([positions, features]) / masses
-                positions = positions + velocities
-                meta, overlap = get_losses(initial_distances, positions)
-            gradients = tape.gradient([meta, overlap], agent.trainable_weights)
-            optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
-            total_meta = tf.math.sqrt(tf.reduce_sum(meta))
-            total_overlap = tf.reduce_sum(overlap)
-            loss = total_meta + total_overlap
-            new_stop = loss * stop_loss_multiple
-            if loss > stop_loss or tf.math.is_nan(loss):
-                break
-            elif new_stop < stop_loss:
-                stop_loss = new_stop
-            move_atoms(tf.squeeze(velocities, 0).numpy())
-            cmd.zoom()
-            png_path = os.path.join(pngs_path, f'{str(step)}.png')
-            cmd.png(png_path, width=image_size, height=image_size)
-            step += 1
-        make_gif(pdb_id, trial_name, pngs_path)
 
 
 class PlotCallback(object):
