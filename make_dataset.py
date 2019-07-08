@@ -241,8 +241,6 @@ def write_shards(qm9, rxns, pdbs):
                 writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
                 k += 1
             try:
-                print(type)
-                time.sleep(5)
                 data = load(type, dataset_item.lower())
                 writer.write(data)
             except Exception as e:
