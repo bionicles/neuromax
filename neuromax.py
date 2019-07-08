@@ -213,11 +213,10 @@ def parse_item(example):
 
 
 def read_shards(datatype):
+    print("read_shards", datatype)
     dataset_path = os.path.join('.', 'datasets', 'tfrecord', datatype)
-    n_data_elements = len(os.listdir(dataset_path))
-    filenames = [os.path.join(dataset_path, str(i) + '.tfrecord')
-                 for i in range(n_data_elements)]
-    dataset = read_shards(filenames)
+    n_records = len(os.listdir(dataset_path))
+    filenames = [os.path.join(dataset_path, str(i) + '.tfrecord') for i in range(n_records)]
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
     dataset = dataset.map(map_func=parse_item, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1)
