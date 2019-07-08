@@ -313,16 +313,16 @@ def trial(**kwargs):
     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    def run_episode(*args, gif=False):
+    def run_episode(*args):
         target_features, target_masses, target_numbers = None, None, None
         quantum_target = None
         type = args[0]
         if type is "xyz":
-            _, target_positions, positions, features, masses, numbers, quantum_target = args
+            _, target_positions, positions, features, masses, numbers, quantum_target, gif = args
         elif type is "rxn":
-            _, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers = args
+            _, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers, gif = args
         else:
-            _, target_positions, positions, features, masses, numbers = args
+            _, target_positions, positions, features, masses, numbers, gif = args
         target_distances = get_distances(target_positions)
         meta = get_loss(target_distances, positions)
         initial_loss = tf.reduce_sum(meta)
@@ -381,29 +381,45 @@ def trial(**kwargs):
         tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32)])
 
     @tf.function
-    def train(datasets):
+    def train(qm9, rxn, proteins):
         total_change = 0.
         episode = 0
         change = 0.
-        for dataset in datasets:
-            episodes_this_dataset = 0
-            for type, id, n_atoms, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers, quantum_target in dataset:
-                with tf.device('/gpu:0'):
-                    if type is "xyz":
-                        change = run_qm9_training_episode(type, target_positions, positions, features, masses, numbers, quantum_target)
-                    elif type is "rxn":
-                        change = run_rxn_training_episode(type, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers)
-                    else:
-                        change = run_protein_training_episode(type, target_positions, positions, features, masses, numbers)
+        episodes_this_dataset = 0
+        for type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target in qm9:
+            with tf.device('/gpu:0'):
+                change = run_qm9_training_episode(type, target_positions, positions, features, masses, numbers, quantum_target)
                 if tf.math.is_nan(change):
-                    change = 100.
-                tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
-                tf.summary.scalar('change', change)
-                total_change = total_change + change
-                episodes_this_dataset = episodes_this_dataset + 1
-                episode = episode + 1
-                if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
-                    break
+                    change = 200.
+            tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
+            tf.summary.scalar('change', change)
+            total_change = total_change + change
+            episodes_this_dataset = episodes_this_dataset + 1
+            episode = episode + 1
+            if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
+                break
+        episodes_this_dataset = 0
+        for type, id, n_atoms, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers in rxn:
+            with tf.device('/gpu:0'):
+                change = run_rxn_training_episode(type, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers)
+            tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
+            tf.summary.scalar('change', change)
+            total_change = total_change + change
+            episodes_this_dataset = episodes_this_dataset + 1
+            episode = episode + 1
+            if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
+                break
+        episodes_this_dataset = 0
+        for type, id, n_atoms, target_positions, positions, features, masses, numbers in proteins:
+            with tf.device('/gpu:0'):
+                change = run_protein_training_episode(type, target_positions, positions, features, masses, numbers)
+            tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
+            tf.summary.scalar('change', change)
+            total_change = total_change + change
+            episodes_this_dataset = episodes_this_dataset + 1
+            episode = episode + 1
+            if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
+                break
         return total_change
 
     changes = []
@@ -413,7 +429,7 @@ def trial(**kwargs):
                 qm9 = qm9.shuffle(buffer_size=n_qm9_records)
                 rxn = rxn.shuffle(buffer_size=n_rxn_records)
                 proteins = proteins.shuffle(buffer_size=n_proteins)
-            total_change = train([qm9, rxn, proteins])
+            total_change = train(qm9, rxn, proteins)
             total_change = total_change.numpy().item(0)
             print('repeat', repeat_number + 1, 'total change:', total_change, '%')
             changes.append(total_change)
