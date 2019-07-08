@@ -1,227 +1,236 @@
-# neuromax.py - why?: 1 simple file with functions over classes
-import tensorflow.keras.layers as L
-from functools import partial
-import tensorflow.keras as K
-import tensorflow as tf
+# experiment.py: why? simplify
+from plots import plot_objective, plot_evaluations
+import matplotlib.pyplot as plt
+from tensorboard import program
+from attrdict import AttrDict
+from pymol import cmd, util
+import multiprocessing
 import numpy as np
-import imageio
+import webbrowser
 import random
+import imageio
 import shutil
 import skopt
+import math
 import time
-import csv
 import os
+from make_dataset import load_pedagogy, load
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+import tensorflow as tf
+tf.logging.set_verbosity(tf.logging.ERROR)
 tf.compat.v1.enable_eager_execution()
+plt.set_cmap("viridis")
+B = tf.keras.backend
+L = tf.keras.layers
+K = tf.keras
 # globals
-best_cumulative_improvement = 0
-experiment = 0
-# simulation
+trial_number = 0
+atom_index = 0
+best_trial = ''
+best_args = []
+best = 12345678900
+# parameters
+ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
+STOP_LOSS_MULTIPLE = 1.2
+EPISODES_PER_TRIAL = 64
+REPEATS_PER_TRIAL = 6
+TENSORBOARD = False
+MAX_STEPS = 420
+N_RANDOM_STARTS = 10
+N_CALLS = 1000
+MOVIE_STYLE = "spheres"
 IMAGE_SIZE = 256
-POSITION_VELOCITY_LOSS_WEIGHT, SHAPE_LOSS_WEIGHT = 100, 1
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 8, 64
-MIN_STEPS_IN_UNDOCK, MAX_STEPS_IN_UNDOCK = 1, 1
-MIN_STEPS_IN_UNFOLD, MAX_STEPS_IN_UNFOLD = 0, 1
-SCREENSHOT_EVERY = 10
-NOISE = 0.01
-WARMUP = 1000
-BUFFER = 42
-# dataset
-PEDAGOGY_FILE_NAME = 'less-than-164kd-9-chains.csv'
-BIGGEST_FIRST_IF_NEG = 1
-RANDOM_PROTEINS = True
-N_PARALLEL_CALLS = 1
-BATCH_SIZE = 1
-# training
-N_RANDOM_TRIALS, N_TRIALS = 1, 1
-STOP_LOSS_MULTIPLIER = 1.04
-POSITION_ERROR_WEIGHT = 1
-ACTION_ERROR_WEIGHT = 1
-SHAPE_ERROR_WEIGHT = 1
-N_EXPERIMENTS = 1
-N_EPISODES = 1
-N_STEPS = 100
-VERBOSE = True
+N_MOVIES = 5
 # hyperparameters
-d_blocks = skopt.space.Integer(1, 9, name='blocks')
-d_block_layers = skopt.space.Integer(1, 9, name='block_layers')
-d_compressor_kernel_units = skopt.space.Integer(16, 1024, name='compressor_kernel_units')
-d_compressor_kernel_layers = skopt.space.Integer(1, 9, name='compressor_kernel_layers')
-d_pair_kernel_units = skopt.space.Integer(16, 1024, name='pair_kernel_units')
-d_pair_kernel_layers = skopt.space.Integer(1, 9, name='pair_kernel_layers')
-d_learning_rate = skopt.space.Real(0.0001, 0.01, name='learning_rate')
-d_decay = skopt.space.Real(0.0001, 0.01, name='decay')
-
 dimensions = [
-                d_compressor_kernel_layers,
-                d_compressor_kernel_units,
-                d_pair_kernel_layers,
-                d_pair_kernel_units,
-                d_blocks,
-                d_block_layers,
-                d_learning_rate,
-                d_decay
-            ]
+    skopt.space.Integer(1, 6, name='c_blocks'),
+    skopt.space.Categorical(['c_res_deep', 'c_res_wide_deep', 'c_conv_deep', 'c_conv_wide_deep'], name="c"),
+    skopt.space.Integer(1, 3, name='c_layers'),
+    skopt.space.Integer(1, 1024, name='c_units'),
+    skopt.space.Integer(1, 6, name='p_blocks'),
+    skopt.space.Categorical(['p_res_deep', 'p_res_wide_deep', 'p_conv_deep', 'p_conv_wide_deep'], name='p'),
+    skopt.space.Integer(1, 3, name='p_layers'),
+    skopt.space.Integer(1, 1024, name='p_units'),
+    skopt.space.Real(0.001, 0.1, name='stddev'),
+    skopt.space.Categorical(['normal', 'noise', 'drop', 'noisedrop'], name='layer'),
+    skopt.space.Categorical(['first', 'all'], name='norm'),
+    skopt.space.Real(0.00001, 0.01, name='lr'),
+    skopt.space.Integer(10, 1000000, name='decay')]  # major factor in step size
+hyperpriors = [
+    2,  # compressor_blocks,
+    'c_conv_deep',  # compressor block type
+    1,  # compressor_layers
+    256,  # compressor_units
+    2,  # pair_blocks
+    'p_conv_deep',  # pair block type
+    1,  # pair_layers
+    1024,  # pair_units,
+    0.02,  # stddev
+    'normal',
+    'first',  # norm
+    0.004,  # lr
+    100000]  # decay_steps
 
-default_hyperparameters = [
-    2,
-    512,
-    2,
-    512,
-    2,
-    2,
-    0.001,
-    0.0001
-]
+
+class NoisyDropConnectDense(L.Dense):
+    def __init__(self, *args, **kwargs):
+        layer = kwargs.pop('layer')
+        self.stddev = kwargs.pop('stddev')
+        super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
+        if layer is 'noisedrop':
+            self.call = self.call_noise_drop
+        elif layer is 'drop':
+            self.call = self.call_drop
+        elif layer is 'noise':
+            self.call = self.call_noise
+        else:
+            self.call = self.normal_call
+
+    @tf.function
+    def add_noise(self):
+        return self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.stddev), self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.stddev)
+
+    def call_noise_drop(self, x):
+        kernel, bias = self.add_noise()
+        kernel = tf.nn.dropout(kernel, 0.5)
+        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
+
+    def call_drop(self, x):
+        return self.activation(tf.nn.bias_add(B.dot(x, tf.nn.dropout(self.kernel, 0.5)), self.bias))
+
+    def call_noise(self, x):
+        kernel, bias = self.add_noise()
+        return self.activation(tf.nn.bias_add(B.dot(x, kernel), bias))
+
+    def normal_call(self, x):
+        return self.activation(tf.nn.bias_add(B.dot(x, self.kernel), self.bias))
 
 
-# begin model
-def get_layer(units):
-    return L.Dense(units, activation='tanh')
-
-def get_mlp(features, outputs, layers, units):
-    input = K.Input((features, ))
-    output = get_layer(units)(input)
-    for layer in range(layers):
-        output = get_layer(units)(output)
-    output = get_layer(outputs)(output)
-    return K.Model(input, output)
+def get_layer(units, hp):
+    return NoisyDropConnectDense(units, activation="tanh", layer=hp.layer, stddev=hp.stddev)
+    # return L.Dense(units, activation="tanh")
 
 
 class ConvKernel(L.Layer):
-    def __init__(self, features=16, outputs=5, layers=2, units=512):
+    def __init__(self, hp, d_features, d_output):
         super(ConvKernel, self).__init__()
-        self.kernel = get_mlp(features, outputs, layers, units)
+        self.kernel = get_kernel(hp.c, hp.c_layers, hp.c_units, hp, d_features + d_output, d_output)
 
     def call(self, inputs):
         return tf.vectorized_map(self.kernel, inputs)
 
 
 class ConvPair(L.Layer):
-    def __init__(self, features=16, outputs=3, layers=2, units=512):
+    def __init__(self, hp, d_features, d_output):
         super(ConvPair, self).__init__()
-        self.kernel = get_mlp(features, outputs, layers, units)
+        self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, (d_features + d_output), d_output, pair=True)
 
     def call(self, inputs):
-        self.inputs = inputs
-        outputs = tf.map_fn(self.compute_atom, self.inputs)
-        return outputs
-
-    def compute_atom(self, atom1):
-        def compute_pair(atom2):
-            pair = tf.concat([atom1, atom2], 1)
-            return self.kernel(pair)
-        contributions = tf.map_fn(compute_pair, self.inputs)
-        potentials = tf.reduce_sum(contributions, axis=0)
-        return potentials
+        return tf.vectorized_map(lambda a1: tf.reduce_sum(tf.vectorized_map(
+                lambda a2: self.kernel([a1, a2]), inputs), axis=0), inputs)
 
 
-def make_block(features, noise_or_output, block_layers, pair_kernel_layers, pair_kernel_units):
-    block_output = L.Concatenate(2)([features, noise_or_output])
-    for layer_n in range(block_layers):
-        block_output = ConvPair(layers=pair_kernel_layers, units=pair_kernel_units)(block_output)
-        block_output = L.Concatenate(2)([features, block_output])
-    block_output = ConvPair(layers=pair_kernel_layers, units=pair_kernel_units)(block_output)
-    return L.Add()([block_output, noise_or_output])
+def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
+    input = K.Input((d_features, ))
+    if pair:
+        input2 = K.Input((d_features, ))
+        inputs = L.Concatenate()([input, input2])
+        output = get_layer(units, hp)(inputs)
+    else:
+        output = get_layer(units, hp)(input)
+    for layer in range(layers - 1):
+        output = get_layer(units, hp)(output)
+    if 'wide' in block_type:
+        output = L.Concatenate(-1)([input, output])
+    output = get_layer(d_output, hp)(output)
+    if pair:
+        return K.Model([input, input2], output)
+    return K.Model(input, output)
 
 
-def make_resnet(name, d_in, d_out, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers):
+def get_block(block_type, hp, features, prior):
+    block_output = L.Concatenate(-1)([features, prior])
+    d_features = features.shape[-1]
+    d_output = prior.shape[-1]
+    if block_type in ["c_conv_deep", "c_conv_wide_deep"]:
+        block_output = ConvKernel(hp, d_features, d_output)(block_output)
+    elif block_type in ["p_conv_deep", 'p_conv_wide_deep']:
+        block_output = ConvPair(hp, d_features, d_output)(block_output)
+    elif block_type in ["c_res_deep", "c_res_wide_deep"]:
+        block_output = get_kernel(block_type, hp.c_layers, hp.c_units, hp, block_output.shape[-1], d_output)(block_output)
+    elif block_type in ["p_res_deep", "p_res_wide_deep"]:
+        block_output = get_kernel(block_type, hp.p_layers, hp.p_units, hp, block_output.shape[-1], d_output)(block_output)
+    if hp.norm is 'all':
+        block_output = L.BatchNormalization()(block_output)
+    return L.Add()([prior, block_output])
+
+
+def get_agent(trial_number, d_in, d_compressed, d_out, hp):
+    print('\ntrial', trial_number, '\n')
+    [print(f'   {k}={v}') for k, v in hp.items()]
     features = K.Input((None, d_in))
-    noise = K.Input((None, d_out))
-    compressed_features = ConvKernel(layers=compressor_kernel_layers, units=compressor_kernel_units)(features)
-    output = make_block(compressed_features, noise, block_layers, pair_kernel_layers, pair_kernel_units)
-    for i in range(1, blocks):
-        output = make_block(compressed_features, output, block_layers, pair_kernel_layers, pair_kernel_units)
-    output *= -1
-    resnet = K.Model([features, noise], output)
-    K.utils.plot_model(resnet, name + '.png', show_shapes=True)
-    return resnet
-# end model
+    compressed_noise = K.Input((None, d_compressed))
+    output_noise = K.Input((None, d_out))
+    normalized = L.BatchNormalization()(features) if hp.norm is not 'none' else features
+    compressed_features = get_block(hp.c, hp, normalized, compressed_noise)
+    for compressor_block in range(hp.c_blocks - 1):
+        compressed_features = get_block(hp.c, hp, normalized, compressed_features)
+    output = get_block(hp.p, hp, compressed_features, output_noise)
+    for i in range(hp.p_blocks - 1):
+        output = get_block(hp.p, hp, compressed_features, output)
+    trial_name = f'{trial_number}-' + '-'.join(f'{k}.{round(v, 4) if isinstance(v, float) else v}' for k, v in hp.items())
+    return K.Model([features, compressed_noise, output_noise], output, name=trial_name), trial_name
 
 
-# begin dataset
-def parse_feature(byte_string, d):
-    tensor = tf.io.parse_tensor(byte_string, tf.float32)
-    return tf.reshape(tensor, [-1, d])
-
-
-def parse_example(example):
+@tf.function
+def parse_protein(example):
     context_features = {'protein': tf.io.FixedLenFeature([], dtype=tf.string)}
     sequence_features = {
-        'initial_positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+        'initial_positions': tf.io.FixedLenSequenceFeature(
+            [], dtype=tf.string),
         'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)
     }
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
-    initial_positions = parse_feature(sequence['initial_positions'][0], 3)
-    features = parse_feature(sequence['features'][0], 9)
-    masses = parse_feature(sequence['masses'][0], 1)
-    initial_distances = calculate_distances(initial_positions)
-    # protein_name_tensor = context['protein']
-    positions = parse_feature(sequence['positions'][0], 3)
+    initial_positions = tf.reshape(tf.io.parse_tensor(
+        sequence['initial_positions'][0], tf.float32), [-1, 3])
+    features = tf.reshape(tf.io.parse_tensor(
+        sequence['features'][0], tf.float32), [-1, 12])
+    masses = tf.reshape(tf.io.parse_tensor(
+        sequence['masses'][0], tf.float32), [-1, 1])
+    positions = tf.reshape(tf.io.parse_tensor(
+        sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.concat([masses, features], 1)
     masses = tf.concat([masses, masses, masses], 1)
-    return initial_positions, initial_distances, positions, masses, features
+    velocities = tf.random.normal(tf.shape(positions))
+    forces = tf.zeros(tf.shape(positions))
+    return initial_positions, positions, features, masses, forces, velocities, context['protein'], tf.shape(positions)[0]
 
 
-def read_dataset():
-    path = os.path.join('.', 'tfrecords')
-    recordpaths = []
-    for name in os.listdir(path):
-        recordpaths.append(os.path.join(path, name))
-    dataset = tf.data.TFRecordDataset(recordpaths, 'ZLIB')
-    dataset = dataset.map(map_func=parse_example)
-    dataset = dataset.batch(batch_size=BATCH_SIZE)
-    dataset = dataset.prefetch(buffer_size=BATCH_SIZE)
-    return dataset
-# end dataset
+def read_shards(filenames):
+    dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
+    dataset = dataset.shuffle(buffer_size=1237)
+    dataset = dataset.map(map_func=parse_protein, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.batch(1)
+    return dataset.prefetch(buffer_size=1)
 
 
-# begin step / loss
-def step(initial_positions, initial_distances, positions, velocities,
-         masses, num_atoms, num_atoms_squared, force_field):
-    positions, velocities = move_atoms(positions, velocities, masses, force_field)
-    loss_value = loss(initial_positions, initial_distances, positions,
-                      velocities, masses,
-                      num_atoms, num_atoms_squared, force_field)
-    return positions, velocities, loss_value
+@tf.function
+def get_losses(initial, xyz):
+    d = get_distances(xyz)
+    return tf.losses.mean_squared_error(initial, d), tf.math.exp(-d)
 
 
-def move_atoms(positions, velocities, masses, force_field):
-    acceleration = force_field / masses
-    noise = tf.random.normal(acceleration.shape, 0, NOISE, dtype='float32')
-    velocities += acceleration + noise
-    positions += velocities
-    return positions, velocities
+@tf.function
+def get_distances(xyz):
+    xyz = tf.squeeze(xyz, 0)
+    d = tf.reshape(tf.reduce_sum(xyz * xyz, 1), [-1,1])
+    return d - 2 * tf.matmul(xyz, xyz, transpose_b=True) + tf.transpose(d)
 
-
-def loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field):
-    # position
-    num_atoms = tf.dtypes.cast(num_atoms, dtype = tf.float32)
-    position_error = K.losses.mean_squared_error(initial_positions, positions)
-    position_error /= num_atoms
-    position_error *= POSITION_ERROR_WEIGHT
-    # shape
-    distances = calculate_distances(positions)
-    shape_error = K.losses.mean_squared_error(initial_distances, distances)
-    shape_error /= num_atoms_squared
-    shape_error *= SHAPE_ERROR_WEIGHT
-    # action energy
-    kinetic_energy = (masses / 2) * (velocities ** 2)
-    potential_energy = -1 * force_field
-    average_action_error = tf.reduce_mean(kinetic_energy - potential_energy)
-    average_action_error *= ACTION_ERROR_WEIGHT
-    return position_error + shape_error + average_action_error
-
-
-def calculate_distances(positions):
-    positions = tf.squeeze(positions)
-    distances = tf.reduce_sum(positions * positions, 1)
-    distances = tf.reshape(distances, [-1, 1])
-    return distances - 2 * tf.matmul(positions, tf.transpose(positions)) + tf.transpose(distances)
-# end step/loss
 
 @skopt.utils.use_named_args(dimensions=dimensions)
+<<<<<<< HEAD
 def train(compressor_kernel_layers,
           compressor_kernel_units,
           pair_kernel_layers,
@@ -254,65 +263,228 @@ def train(compressor_kernel_layers,
         stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
         stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
         while not done:
+=======
+def trial(**kwargs):
+    global run_step, best, best_trial, best_args, trial_number, writer
+    start_time = time.perf_counter()
+    hp = AttrDict(kwargs)
+    agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
+    ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+    averages = ema.apply(agent.weights)
+    global_step = tf.train.get_or_create_global_step()
+    tf.assign(global_step, 0)
+    optimizer = tf.keras.optimizers.Adam(tf.train.cosine_decay_restarts(tf.cast(hp.lr, tf.float32), global_step, hp.decay), amsgrad=True)
+    writer = tf.contrib.summary.create_file_writer(log_dir)
+
+    # @tf.function
+    # def run_step(agent, optimizer, positions, features, masses, forces, velocities):
+    #     stacked_features = tf.concat([positions, features], axis=-1)
+    #     compressed_noise = tf.random.truncated_normal((1, tf.shape(positions)[1], 5), stddev=hp.stddev)
+    #     output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=hp.stddev)
+    #     velocities = velocities + (agent([stacked_features, compressed_noise, output_noise]) / masses)
+    #     return positions + velocities, velocities
+
+    @tf.function
+    def run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities):
+        initial_distances = get_distances(initial_positions)
+        meta, overlap = get_losses(initial_distances, positions)
+        initial_loss = tf.reduce_sum(meta) + tf.reduce_sum(overlap)
+        stop = initial_loss * STOP_LOSS_MULTIPLE
+        loss = 0.
+        for step in tf.range(MAX_STEPS):
             with tf.GradientTape() as tape:
-                atoms = tf.concat([positions, velocities, features], 2)
-                # atoms = tf.expand_dims(tf.concat([positions, velocities, features], 1), 0)
-                noise = tf.expand_dims(tf.random.normal((num_atoms, 3)), 0)
-                force_field = agent([atoms, noise])
-                # force_field = tf.squeeze(agent([atoms, noise]), 0)
-                positions, velocities, loss_value = step(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-            gradients = tape.gradient(loss_value, agent.trainable_weights)
-            adam.apply_gradients(zip(gradients, agent.trainable_weights))
-            step_mean_loss = tf.reduce_mean(loss_value, axis = -1)
-            print('step', train_step, 'mean loss', step_mean_loss.numpy())
-            done_because_loss = step_mean_loss > stop_loss_condition
-            train_step += 1
-            done_because_step = train_step > N_STEPS
-            done = done_because_step or done_because_loss
-            if not done:
-                current_stop_loss = loss_value * STOP_LOSS_MULTIPLIER
-                current_stop_loss_condition = tf.reduce_mean(current_stop_loss, axis = -1)
-                if current_stop_loss_condition.numpy().item() < stop_loss_condition.numpy().item():
-                    stop_loss_condition = current_stop_loss_condition
-                    print('new stop loss:', current_stop_loss_condition.numpy())
-        reason = 'STEP' if done_because_step else 'STOP LOSS'
-        print('done because of', reason)
-        initial_loss = tf.reduce_mean(initial_loss, axis = 1)
-        loss_value = tf.reduce_mean(loss_value, axis = 1)
-        percent_improvement = ((initial_loss - loss_value) / initial_loss ) * 100
-        print('improved by', percent_improvement.numpy(), '%')
-        cumulative_improvement += percent_improvement
-        episode += 1
-    cumulative_improvement /= N_EPISODES
-    global best_cumulative_improvement
-    if cumulative_improvement > best_cumulative_improvement:
-        print('new best mean cumulative improvement:', cumulative_improvement.numpy())
-        best_cumulative_improvement = cumulative_improvement
-        run_path = os.path.join('.', 'runs', TIME)
-        os.makedirs(run_path)
-        save_path = os.path.join(run_path, 'best_agent.h5')
-        tf.saved_model.save(agent, save_path)
-        print('saved agent to', save_path)
-    K.backend.clear_session()
-    del agent
-    return -1 * cumulative_improvement.numpy()[0]
+                stacked_features = tf.concat([positions, features], axis=-1)
+                compressed_noise = tf.random.truncated_normal((1, tf.shape(positions)[1], 5), stddev=hp.stddev)
+                output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=hp.stddev)
+                velocities = velocities + (agent([stacked_features, compressed_noise, output_noise]) / masses)
+                positions = positions + velocities
+                meta, overlap = get_losses(initial_distances, positions)
+            gradients = tape.gradient([meta, overlap], agent.trainable_weights)
+            optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+            loss = tf.reduce_sum(meta) + tf.reduce_sum(overlap)
+            new_stop = loss * STOP_LOSS_MULTIPLE
+            if tf.math.logical_or(tf.math.greater(loss, stop), tf.is_nan(loss)):
+                break
+            elif tf.math.less(new_stop, stop):
+                stop = new_stop
+        return ((loss - initial_loss) / initial_loss) * 100
+
+    @tf.function
+    def train(agent, optimize, proteins):
+        total_change = 0.
+        episode = 0
+        for initial_positions, positions, features, masses, forces, velocities, pdb_id, n_atoms in proteins:
+            if episode >= EPISODES_PER_TRIAL:
+                break
+            change = run_episode(agent, optimizer, initial_positions, positions, features, masses, forces, velocities)
+            ema.apply(agent.weights)
+            if tf.math.is_nan(change):
+                change = 100.
+            tf.print('episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', tf.math.round(change), "% change (lower is better)")
+            tf.contrib.summary.scalar('change', change)
+            total_change = total_change + change
+            episode = episode + 1
+        return total_change
+
+    with writer.as_default(), tf.contrib.summary.always_record_summaries():
+        changes = []
+        for repeat_number in range(REPEATS_PER_TRIAL):
+            try:
+                total_change = train(agent, optimizer, proteins)
+                total_change = total_change.numpy().item(0)
+                print('repeat', repeat_number + 1, 'total change:', total_change, '%')
+                changes.append(total_change)
+            except Exception as e:
+                total_change = EPISODES_PER_TRIAL * 100 * STOP_LOSS_MULTIPLE
+                print(e)
+
+    median = np.median(changes)
+    stddev = np.std(changes)
+    objective = median + stddev  # reward skill and consistency
+    print('changes:', changes)
+    print('median:', median, 'stddev:', stddev)
+    print('objective:', objective)
+    if math.isnan(objective):
+        objective = 100 * EPISODES_PER_TRIAL
+    if tf.math.less(objective, best):
+        plot_path = os.path.join('.', 'runs', trial_name + '.png')
+        K.utils.plot_model(agent, plot_path, show_shapes=True)
+        agent.summary()
+        averages = [ema.average(weight).numpy() for weight in agent.weights]
+        agent.set_weights(averages)
+        make_gifs(agent, optimizer, trial_name, hp.stddev, N_MOVIES, IMAGE_SIZE, MAX_STEPS, STOP_LOSS_MULTIPLE)
+        tf.saved_model.save(agent, os.path.join(log_dir, trial_name + ".h5"))
+        best_trial = trial_name
+        best = objective
+    print('best_trial', best_trial)
+    print('best', best)
+    del agent, writer
+    trial_number += 1
+    if ACQUISITION_FUNCTION is 'EIps':
+        elapsed = time.perf_counter() - start_time
+        print(f'trial {trial_number} done in {elapsed}S')
+        return objective, elapsed
+    else:
+        return objective
 
 
-def main():
-    global N_EPISODES
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+def move_atom(xyz):
+    global atom_index
+    xyz = xyz.tolist()
+    cmd.translate(xyz, f'id {str(atom_index)}')
+    atom_index += 1
 
-    search_result = skopt.gp_minimize(func=train,
-                            dimensions=dimensions,
-                            acq_func='EI', # Expected Improvement.
-                            n_calls=12,
-                            x0=default_hyperparameters)
 
-    N_EPISODES = N_VALIDATION_EPISODES, True
-    bayes.maximize(init_points=0, n_iter=1)
-    for i, res in enumerate(bayes.res):
-        print('iteration: {}, results: {}'.format(i, res))
+def move_atoms(velocities):
+    global atom_index
+    atom_index = 0
+    np.array([move_atom(xyz) for xyz in velocities])
+
+
+def prepare_pymol():
+    cmd.set('max_threads', multiprocessing.cpu_count())
+    cmd.show(MOVIE_STYLE)
+    cmd.unpick()
+    util.cbc()
+
+
+def make_gif(pdb_name, trial_name, pngs_path):
+    gif_name = f'{pdb_name}-{trial_name}.gif'
+    gif_path = os.path.join(".", "gifs", gif_name)
+    imagepaths, images = [], []
+    for stackname in os.listdir(pngs_path):
+        print('processing', stackname)
+        filepath = os.path.join(pngs_path, stackname)
+        imagepaths.append(filepath)
+    imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    for imagepath in imagepaths:
+        image = imageio.imread(imagepath)
+        images.append(image)
+    print('saving gif to', gif_path)
+    imageio.mimsave(gif_path + pdb_name + ".gif", images)
+
+
+def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_steps, stop_loss_multiple):
+    pngs_path = os.path.join('.', 'pngs')
+    pedagogy = load_pedagogy()
+    for movie_number in range(n_movies):
+        step = 0
+        try:
+            shutil.rmtree(pngs_path)
+        except Exception as e:
+            print(e)
+        os.makedirs(pngs_path)
+        pdb_id = random.choice(pedagogy)
+        initial_positions, positions, features, masses, forces, velocities, _, n_atoms = parse_protein(load(pdb_id))
+        prepare_pymol()
+        [initial_positions, positions, features, masses, forces, velocities] = [tf.expand_dims(x, 0) for x in [initial_positions, positions, features, masses, forces, velocities]]
+        velocities = tf.random.truncated_normal(tf.shape(positions), stddev=stddev)
+        initial_distances = get_distances(initial_positions)
+        stop_loss = stop_loss_multiple * tf.reduce_sum([tf.reduce_sum(l) for l in get_losses(initial_distances, positions)])
+        while step < max_steps:
+>>>>>>> 3dff77e1054ae54b94c8f27b5f55e524e3ea7b56
+            with tf.GradientTape() as tape:
+                stacked_features = tf.concat([positions, features], axis=-1)
+                compressed_noise = tf.random.truncated_normal((1, n_atoms, 5), stddev=stddev)
+                output_noise = tf.random.truncated_normal(tf.shape(positions), stddev=stddev)
+                velocities = velocities + agent([stacked_features, compressed_noise, output_noise]) / masses
+                positions = positions + velocities
+                losses = get_losses(initial_distances, positions)
+            gradients = tape.gradient(losses, agent.trainable_weights)
+            optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+            loss = tf.reduce_sum([tf.reduce_sum(l) for l in losses])
+            if loss > stop_loss or tf.math.is_nan(loss):
+                break
+            new_stop = loss * stop_loss_multiple
+            if new_stop < stop_loss:
+                stop_loss = new_stop
+            move_atoms(tf.squeeze(velocities, 0).numpy())
+            cmd.zoom("all")
+            png_path = os.path.join(pngs_path, f'{str(step)}.png')
+            cmd.png(png_path, width=image_size, height=image_size)
+            step += 1
+        make_gif(pdb_id, trial_name, pngs_path)
+
+
+class PlotCallback(object):
+    def __init__(self, path):
+        self.path = path
+
+    def __call__(self, results):
+        print(results)
+        if trial_number > 10:
+            _ = plot_evaluations(results)
+            plt.savefig(os.path.join(self.path, "evaluations.png"))
+            _ = plot_objective(results)
+            plt.savefig(os.path.join(self.path, "objective.png"))
+
+
+def experiment():
+    global log_dir, proteins
+    log_dir = os.path.join('.', 'runs')
+
+    if TENSORBOARD:
+        tb = program.TensorBoard()
+        tb.configure(argv=[None, '--logdir', log_dir])
+        webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
+
+    path = os.path.join('.', 'tfrecords')
+    filenames = [os.path.join(path, name) for name in os.listdir(path)]
+    proteins = read_shards(filenames)
+    checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
+    checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
+    plotter = PlotCallback('.')
+    try:
+        res = skopt.load(checkpoint_path)
+        x0 = res.x_iters
+        y0 = res.func_vals
+        results = skopt.gp_minimize(trial, dimensions, x0=x0, y0=y0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
+    except Exception as e:
+        print(e)
+        x0 = hyperpriors
+        results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
+    print(results)
 
 
 if __name__ == '__main__':
-    main()
+    experiment()
