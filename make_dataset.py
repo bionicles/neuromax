@@ -31,13 +31,8 @@ elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 'rg': 111, 'cn': 112}
 
 
-def load_qm9():
-    path = os.path.join('.', 'datasets', 'xyz')
-    return os.listdir(path)
-
-
-def load_rxns():
-    path = os.path.join('.', 'datasets', 'rxn')
+def load_folder(type):
+    path = os.path.join('.', 'datasets', type)
     return os.listdir(path)
 
 
@@ -100,11 +95,6 @@ def get_features(model):
 
 
 def get_atom_features(atom):
-    resi = atom.resi
-    try:
-        resi = float(resi)
-    except Exception as e:
-        resi = float(resi[0:-1]) + float(ord(resi[-1])) / 122.
     return np.array([elements[atom.symbol.lower()],
                      atom.get_mass(),
                      atom.formal_charge,
@@ -112,12 +102,7 @@ def get_atom_features(atom):
                      atom.vdw,
                      atom.b,
                      atom.q,
-                     atom.get_free_valence(0),
-                     resi,
-                     atom.index,
-                     sum([ord(i) / 122 for i in atom.chain]),
-                     sum([ord(i) / 122 for i in atom.resn]),
-                     sum([ord(i) / 122 for i in atom.name])], dtype=np.float32)
+                     atom.get_free_valence(0)], dtype=np.float32)
 
 
 def get_quantum_target(path):
@@ -213,9 +198,9 @@ def make_example(type, id, target_positions, positions, features, quantum_target
     if len(quantum_target) > 1:
         example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy())
     # sequential features
-    #if target_features:
-    #    fl_target_features = example.feature_lists.feature_list["target_positions"]
-    #    fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
+    if target_features:
+       fl_target_features = example.feature_lists.feature_list["target_positions"]
+       fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
     fl_target_positions = example.feature_lists.feature_list["target_positions"]
     fl_target_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_positions).numpy())
     fl_positions = example.feature_lists.feature_list["positions"]
@@ -229,9 +214,9 @@ def make_example(type, id, target_positions, positions, features, quantum_target
 def write_shards(qm9, rxns, pdbs):
     problems = []
     # write qm9 tfrecords
-    for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (pdbs, "pdb")]:
+    for dataset, type in [(rxns, "rxn"), (qm9, "xyz"), (pdbs, "pdb")]:
         k, p = 0, 0
-        for dataset_item in ProgIter(rxns, verbose=1):
+        for dataset_item in ProgIter(dataset, verbose=1):
             if p % ITEMS_PER_SHARD is 0:
                 try:
                     writer.close()
@@ -244,7 +229,7 @@ def write_shards(qm9, rxns, pdbs):
                 writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
                 k += 1
             try:
-                data = load("rxn", dataset_item.lower())
+                data = load(type, dataset_item.lower())
                 writer.write(data)
             except Exception as e:
                 print('failed on', p, dataset_item)
@@ -268,8 +253,8 @@ def main():
     except Exception as e:
         print('os.path.makedirs(tfrecord_path) exception', e)
 
-    qm9 = load_qm9()
-    rxns = load_rxns()
+    qm9 = load_folder("xyz")
+    rxns = load_folder("rxn")
     pdbs = load_pdbs()
     write_shards(qm9, rxns, pdbs)
 
