@@ -254,7 +254,7 @@ def write_shards():
     qm9 = load_folder("xyz")
     rxns = load_folder("rxn")
     proteins = load_proteins()
-    for dataset, type in [(rxns, 'rxn')]: #[(qm9, "xyz"), (rxns, "rxn"), (proteins, "cif")]:
+    for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (proteins, "cif")]:
         shard_number, item_number = 0, 0
         for dataset_item in ProgIter(dataset, verbose=1):
             if item_number % ITEMS_PER_SHARD is 0:

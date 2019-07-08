@@ -22,6 +22,8 @@ B = tf.keras.backend
 L = tf.keras.layers
 K = tf.keras
 # globals
+qm9 = None
+rxn = None
 proteins = None
 trial_number = 0
 atom_index = 0
@@ -31,6 +33,7 @@ best = 12345678900
 # parameters
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
 STOP_LOSS_MULTIPLE = 1.2
+EPISODES_PER_DATASET = 2
 EPISODES_PER_TRIAL = 2
 REPEATS_PER_TRIAL = 2
 TENSORBOARD = False
@@ -198,21 +201,34 @@ def parse_item(example):
                         'id': tf.io.FixedLenFeature([], dtype=tf.string)}
     sequence_features = {'target_positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'target_features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'target_masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'target_numbers': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-                         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
+                         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'numbers': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     target_positions = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 3])
     target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 8])
-    target_masses = tf.reshape(tf.io.parse_tensor(sequence['target_masses'][0], tf.float32), [-1, 8])
-    target_elements = tf.reshape(tf.io.parse_tensor(sequence['target_elements'][0], tf.float32), [-1, 8])
+    target_masses = tf.reshape(tf.io.parse_tensor(sequence['target_masses'][0], tf.float32), [-1, 1])
+    target_numbers = tf.reshape(tf.io.parse_tensor(sequence['target_numbers'][0], tf.float32), [-1, 1])
     positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 8])
     numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
     masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
+    numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
     quantum_target = tf.io.parse_tensor(context['quantum_target'], tf.float32)
+    features = tf.concat([features, masses, numbers], -1)
     masses = tf.concat([masses, masses, masses], 1)
-    return (context['type'], context['id'], target_positions, positions, features, elements, masses,
-            tf.shape(positions)[0], target_features, quantum_target)
+    n_atoms = tf.shape(positions)[0]
+    type = context['type']
+    id = context['id']
+    if type is "xyz":
+        return (type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target)
+    elif type is "rxn":
+        return (type, id, n_atoms, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers)
+    else:
+        return (type, id, n_atoms, target_positions, positions, features, masses, numbers)
 
 
 def read_shards(datatype):
@@ -223,7 +239,7 @@ def read_shards(datatype):
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
     dataset = dataset.map(map_func=parse_item, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1)
-    return n_data_elements, dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+    return n_records, dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
 
 def move_atom(xyz):
@@ -263,7 +279,7 @@ def make_gif(pdb_name, trial_name, pngs_path):
 
 @tf.function(input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.float32),
                               tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
-def get_losses(initial, xyz):
+def get_loss(initial, xyz):
     return tf.math.square(tf.math.subtract(initial, get_distances(xyz))) * 0.5
 
 
@@ -276,7 +292,7 @@ def get_distances(xyz):
 
 @skopt.utils.use_named_args(dimensions=dimensions)
 def trial(**kwargs):
-    global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp, proteins
+    global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp, qm9, rxn, proteins
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
     lr = tf.cast(hp.lr, tf.float32)
@@ -297,9 +313,18 @@ def trial(**kwargs):
     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    def run_episode(target_positions, positions, features, masses, gif=False):
+    def run_episode(*args, gif=False):
+        target_features, target_masses, target_numbers = None, None, None
+        quantum_target = None
+        type = args[0]
+        if type is "xyz":
+            _, target_positions, positions, features, masses, numbers, quantum_target = args
+        elif type is "rxn":
+            _, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers = args
+        else:
+            _, target_positions, positions, features, masses, numbers = args
         target_distances = get_distances(target_positions)
-        meta, overlap = get_losses(target_distances, positions)
+        meta = get_loss(target_distances, positions)
         initial_loss = tf.reduce_sum(meta)
         velocities = tf.zeros_like(positions)
         stop = initial_loss * STOP_LOSS_MULTIPLE
@@ -308,7 +333,7 @@ def trial(**kwargs):
             with tf.GradientTape() as tape:
                 velocities = velocities + agent([positions, features]) / masses
                 positions = tf.math.add(positions, velocities)
-                meta = get_losses(target_distances, positions)
+                meta = get_loss(target_distances, positions)
             gradients = tape.gradient([meta], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
@@ -328,35 +353,67 @@ def trial(**kwargs):
             make_gif(pdb_id, trial_name, pngs_path)
         return ((loss - initial_loss) / initial_loss) * 100.
 
-    run_training_episode = tf.function(run_episode, input_signature=[
+    run_qm9_training_episode = tf.function(run_episode, input_signature=[
+        tf.TensorSpec(shape=(1), dtype=tf.string),
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
-        tf.TensorSpec(shape=(1, None, 13), dtype=tf.float32),
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
+        tf.TensorSpec(shape=(1, None, 8), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),
+        tf.TensorSpec(shape=(15), dtype=tf.float32)])
+    run_rxn_training_episode = tf.function(run_episode, input_signature=[
+        tf.TensorSpec(shape=(1), dtype=tf.string),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 8), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 8), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 8), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32)])
+    run_protein_training_episode = tf.function(run_episode, input_signature=[
+        tf.TensorSpec(shape=(1), dtype=tf.string),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 8), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32)])
 
     @tf.function
-    def train(qm9, rxns, proteins):
+    def train(datasets):
         total_change = 0.
         episode = 0
         change = 0.
-        for target_positions, positions, features, masses, pdb_id, n_atoms in proteins:
-            with tf.device('/gpu:0'):
-                change = run_training_episode(target_positions, positions, features, masses)
-            if tf.math.is_nan(change):
-                change = 100.
-            tf.print('episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
-            tf.summary.scalar('change', change)
-            total_change = total_change + change
-            episode = episode + 1
-            if episode >= EPISODES_PER_TRIAL:
-                break
+        for dataset in datasets:
+            episodes_this_dataset = 0
+            for type, id, n_atoms, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers, quantum_target in dataset:
+                with tf.device('/gpu:0'):
+                    if type is "xyz":
+                        change = run_qm9_training_episode(type, target_positions, positions, features, masses, numbers, quantum_target)
+                    elif type is "rxn":
+                        change = run_rxn_training_episode(type, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers)
+                    else:
+                        change = run_protein_training_episode(type, target_positions, positions, features, masses, numbers)
+                if tf.math.is_nan(change):
+                    change = 100.
+                tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
+                tf.summary.scalar('change', change)
+                total_change = total_change + change
+                episodes_this_dataset = episodes_this_dataset + 1
+                episode = episode + 1
+                if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
+                    break
         return total_change
 
     changes = []
     for repeat_number in range(REPEATS_PER_TRIAL):
         try:
-            proteins = proteins if repeat_number is 0 else proteins.shuffle(buffer_size=9288)
-            total_change = train(proteins)
+            if repeat_number > 0:
+                qm9 = qm9.shuffle(buffer_size=n_qm9_records)
+                rxn = rxn.shuffle(buffer_size=n_rxn_records)
+                proteins = proteins.shuffle(buffer_size=n_proteins)
+            total_change = train([qm9, rxn, proteins])
             total_change = total_change.numpy().item(0)
             print('repeat', repeat_number + 1, 'total change:', total_change, '%')
             changes.append(total_change)
@@ -417,7 +474,7 @@ class PlotCallback(object):
 
 
 def experiment():
-    global log_dir, proteins
+    global log_dir, n_qm9_records, qm9, n_rxn_records, rxn, n_proteins, proteins
     log_dir = os.path.join('.', 'runs', str(time.time()))
 
     if TENSORBOARD:
@@ -425,10 +482,11 @@ def experiment():
         tb.configure(argv=[None, '--logdir', log_dir])
         webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
 
-    datasets = []
-    for datatype in ['xyz', 'rxn', 'cif']:
-        n_data_elements, dataset = read_shards(datatype)
-        datasets.append((datatype, n_data_elements, dataset))
+
+    n_qm9_records, qm9 = read_shards('xyz')
+    n_rxn_records, rxn = read_shards('rxn')
+    n_proteins, proteins = read_shards('cif')
+
     checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
     checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
     plotter = PlotCallback('.')
