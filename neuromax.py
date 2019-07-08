@@ -33,9 +33,9 @@ best = 12345678900
 # parameters
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
 STOP_LOSS_MULTIPLE = 1.2
-EPISODES_PER_TRIAL = 128
-REPEATS_PER_TRIAL = 5
-TENSORBOARD = True
+EPISODES_PER_TRIAL = 2
+REPEATS_PER_TRIAL = 2
+TENSORBOARD = False
 MAX_STEPS = 420
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
@@ -97,7 +97,8 @@ class NoisyDropConnectDense(L.Dense):
             self.call = self.normal_call
 
     def add_noise(self):
-        return self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.stddev), self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.stddev)
+        return (self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.stddev),
+                self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.stddev))
 
     def call_noise_drop(self, x):
         kernel, bias = self.add_noise()
@@ -238,47 +239,81 @@ def read_shards(filenames):
     return dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
 
-@tf.function(input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
-def get_losses(initial, xyz):
-    print('tracing get_losses')
-    d = get_distances(xyz)
-    return tf.losses.mean_squared_error(initial, d), tf.math.exp(-d)
+def move_atom(xyz):
+    global atom_index
+    xyz = xyz.tolist()
+    cmd.translate(xyz, f'id {str(atom_index)}')
+    atom_index += 1
 
+
+def move_atoms(velocities):
+    global atom_index
+    atom_index = 0
+    np.array([move_atom(xyz) for xyz in velocities])
+
+
+def prepare_pymol():
+    cmd.set('max_threads', multiprocessing.cpu_count())
+    cmd.show(MOVIE_STYLE)
+    cmd.unpick()
+    util.cbc()
+
+
+def make_gif(pdb_name, trial_name, pngs_path):
+    gif_name = f'{pdb_name}-{trial_name}.gif'
+    gif_path = os.path.join(".", "gifs", gif_name)
+    imagepaths, images = [], []
+    for stackname in os.listdir(pngs_path):
+        print('processing', stackname)
+        filepath = os.path.join(pngs_path, stackname)
+        imagepaths.append(filepath)
+    imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    for imagepath in imagepaths:
+        image = imageio.imread(imagepath)
+        images.append(image)
+    print('saving gif to', gif_path)
+    imageio.mimsave(gif_path + pdb_name + ".gif", images)
+
+
+@tf.function(input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.float32),
+                              tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
+def get_losses(initial, xyz):
+    d = get_distances(xyz)
+    o = get_overlap(d)
+    return tf.losses.mean_squared_error(initial, d), o
+
+
+# @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
+# def get_distances(xyz):
+#     print('tracing get_distances')
+#     xyz = tf.squeeze(xyz, 0)
+#     d = tf.reshape(tf.reduce_sum(xyz * xyz, 1), [-1,1])
+#     return d - 2 * tf.matmul(xyz, xyz, transpose_b=True) + tf.transpose(d)
 
 @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
 def get_distances(xyz):
-    print('tracing get_distances')
-    xyz = tf.squeeze(xyz, 0)
-    d = tf.reshape(tf.reduce_sum(xyz * xyz, 1), [-1,1])
-    return d - 2 * tf.matmul(xyz, xyz, transpose_b=True) + tf.transpose(d)
+    n = tf.shape(xyz)[1]
+    d = tf.zeros((n, n))
+    for i in range(n):
+        ai = xyz[0, i]
+        for j in range(i):
+            d = tf.tensor_scatter_nd_add(d, [[i, j]],
+                                         [tf.reduce_sum(
+                                             tf.math.squared_difference(
+                                                 ai, xyz[0, j]))
+                                          ])
+    return d
 
 
-def experiment():
-    global log_dir, proteins
-    log_dir = os.path.join('.', 'runs', str(time.time()))
+@tf.function(input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.float32)])
+def get_overlap(d):
+    n = tf.shape(d)[1]
+    o = 0.
+    for i in range(n):
+        for j in range(i):
+            o = o + tf.math.exp(-1 * d[i, j])
+    return o
 
-    if TENSORBOARD:
-        tb = program.TensorBoard()
-        tb.configure(argv=[None, '--logdir', log_dir])
-        webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
-
-    path = os.path.join('.', 'tfrecords')
-    filenames = [os.path.join('.', 'tfrecords', str(i) + '.tfrecord') for i in range(1, 1237)]
-    [print(filename) for filename in filenames]
-    proteins = read_shards(filenames)
-    checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
-    checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
-    plotter = PlotCallback('.')
-    try:
-        res = skopt.load(checkpoint_path)
-        x0 = res.x_iters
-        y0 = res.func_vals
-        results = skopt.gp_minimize(trial, dimensions, x0=x0, y0=y0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
-    except Exception as e:
-        print(e)
-        x0 = hyperpriors
-        results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
-    print(results)
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -287,27 +322,32 @@ def trial(**kwargs):
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
     lr = tf.cast(hp.lr, tf.float32)
-    try:
-        strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"])
-        print('Number of GPU devices: {}'.format(strategy.num_replicas_in_sync))
-        with strategy.scope():
-            agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
-            ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-            averages = ema.apply(agent.weights)
-            lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
-            optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
-    except:
-        agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
-        ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-        averages = ema.apply(agent.weights)
-        lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
-        optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
+    # try:
+    #     strategy = tf.distribute.MirroredStrategy(devices=["/gpu:0", "/gpu:1"])
+    #     print('Number of GPU devices: {}'.format(strategy.num_replicas_in_sync))
+    #     with strategy.scope():
+    #         agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
+    #         ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+    #         averages = ema.apply(agent.weights)
+    #         lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
+    #         optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
+    # except:
+    agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
+    ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+    averages = ema.apply(agent.weights)
+    lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
+    optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 13), dtype=tf.float32), tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
-    def run_episode(initial_positions, positions, features, masses):
-        initial_distances = get_distances(initial_positions)
-        meta, overlap = get_losses(initial_distances, positions)
+    @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+                                  tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+                                  tf.TensorSpec(shape=(1, None, 13), dtype=tf.float32),
+                                  tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
+                                  tf.TensorSpec(shape=1, dtype=tf.int32)])
+    def run_episode(initial_positions, positions, features, masses, n_atoms):
+        tf.print("n_atoms", n_atoms)
+        initial_distances = get_distances(initial_positions, n_atoms)
+        meta, overlap = get_losses(initial_distances, positions, n_atoms)
         total_meta = tf.reduce_sum(meta)
         total_overlap = tf.reduce_sum(overlap)
         initial_loss = total_meta + total_overlap
@@ -318,7 +358,7 @@ def trial(**kwargs):
             with tf.GradientTape() as tape:
                 velocities = velocities + agent([positions, features]) / masses
                 positions = tf.math.add(positions, velocities)
-                meta, overlap = get_losses(initial_distances, positions)
+                meta, overlap = get_losses(initial_distances, positions, n_atoms)
             gradients = tape.gradient([meta, overlap], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
@@ -339,7 +379,7 @@ def trial(**kwargs):
         change = 0.
         for initial_positions, positions, features, masses, pdb_id, n_atoms in proteins:
             with tf.device('/gpu:0'):
-                change = run_episode(initial_positions, positions, features, masses)
+                change = run_episode(initial_positions, positions, features, masses, n_atoms)
             if tf.math.is_nan(change):
                 change = 100.
             tf.print('episode', episode, 'pdb id', pdb_id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
@@ -392,43 +432,6 @@ def trial(**kwargs):
         return objective
 
 
-def move_atom(xyz):
-    global atom_index
-    xyz = xyz.tolist()
-    cmd.translate(xyz, f'id {str(atom_index)}')
-    atom_index += 1
-
-
-def move_atoms(velocities):
-    global atom_index
-    atom_index = 0
-    np.array([move_atom(xyz) for xyz in velocities])
-
-
-def prepare_pymol():
-    cmd.set('max_threads', multiprocessing.cpu_count())
-    cmd.show(MOVIE_STYLE)
-    cmd.unpick()
-    util.cbc()
-
-
-def make_gif(pdb_name, trial_name, pngs_path):
-    gif_name = f'{pdb_name}-{trial_name}.gif'
-    gif_path = os.path.join(".", "gifs", gif_name)
-    imagepaths, images = [], []
-    for stackname in os.listdir(pngs_path):
-        print('processing', stackname)
-        filepath = os.path.join(pngs_path, stackname)
-        imagepaths.append(filepath)
-    imagepaths.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
-    for imagepath in imagepaths:
-        image = imageio.imread(imagepath)
-        images.append(image)
-    print('saving gif to', gif_path)
-    imageio.mimsave(gif_path + pdb_name + ".gif", images)
-
-
-# TODO: REMOVE THIS!
 def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_steps, stop_loss_multiple):
     pngs_path = os.path.join('.', 'pngs')
     pedagogy = load_pedagogy()
@@ -439,12 +442,12 @@ def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_st
         except Exception as e:
             print(e)
         os.makedirs(pngs_path)
-        pdb_id = random.choice(pedagogy)
-        initial_positions, positions, features, masses, _, _ = parse_protein(load(pdb_id))
+        pdb_id = '4CC8'
+        initial_positions, positions, features, masses, _, n_atoms = parse_protein(load(pdb_id))
         prepare_pymol()
         [initial_positions, positions, features, masses] = [tf.expand_dims(x, 0) for x in [initial_positions, positions, features, masses]]
-        initial_distances = get_distances(initial_positions)
-        meta, overlap = get_losses(initial_distances, positions)
+        initial_distances = get_distances(initial_positions, n_atoms)
+        meta, overlap = get_losses(initial_distances, positions, n_atoms)
         total_meta = tf.math.sqrt(tf.reduce_sum(meta))
         total_overlap = tf.reduce_sum(overlap)
         initial_loss = total_meta + total_overlap
@@ -454,7 +457,7 @@ def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_st
             with tf.GradientTape() as tape:
                 velocities = velocities + agent([positions, features]) / masses
                 positions = positions + velocities
-                meta, overlap = get_losses(initial_distances, positions)
+                meta, overlap = get_losses(initial_distances, positions, n_atoms)
             gradients = tape.gradient([meta, overlap], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             total_meta = tf.math.sqrt(tf.reduce_sum(meta))
@@ -471,6 +474,33 @@ def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_st
             cmd.png(png_path, width=image_size, height=image_size)
             step += 1
         make_gif(pdb_id, trial_name, pngs_path)
+
+
+def experiment():
+    global log_dir, proteins
+    log_dir = os.path.join('.', 'runs', str(time.time()))
+
+    if TENSORBOARD:
+        tb = program.TensorBoard()
+        tb.configure(argv=[None, '--logdir', log_dir])
+        webbrowser.get(using='google-chrome').open(tb.launch()+'#scalars', new=2)
+
+    path = os.path.join('.', 'tfrecords')
+    filenames = [os.path.join('.', 'tfrecords', str(i) + '.tfrecord') for i in range(1, 1237)]
+    proteins = read_shards(filenames)
+    checkpoint_path = os.path.join(log_dir, 'checkpoint.pkl')
+    checkpointer = skopt.callbacks.CheckpointSaver(checkpoint_path)
+    plotter = PlotCallback('.')
+    try:
+        res = skopt.load(checkpoint_path)
+        x0 = res.x_iters
+        y0 = res.func_vals
+        results = skopt.gp_minimize(trial, dimensions, x0=x0, y0=y0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
+    except Exception as e:
+        print(e)
+        x0 = hyperpriors
+        results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[checkpointer, plotter])
+    print(results)
 
 
 class PlotCallback(object):
