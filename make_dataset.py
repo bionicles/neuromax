@@ -6,12 +6,10 @@ import random
 import shutil
 import csv
 import os
-tf.enable_eager_execution()
-# reactions from ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-rxn.tar.gz
-# reaction molecules from ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-mol.tar.gz
-# qm9 data from https://figshare.com/articles/Data_for_6095_constitutional_isomers_of_C7H10O2/1057646
-# qm9 paper https://www.nature.com/articles/sdata201422
-CSV_FILE_NAME = 'less-than-164kd-9-chains.csv'
+
+CSV_FILE_NAME = 'smallbig_less_then_9_chains.csv'
+P_UNDOCK = 0.8
+P_UNFOLD = 0.8
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
 ITEMS_PER_SHARD = 8
 DTYPE = tf.float32
@@ -189,8 +187,10 @@ def load(type, id):
     # make the model inputs
     if type is 'pdb':
         chains = cmd.get_chains('all')
-        undock(chains, type)
-        unfold(chains)
+        if random.random() < P_UNDOCK:
+            undock(chains, type)
+        if random.random() < P_UNFOLD:
+            unfold(chains)
     if type is 'rxn':
         names = cmd.get_names('all')
         undock(names, type)
