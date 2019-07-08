@@ -17,7 +17,7 @@ P_UNFOLD = 0.8
 # quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
 # chem -> datasets/rxn: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-rxn.tar.gz
 # chem -> datasets/mol: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-mol.tar.gz
-# pdb datasets use datasets/csv lists of RCSB PDB ids
+# cif datasets use datasets/csv lists of RCSB cif ids
 
 elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 'f': 9, 'ne': 10, 'na': 11, 'mg': 12, 'al': 13, 'si': 14, 'p': 15, 's': 16,
@@ -37,11 +37,10 @@ elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 
 
 def load_folder(type):
-    path = os.path.join('.', 'datasets', type)
-    return os.listdir(path)
+    return os.listdir(os.path.join('.', 'datasets', type))
 
 
-def load_pdbs():
+def load_proteins():
     with open(os.path.join('.', 'datasets', 'csv', CSV_FILE_NAME)) as csvfile:
         reader = csv.reader(csvfile)
         rows = [row for row in reader]
@@ -50,7 +49,7 @@ def load_pdbs():
 
 def undock(chains, type):
     for chainOrName in chains:
-        selection_string = f'chain {chainOrName}' if type is 'pdb' else chainOrName
+        selection_string = f'chain {chainOrName}' if type is 'cif' else chainOrName
         translation_vector = [
             random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
             random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
@@ -85,7 +84,7 @@ def unfold_index(name, index):
                          selection_string_array[4], random.randint(0, 360))
     except Exception as e:
         print('failed to set dihedral at ', name, index)
-        print(e)
+        # print(e)
 
 
 def get_positions(model):
@@ -158,14 +157,14 @@ def load(type, id):
     quantum_target = []
     target_features = []
     cmd.delete('all')
-    file_name = f'{id}.{type}' if type is 'pdb' else id
+    file_name = f'{id}.{type}' if type is 'cif' else id
     dataset_path = os.path.join('.', 'datasets', type)
     path = os.path.join(dataset_path, file_name)
     # we load the target
     print(f'load {id} {path}')
-    if type is "pdb":
+    if type is "cif":
         if not os.path.exists(path):
-            cmd.fetch(id, path=dataset_path, type='pdb')
+            cmd.fetch(id, path=dataset_path)
         elif os.path.exists(path):
             cmd.load(path)
     elif type is "xyz":
@@ -190,7 +189,7 @@ def load(type, id):
         clean_pymol()
         model = cmd.get_model('all', 1)
     # make the model inputs
-    if type is 'pdb':
+    if type is 'cif':
         chains = cmd.get_chains('all')
         if random.random() < P_UNDOCK:
             undock(chains, type)
@@ -229,8 +228,8 @@ def write_shards():
     problems = []
     qm9 = load_folder("xyz")
     rxns = load_folder("rxn")
-    pdbs = load_pdbs()
-    for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (pdbs, "pdb")]:
+    proteins = load_proteins()
+    for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (proteins, "cif")]:
         shard_number, item_number = 0, 0
         for dataset_item in ProgIter(dataset, verbose=1):
             if item_number % ITEMS_PER_SHARD is 0:
