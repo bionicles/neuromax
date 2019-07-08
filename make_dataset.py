@@ -6,12 +6,11 @@ import random
 import shutil
 import csv
 import os
-import time
 CSV_FILE_NAME = 'smallbig_less_then_9_chains.csv'
 P_UNDOCK = 0.8
 P_UNFOLD = 0.8
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
-ITEMS_PER_SHARD = 8
+ITEMS_PER_SHARD = 2
 DTYPE = tf.float32
 
 elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
@@ -37,7 +36,7 @@ def load_folder(type):
 
 
 def load_pdbs():
-    with open(os.path.join('.', 'datasets', 'csvs', CSV_FILE_NAME)) as csvfile:
+    with open(os.path.join('.', 'datasets', 'csv', CSV_FILE_NAME)) as csvfile:
         reader = csv.reader(csvfile)
         rows = [row for row in reader]
         return [item.strip() for item in rows[0]]
@@ -110,6 +109,7 @@ def get_quantum_target(path):
 
 
 def get_reactants_products(path):
+    print(f"getting reactants and products for {path}")
     line_is_n_reactants_products = False
     line_is_molfile = False
     mol_data = open(path)
@@ -119,20 +119,25 @@ def get_reactants_products(path):
     for line in mol_data:
         if line_is_n_reactants_products:
             reactants_products = line.strip().split(" ")
-            reactants = reactants_products[0]
-            products = reactants_products[-1]
-        elif line_is_molfile:
+            n_reactants = int(reactants_products[0])
+            n_products = int(reactants_products[-1])
+            line_is_n_reactants_products = False
+        elif line_is_molfile and ":" in line:
             molfile = line.replace(':', '_')
+            molfile = molfile.replace('\n', '')
             molfiles.append(f'{molfile}.mol')
+            line_is_molfile = False
         if "RHEA:release" in line:
             line_is_n_reactants_products = True
-        if "$mol" in line:
+        if "$MOL" in line:
             line_is_molfile = True
-    for name in molfiles:
-        if reactants > 0:
-            reactants.push(name)
-        else:
-            products.push(name)
+    for molfile in molfiles:
+        if n_reactants > 0:
+            reactants.append(molfile)
+            n_reactants -= 1
+        elif n_products > 0:
+            products.append(molfile)
+            n_products -= 1
     return reactants, products
 
 
@@ -153,10 +158,10 @@ def load(type, id):
     dataset_path = os.path.join('.', 'datasets', type)
     path = os.path.join(dataset_path, file_name)
     # we load the target
-    print(f'load {path}')
-    if type is "pdb":  #bio
+    print(f'load {id} {path}')
+    if type is "pdb":
         if not os.path.exists(path):
-            cmd.fetch(id, path=path, type='pdb')
+            cmd.fetch(id, path=dataset_path, type='pdb')
         elif os.path.exists(path):
             cmd.load(path)
     elif type is "xyz":
@@ -164,7 +169,10 @@ def load(type, id):
         cmd.load(path)
     elif type is "rxn":
         reactants, products = get_reactants_products(path)
-        [cmd.load(os.path.join('.', 'datasets', 'mol', product)) for product in products]
+        print(f"{str(reactants)} ---> {str(products)}")
+        for product in products:
+            product_path = os.path.join('.', 'datasets', 'mol', product)
+            cmd.load(product_path)
     # make target
     clean_pymol()
     model = cmd.get_model('all', 1)
@@ -172,7 +180,9 @@ def load(type, id):
     if type is 'rxn':
         target_features = get_features(model)
         cmd.delete('all')
-        [cmd.load(os.path.join('.', 'datasets', 'mol', reactant)) for reactant in reactants]
+        for reactant in reactants:
+            reactant_path = os.path.join('.', 'datasets', 'mol', reactant)
+            cmd.load(reactant_path)
         clean_pymol()
         model = cmd.get_model('all', 1)
     # make the model inputs
@@ -199,8 +209,8 @@ def make_example(type, id, target_positions, positions, features, quantum_target
         example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy())
     # sequential features
     if target_features:
-       fl_target_features = example.feature_lists.feature_list["target_positions"]
-       fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
+        fl_target_features = example.feature_lists.feature_list["target_positions"]
+        fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
     fl_target_positions = example.feature_lists.feature_list["target_positions"]
     fl_target_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_positions).numpy())
     fl_positions = example.feature_lists.feature_list["positions"]
@@ -211,10 +221,13 @@ def make_example(type, id, target_positions, positions, features, quantum_target
     return example.SerializeToString()
 
 
-def write_shards(qm9, rxns, pdbs):
+def write_shards():
     problems = []
     # write qm9 tfrecords
-    for dataset, type in [(rxns, "rxn"), (qm9, "xyz"), (pdbs, "pdb")]:
+    # qm9 = load_folder("xyz")
+    rxns = load_folder("rxn")
+    # pdbs = load_pdbs()
+    for dataset, type in [(rxns, "rxn")]:
         k, p = 0, 0
         for dataset_item in ProgIter(dataset, verbose=1):
             if p % ITEMS_PER_SHARD is 0:
@@ -228,14 +241,16 @@ def write_shards(qm9, rxns, pdbs):
                 shard_path = os.path.join(shard_path, str(k) + '.tfrecord')
                 writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
                 k += 1
+                if k > 1:
+                    break
             try:
                 data = load(type, dataset_item.lower())
                 writer.write(data)
+                print('wrote', dataset_item, 'to', shard_path)
             except Exception as e:
-                print('failed on', p, dataset_item)
+                print('failed on', p, dataset_item, shard_path)
                 print(e)
                 problems.append([p, dataset_item, e])
-            print('wrote', dataset_item, 'to', shard_path)
             p += 1
     print('problem children:')
     [print(problem) for problem in problems]
@@ -253,10 +268,7 @@ def main():
     except Exception as e:
         print('os.path.makedirs(tfrecord_path) exception', e)
 
-    qm9 = load_folder("xyz")
-    rxns = load_folder("rxn")
-    pdbs = load_pdbs()
-    write_shards(qm9, rxns, pdbs)
+    write_shards()
 
 
 if __name__ == '__main__':
