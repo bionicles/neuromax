@@ -94,7 +94,8 @@ def get_positions(model):
 
 
 def get_features(model):
-    features = np.array([get_atom_features(atom) for atom in model.atom])
+    features = np.array([get_atom_features(atom) for atom in model.atom if atom.symbol!="gdb"])
+    tf.convert_to_tensor(features, dtype=DTYPE)
     return tf.convert_to_tensor(features, dtype=DTYPE)
 
 
@@ -120,7 +121,7 @@ def get_atom_features(atom):
 
 
 def get_quantum_target(path):
-    return tf.convert_to_tensor(open(path)[1].split("\t")[1:-1])
+    return tf.convert_to_tensor([float(element) for element in open(path).readlines(3)[1].split("\t")[1:-1]])
 
 
 def get_reactants_products(path):
@@ -158,8 +159,8 @@ def clean_pymol():
 
 def load(type, id):
     # we clear pymol, make filename and path
-    quantum_target = None
-    target_features = None
+    quantum_target = []
+    target_features = []
     cmd.delete('all')
     file_name = f'{id}.{type}'
     if type is not "pdb":
@@ -204,17 +205,17 @@ def load(type, id):
     return make_example(type, id, target_positions, positions, features, quantum_target, target_features)
 
 
-def make_example(type, id, target_positions, positions, features, quantum_target=None, target_features=None):
+def make_example(type, id, target_positions, positions, features, quantum_target, target_features):
     example = tf.train.SequenceExample()
     # non-sequential features
     example.context.feature["type"].bytes_list.value.append(bytes(type, 'utf-8'))
     example.context.feature["id"].bytes_list.value.append(bytes(id, 'utf-8'))
-    if quantum_target:
+    if len(quantum_target) > 1:
         example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy())
     # sequential features
-    if target_features:
-        fl_target_features = example.feature_lists.feature_list["target_positions"]
-        fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
+    #if target_features:
+    #    fl_target_features = example.feature_lists.feature_list["target_positions"]
+    #    fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
     fl_target_positions = example.feature_lists.feature_list["target_positions"]
     fl_target_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_positions).numpy())
     fl_positions = example.feature_lists.feature_list["positions"]
