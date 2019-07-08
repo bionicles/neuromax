@@ -6,7 +6,7 @@ import random
 import shutil
 import csv
 import os
-
+import time
 CSV_FILE_NAME = 'smallbig_less_then_9_chains.csv'
 P_UNDOCK = 0.8
 P_UNFOLD = 0.8
@@ -42,13 +42,14 @@ def load_rxns():
 
 
 def load_pdbs():
-    with open(os.path.join('.', 'csvs', CSV_FILE_NAME)) as csvfile:
+    with open(os.path.join('.', 'datasets', 'csvs', CSV_FILE_NAME)) as csvfile:
         reader = csv.reader(csvfile)
-        return [item.strip() for item in row for row in reader]
+        rows = [row for row in reader]
+        return [item.strip() for item in rows[0]]
 
 
 def undock(chains, type):
-    for chainOrName in chainsOrNames:
+    for chainOrName in chains:
         selection_string = f'chain {chainOrName}' if type is 'pdb' else chainOrName
         translation_vector = [
             random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
@@ -89,12 +90,12 @@ def unfold_index(name, index):
 
 def get_positions(model):
     positions = np.array(model.get_coord_list())
-    return tf.convert_to_tensor(positions, preferred_dtype=DTYPE)
+    return tf.convert_to_tensor(positions, dtype=DTYPE)
 
 
 def get_features(model):
     features = np.array([get_atom_features(atom) for atom in model.atom])
-    return tf.convert_to_tensor(features, preferred_dtype=DTYPE)
+    return tf.convert_to_tensor(features, dtype=DTYPE)
 
 
 def get_atom_features(atom):
@@ -157,6 +158,8 @@ def clean_pymol():
 
 def load(type, id):
     # we clear pymol, make filename and path
+    quantum_target = None
+    target_features = None
     cmd.delete('all')
     file_name = f'{id}.{type}'
     dataset_path = os.path.join('.', 'datasets', type)
@@ -205,7 +208,7 @@ def make_example(type, id, target_positions, positions, features, quantum_target
     example.context.feature["type"].bytes_list.value.append(bytes(type, 'utf-8'))
     example.context.feature["id"].bytes_list.value.append(bytes(id, 'utf-8'))
     if quantum_target:
-        example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy()))
+        example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy())
     # sequential features
     if target_features:
         fl_target_features = example.feature_lists.feature_list["target_positions"]
@@ -225,17 +228,22 @@ def write_shards(qm9, rxns, pdbs):
     # write qm9 tfrecords
     for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (pdbs, "pdb")]:
         k, p = 0, 0
-        for dataset_item in ProgIter(qm9, verbose=1):
+        for dataset_item in ProgIter(dataset, verbose=1):
             if p % ITEMS_PER_SHARD is 0:
                 try:
                     writer.close()
                 except Exception as e:
                     print('writer.close() exception', e)
-                shard_path = os.path.join('.', 'datasets', 'tfrecord', type, str(k) + '.tfrecord')
+                shard_path = os.path.join('.', 'datasets', 'tfrecord', type)
+                if not os.path.exists(shard_path):
+                    os.makedirs(shard_path)
+                shard_path = os.path.join(shard_path, str(k) + '.tfrecord')
                 writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
                 k += 1
             try:
-                data = load(dataset_item, type)
+                print(type)
+                time.sleep(5)
+                data = load(type, dataset_item.lower())
                 writer.write(data)
             except Exception as e:
                 print('failed on', p, dataset_item)
@@ -260,7 +268,7 @@ def main():
         print('os.path.makedirs(tfrecord_path) exception', e)
 
     qm9 = load_qm9()
-    rxns = load_rhea()
+    rxns = load_rxns()
     pdbs = load_pdbs()
     write_shards(qm9, rxns, pdbs)
 

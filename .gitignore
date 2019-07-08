@@ -19,3 +19,4 @@ agents/
 *.rsmi
 *.txt
 *.tfrecord
+*.xyz
