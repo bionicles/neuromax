@@ -133,9 +133,9 @@ def get_reactants_products(path):
     molfiles = []
     for line in mol_data:
         if line_is_n_reactants_products:
-            reactants_products = line.split('\t')
+            reactants_products = line.strip().split(" ")
             reactants = reactants_products[0]
-            products = reactants_products[1]
+            products = reactants_products[-1]
         elif line_is_molfile:
             molfile = line.replace(':', '_')
             molfiles.append(f'{molfile}.mol')
@@ -231,7 +231,7 @@ def write_shards(qm9, rxns, pdbs):
     # write qm9 tfrecords
     for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (pdbs, "pdb")]:
         k, p = 0, 0
-        for dataset_item in ProgIter(qm9, verbose=1):
+        for dataset_item in ProgIter(rxns, verbose=1):
             if p % ITEMS_PER_SHARD is 0:
                 try:
                     writer.close()
@@ -244,7 +244,7 @@ def write_shards(qm9, rxns, pdbs):
                 writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
                 k += 1
             try:
-                data = load("xyz", dataset_item.lower())
+                data = load("rxn", dataset_item.lower())
                 writer.write(data)
             except Exception as e:
                 print('failed on', p, dataset_item)
