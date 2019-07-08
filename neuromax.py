@@ -202,11 +202,14 @@ def parse_item(example):
                          'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     target_positions = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 3])
-    target_features = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 13])
+    target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 8])
+    target_masses = tf.reshape(tf.io.parse_tensor(sequence['target_masses'][0], tf.float32), [-1, 8])
+    target_elements = tf.reshape(tf.io.parse_tensor(sequence['target_elements'][0], tf.float32), [-1, 8])
     positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
-    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 13])
-    quantum_target = tf.io.parse_tensor(sequence['quantum_target'][0], tf.float32)
-    elements, masses = features[:, 1], features[:, 0]
+    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 8])
+    numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
+    masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
+    quantum_target = tf.io.parse_tensor(context['quantum_target'], tf.float32)
     masses = tf.concat([masses, masses, masses], 1)
     return (context['type'], context['id'], target_positions, positions, features, elements, masses,
             tf.shape(positions)[0], target_features, quantum_target)
