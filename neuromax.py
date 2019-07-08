@@ -230,39 +230,6 @@ def get_distances(xyz):
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
-<<<<<<< HEAD
-def train(compressor_kernel_layers,
-          compressor_kernel_units,
-          pair_kernel_layers,
-          pair_kernel_units,
-          blocks,
-          block_layers,
-          learning_rate,
-          decay):
-    start = time.time()
-    TIME = str(start)
-    train_step = 0
-    dataset = read_dataset()
-    agent = make_resnet('agent', 16, 3, compressor_kernel_layers, compressor_kernel_units, pair_kernel_layers, pair_kernel_units, blocks, block_layers)
-    adam = tf.keras.optimizers.Adam(learning_rate=learning_rate, decay=decay)
-    cumulative_improvement, episode = 0, 0
-    for protein_data in dataset:
-        if episode > N_EPISODES:
-            break
-        done, train_step = False, 0
-        initial_positions, initial_distances, positions, masses, features = protein_data
-        print('')
-        print('model', TIME, 'episode', episode, 'step', train_step)
-        [print(i.shape) for i in protein_data]
-        num_atoms = positions.shape[0].value
-        num_atoms_squared = num_atoms ** 2
-        velocities = tf.random.normal(shape=positions.shape)
-        force_field = tf.zeros_like(velocities)
-        initial_loss = loss(initial_positions, initial_distances, positions, velocities, masses, num_atoms, num_atoms_squared, force_field)
-        num_atoms = initial_positions.shape[1]
-        stop_loss = initial_loss * STOP_LOSS_MULTIPLIER
-        stop_loss_condition = tf.reduce_mean(stop_loss, axis = -1)
-        while not done:
 =======
 def trial(**kwargs):
     global run_step, best, best_trial, best_args, trial_number, writer
@@ -422,7 +389,6 @@ def make_gifs(agent, optimizer, trial_name, stddev, n_movies, image_size, max_st
         initial_distances = get_distances(initial_positions)
         stop_loss = stop_loss_multiple * tf.reduce_sum([tf.reduce_sum(l) for l in get_losses(initial_distances, positions)])
         while step < max_steps:
->>>>>>> 3dff77e1054ae54b94c8f27b5f55e524e3ea7b56
             with tf.GradientTape() as tape:
                 stacked_features = tf.concat([positions, features], axis=-1)
                 compressed_noise = tf.random.truncated_normal((1, n_atoms, 5), stddev=stddev)

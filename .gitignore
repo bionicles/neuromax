@@ -8,7 +8,11 @@ rxn/
 mol/
 pdb/
 runs/
+<<<<<<< HEAD
 *.pdb
+=======
+agents/
+>>>>>>> 3dff77e1054ae54b94c8f27b5f55e524e3ea7b56
 *.png
 *.mpg
 *.gif
