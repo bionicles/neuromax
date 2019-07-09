@@ -324,7 +324,7 @@ def trial(**kwargs):
         velocities = tf.zeros_like(positions)
         stop = initial_loss * STOP_LOSS_MULTIPLE
         loss = 0.
-        for step in tf.range(MAX_STEPS):
+        for step in range(MAX_STEPS):
             with tf.GradientTape() as tape:
                 velocities = velocities + agent([positions, features]) / masses
                 positions = tf.math.add(positions, velocities)
@@ -349,10 +349,10 @@ def trial(**kwargs):
         return ((loss - initial_loss) / initial_loss) * 100.
 
     run_qm9_training_episode = tf.function(run_episode, input_signature=[
-        tf.TensorSpec(shape=(1), dtype=tf.string),
+        tf.TensorSpec(shape=(), dtype=tf.string),
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
-        tf.TensorSpec(shape=(1, None, 8), dtype=tf.float32),
+        tf.TensorSpec(shape=(1, None, 10), dtype=tf.float32),
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),
         tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),
         tf.TensorSpec(shape=(15), dtype=tf.float32)])
