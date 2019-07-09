@@ -141,7 +141,7 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
     input = K.Input((d_features, ))
     if pair:
         input2 = K.Input((d_features, ))
-        splitter = L.Lambda(lambda x: tf.split(x, num_or_size_splits=[3,5], axis=1))
+        splitter = L.Lambda(lambda x: tf.split(x, num_or_size_splits=[3,5], axis=-1))
         xyz1, f1 = splitter(input1)
         xyz2, f2 = splitter(input2)
         dxyz = L.Subtract()(xyz1, xyz2)
