@@ -131,7 +131,7 @@ class ConvKernel(L.Layer):
 class ConvPair(L.Layer):
     def __init__(self, hp, d_features, d_output):
         super(ConvPair, self).__init__()
-        self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, d_features, d_output, pair=True)
+        self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, 8, d_output, pair=True)
 
     def call(self, inputs):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: self.kernel([a1, a2]), inputs), axis=0), inputs)
@@ -142,7 +142,7 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
     if pair:
         input2 = K.Input((d_features, ))
         splitter = L.Lambda(lambda x: tf.split(x, num_or_size_splits=[3,5], axis=-1))
-        xyz1, f1 = splitter(input1)
+        xyz1, f1 = splitter(input)
         xyz2, f2 = splitter(input2)
         dxyz = L.Subtract()(xyz1, xyz2)
         inputs = L.Concatenate()([dxyz, f1, f2])
