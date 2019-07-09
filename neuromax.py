@@ -227,7 +227,7 @@ def parse_item(example):
         return (type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target)
     elif type is "rxn":
         return (type, id, n_atoms, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers)
-    else:
+    elif type is "cif":
         return (type, id, n_atoms, target_positions, positions, features, masses, numbers)
 
 
