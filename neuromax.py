@@ -223,12 +223,7 @@ def parse_item(example):
     n_atoms = tf.shape(positions)[0]
     type = context['type']
     id = context['id']
-    if type is "xyz":
-        return (type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target)
-    elif type is "rxn":
-        return (type, id, n_atoms, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers)
-    elif type is "cif":
-        return (type, id, n_atoms, target_positions, positions, features, masses, numbers)
+    return (type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target, target_features, target_masses, target_numbers)
 
 
 def read_shards(datatype):
@@ -285,7 +280,7 @@ def get_loss(initial, xyz):
 
 @tf.function(input_signature=[tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32)])
 def get_distances(xyz):
-    xyz = tf.cast(tf.squeeze(xyz, 0), tf.float16)
+    xyz = tf.squeeze(xyz, 0)
     d = tf.reshape(tf.reduce_sum(xyz * xyz, 1), [-1, 1])
     return d - 2 * tf.matmul(xyz, xyz, transpose_b=True) + tf.transpose(d)
 
@@ -386,7 +381,7 @@ def trial(**kwargs):
         episode = 0
         change = 0.
         episodes_this_dataset = 0
-        for type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target in qm9:
+        for type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target, _, _, _ in qm9:
             with tf.device('/gpu:0'):
                 change = run_qm9_training_episode(type, target_positions, positions, features, masses, numbers, quantum_target)
                 if tf.math.is_nan(change):
@@ -399,7 +394,7 @@ def trial(**kwargs):
             if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
                 break
         episodes_this_dataset = 0
-        for type, id, n_atoms, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers in rxn:
+        for type, id, n_atoms, target_positions, positions, features, masses, numbers, _, target_features, target_masses, target_numbers in rxn:
             with tf.device('/gpu:0'):
                 change = run_rxn_training_episode(type, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers)
             tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
@@ -410,7 +405,7 @@ def trial(**kwargs):
             if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
                 break
         episodes_this_dataset = 0
-        for type, id, n_atoms, target_positions, positions, features, masses, numbers in proteins:
+        for type, id, n_atoms, target_positions, positions, features, masses, numbers, _, _, _, _ in proteins:
             with tf.device('/gpu:0'):
                 change = run_protein_training_episode(type, target_positions, positions, features, masses, numbers)
             tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
