@@ -138,30 +138,46 @@ class ConvPair(L.Layer):
 
 
 def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
+    print(f"get {block_type} {layers} layers {units} units")
     input = K.Input((d_features, ))
+    print('input shape', input.shape)
     if pair:
         input2 = K.Input((d_features, ))
-        splitter = L.Lambda(lambda x: tf.split(x, num_or_size_splits=[3,5], axis=-1))
-        xyz1, f1 = splitter(input)
-        xyz2, f2 = splitter(input2)
+        print('input2 shape', input2.shape)
+        x1,y1,z1,f11,f12,f13,f14,f15 = L.Lambda(lambda x: tf.split(x, 8, -1))(input)
+        x2,y2,z2,f21,f22,f23,f24,f25 = L.Lambda(lambda x: tf.split(x, 8, -1))(input2)
+        xyz1 = L.Concatenate()([x1, y1, z1])
+        xyz2 = L.Concatenate()([x2, y2, z2])
+        f1 = L.Concatenate()([f11,f12,f13,f14,f15])
+        f2 = L.Concatenate()([f21,f22,f23,f24,f25])
+        print('xyz1 shape', xyz1.shape, 'xyz2 shape', xyz2.shape)
+        print('f1 shape', f1.shape, 'f2 shape', f2.shape)
         dxyz = L.Subtract()([xyz1, xyz2])
+        print('dxyz shape', dxyz.shape)
         inputs = L.Concatenate()([dxyz, f1, f2])
+        print('inputs.shape', inputs.shape)
         output = get_layer(units, hp)(inputs)
+        print("output.shape", output.shape)
     else:
         output = get_layer(units, hp)(input)
     for layer in range(layers - 1):
         output = get_layer(units, hp)(output)
     if 'wide' in block_type:
         output = L.Concatenate(-1)([input, output])
+        print("wide concat output", output.shape)
     output = get_layer(d_output, hp)(output)
+    print("final shape", output.shape)
     return K.Model([input, input2], output) if pair else K.Model(input, output)
 
 
-def get_block(block_type, hp, features, prior):
+def get_block(block_type, hp, features, prior, positions=None):
+    print('get_block', block_type)
     if isinstance(prior, int):
+        print("prior is an int", prior)
         block_output = features
         d_output = prior
     else:
+        print("prior is an int of", prior)
         block_output = L.Concatenate(-1)([features, prior])
         d_output = prior.shape[-1]
     d_features = block_output.shape[-1]
@@ -181,19 +197,20 @@ def get_block(block_type, hp, features, prior):
         return L.Add()([prior, block_output])
 
 
-def get_agent(trial_number, d_in, d_compressed, d_out, hp):
+def get_agent(trial_number, hp, d_in=16, d_compressed=5, d_out=3):
     print('\ntrial', trial_number, '\n')
     [print(f'   {k}={v}') for k, v in hp.items()]
     positions = K.Input((None, 3))
-    features = K.Input((None, 13))
-    stacked = L.Concatenate(-1)([positions, features])
-    normalized = L.BatchNormalization()(stacked) if hp.norm is not 'none' else stacked
-    compressed_features = get_block(hp.c, hp, normalized, d_compressed)
+    features = K.Input((None, 7))
+    normalized_features = L.BatchNormalization()(features) if hp.norm is not 'none' else features
+    compressed_features = get_block(hp.c, hp, normalized_features, d_compressed)
     for compressor_block in range(hp.c_blocks - 1):
-        compressed_features = get_block(hp.c, hp, normalized, compressed_features)
-    output = get_block(hp.p, hp, compressed_features, d_out)
+        compressed_features = get_block(hp.c, hp, normalized_features, compressed_features)
+    normalized_positions = L.BatchNormalization()(positions) if hp.norm is not 'none' else positions
+    stacked = L.Concatenate()([normalized_positions, compressed_features])
+    output = get_block(hp.p, hp, stacked, d_out)
     for i in range(hp.p_blocks - 1):
-        output = get_block(hp.p, hp, compressed_features, output)
+        output = get_block(hp.p, hp, stacked, output)
     trial_name = f'{trial_number}-' + '-'.join(f'{k}.{round(v, 4) if isinstance(v, float) else v}' for k, v in hp.items())
     return K.Model([positions, features], output, name=trial_name), trial_name
 
@@ -305,7 +322,8 @@ def trial(**kwargs):
     #         lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
     #         optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     # except:
-    agent, trial_name = get_agent(trial_number, 16, 5, 3, hp)
+    agent, trial_name = get_agent(trial_number, hp,
+                                  d_in=16, d_compressed=5, d_out=3)
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     averages = ema.apply(agent.weights)
     lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
