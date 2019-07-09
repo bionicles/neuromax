@@ -8,8 +8,8 @@ import time
 import csv
 import os
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
-SHARDS_PER_DATASET = 8
-ITEMS_PER_SHARD = 8
+SHARDS_PER_DATASET = 1
+ITEMS_PER_SHARD = 4
 DTYPE = tf.float32
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 1, 64
 P_UNDOCK = 0.5
@@ -111,7 +111,6 @@ def get_numbers(model):
 
 def get_atomic_features(atom):
     return np.array([atom.formal_charge,
-                     atom.partial_charge,
                      atom.vdw,
                      atom.b,
                      atom.q,
@@ -213,6 +212,8 @@ def load(type, id):
     features = get_features(model)
     masses = get_masses(model)
     numbers = get_numbers(model)
+    print("features", features)
+    time.sleep(3)
     return make_example(type, id, target_positions, positions, features,
                         masses, numbers, quantum_target, target_features,
                         target_masses, target_numbers)

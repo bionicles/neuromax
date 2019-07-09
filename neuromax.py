@@ -141,7 +141,11 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
     input = K.Input((d_features, ))
     if pair:
         input2 = K.Input((d_features, ))
-        inputs = L.Concatenate()([input, input2])
+        splitter = L.Lambda(lambda x: tf.split(x, num_or_size_splits=[3,5], axis=1))
+        xyz1, f1 = splitter(input1)
+        xyz2, f2 = splitter(input2)
+        dxyz = L.Subtract()(xyz1, xyz2)
+        inputs = L.Concatenate()([dxyz, f1, f2])
         output = get_layer(units, hp)(inputs)
     else:
         output = get_layer(units, hp)(input)
@@ -209,11 +213,11 @@ def parse_item(example):
                          'numbers': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     target_positions = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 3])
-    target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 8])
+    target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 5])
     target_masses = tf.reshape(tf.io.parse_tensor(sequence['target_masses'][0], tf.float32), [-1, 1])
     target_numbers = tf.reshape(tf.io.parse_tensor(sequence['target_numbers'][0], tf.float32), [-1, 1])
     positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
-    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 8])
+    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 5])
     numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
     masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
     numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
