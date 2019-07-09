@@ -11,9 +11,9 @@ CSV_FILE_NAME = 'sorted-less-than-256.csv'
 SHARDS_PER_DATASET = 8
 ITEMS_PER_SHARD = 8
 DTYPE = tf.float32
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 4, 64
-P_UNDOCK = 0.8
-P_UNFOLD = 0.8
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 1, 64
+P_UNDOCK = 0.5
+P_UNFOLD = 0.5
 
 # quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
 # chem -> datasets/rxn: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-rxn.tar.gz
