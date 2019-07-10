@@ -213,8 +213,6 @@ def load(type, id):
     features = get_features(model)
     masses = get_masses(model)
     numbers = get_numbers(model)
-    print("features", features)
-    time.sleep(3)
     return make_example(type, id, target_positions, positions, features,
                         masses, quantum_target, target_features)
 

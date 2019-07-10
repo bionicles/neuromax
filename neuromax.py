@@ -234,6 +234,8 @@ def parse_item(example):
     n_atoms = tf.shape(positions)[0]
     type = context['type']
     id = context['id']
+    if target_features is None:
+        target_features = features    
     return (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features)
 
 
