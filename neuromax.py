@@ -381,7 +381,7 @@ def trial(**kwargs):
             total_change = 0.
             episode = 0
             change = 0.
-            gif = tf.constantnn(False)
+            gif = tf.constant(False)
             for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in qm9:
                 change, total_change, episode, episodes_this_dataset = run_training_episode(type, target_positions, positions, features, masses, quantum_target, change, total_change, episode, episodes_this_dataset, gif)
                 if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
