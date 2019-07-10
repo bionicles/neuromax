@@ -233,8 +233,8 @@ def parse_item(example):
     n_atoms = tf.shape(positions)[0]
     type = context['type']
     id = context['id']
-    if target_features is None:
-        target_features = features
+    # if target_features is None:
+    target_features = features
     print("quantum_target", quantum_target)
     # if quantum_target is None:
     quantum_target = tf.zeros(15, dtype=tf.float32)
@@ -323,20 +323,21 @@ def trial(**kwargs):
     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    @tf.function(input_signature=[
-        tf.TensorSpec(shape=(None), dtype=tf.string),              # type
-        tf.TensorSpec(shape=(None), dtype=tf.int32),              # num_atoms
-        tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # target_positions
-        tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # positions
-        tf.TensorSpec(shape=(None, None, 7), dtype=tf.float32),   # features
-        tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # masses
-        tf.TensorSpec(shape=(None, 15), dtype=tf.float32),           # quantum_target
-        tf.TensorSpec(shape=(None, None, 7), dtype=tf.float32),   # target_features
-        tf.TensorSpec(shape=(1), dtype=tf.float32),              # change
-        tf.TensorSpec(shape=(1), dtype=tf.float32),              # total_change
-        tf.TensorSpec(shape=(1), dtype=tf.int32),              # episode
-        tf.TensorSpec(shape=(1), dtype=tf.int32),              # episodes_this_dataset
-        tf.TensorSpec(shape=(1), dtype=tf.bool)])             # gif true/false
+    # @tf.function(input_signature=[
+    #     tf.TensorSpec(shape=(None), dtype=tf.string),              # type
+    #     tf.TensorSpec(shape=(None), dtype=tf.int32),              # num_atoms
+    #     tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # target_positions
+    #     tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # positions
+    #     tf.TensorSpec(shape=(None, None, 7), dtype=tf.float32),   # features
+    #     tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # masses
+    #     tf.TensorSpec(shape=(None, 15), dtype=tf.float32),           # quantum_target
+    #     tf.TensorSpec(shape=(None, None, 7), dtype=tf.float32),   # target_features
+    #     tf.TensorSpec(shape=(1), dtype=tf.float32),              # change
+    #     tf.TensorSpec(shape=(1), dtype=tf.float32),              # total_change
+    #     tf.TensorSpec(shape=(1), dtype=tf.int32),              # episode
+    #     tf.TensorSpec(shape=(1), dtype=tf.int32),              # episodes_this_dataset
+    #     tf.TensorSpec(shape=(1), dtype=tf.bool)])             # gif true/false
+    @tf.function
     def run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, change, total_change, episode, episodes_this_dataset, gif):
         print("tracing run_episode")
         target_distances = get_distances(target_positions)

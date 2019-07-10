@@ -187,11 +187,15 @@ def load(type, id):
     clean_pymol()
     model = cmd.get_model('all', 1)
     target_positions = get_positions(model)
-    quantum_target = get_quantum_target(path) if type is "xyz" else None
-    target_features = get_features(model) if type is "rxn" else None
-    target_masses = get_masses(model) if type is "rxn" else None
-    target_numbers = get_numbers(model) if type is "rxn" else None
-    target_features = tf.concat([target_features, target_masses, target_numbers], -1)
+    if type is "xyz":
+        quantum_target = get_quantum_target(path)
+    else:
+        quantum_target = tf.zeros((15), dtype=tf.float32)
+    if type is "rxn":
+        target_features = get_features(model) if type is "rxn" else None
+        target_masses = get_masses(model) if type is "rxn" else None
+        target_numbers = get_numbers(model) if type is "rxn" else None
+        target_features = tf.concat([target_features, target_masses, target_numbers], -1)
     if type is 'rxn':
         cmd.delete('all')
         for reactant in reactants:
@@ -214,24 +218,22 @@ def load(type, id):
     masses = get_masses(model)
     numbers = get_numbers(model)
     features = tf.concat([features, masses, numbers], -1)
-    return make_example(type, id, target_positions, positions, features,
-                        masses, quantum_target, target_features)
+    if type is not "rxn":
+        target_features = features
+    return make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features)
 
 
-def make_example(type, id, target_positions, positions, features, masses,
-                 quantum_target=None, target_features=None):
+def make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features):
     example = tf.train.SequenceExample()
     # non-sequential features
     example.context.feature["type"].bytes_list.value.append(bytes(type, 'utf-8'))
     example.context.feature["id"].bytes_list.value.append(bytes(id, 'utf-8'))
-    if quantum_target is not None:
-        example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy())
+    example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy())
     # sequential features
     fl_target_positions = example.feature_lists.feature_list["target_positions"]
     fl_target_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_positions).numpy())
-    if target_features is not None:
-        fl_target_features = example.feature_lists.feature_list["target_features"]
-        fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
+    fl_target_features = example.feature_lists.feature_list["target_features"]
+    fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
     fl_positions = example.feature_lists.feature_list["positions"]
     fl_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(positions).numpy())
     fl_features = example.feature_lists.feature_list["features"]
