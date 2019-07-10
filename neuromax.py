@@ -235,8 +235,9 @@ def parse_item(example):
     id = context['id']
     if target_features is None:
         target_features = features
-    if quantum_target is None:
-        quantum_target = tf.zeros(15, dtype=tf.float32)
+    print("quantum_target", quantum_target)
+    # if quantum_target is None:
+    quantum_target = tf.zeros(15, dtype=tf.float32)
     return (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features)
 
 
@@ -322,14 +323,29 @@ def trial(**kwargs):
     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    def run_episode(type, target_positions, positions, features, masses, quantum_target, change, total_change, episode, episodes_this_dataset, gif):
+    @tf.function(input_signature=[
+        tf.TensorSpec(shape=(None), dtype=tf.string),              # type
+        tf.TensorSpec(shape=(None), dtype=tf.int32),              # num_atoms
+        tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # target_positions
+        tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # positions
+        tf.TensorSpec(shape=(None, None, 7), dtype=tf.float32),   # features
+        tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),   # masses
+        tf.TensorSpec(shape=(None, 15), dtype=tf.float32),           # quantum_target
+        tf.TensorSpec(shape=(None, None, 7), dtype=tf.float32),   # target_features
+        tf.TensorSpec(shape=(1), dtype=tf.float32),              # change
+        tf.TensorSpec(shape=(1), dtype=tf.float32),              # total_change
+        tf.TensorSpec(shape=(1), dtype=tf.int32),              # episode
+        tf.TensorSpec(shape=(1), dtype=tf.int32),              # episodes_this_dataset
+        tf.TensorSpec(shape=(1), dtype=tf.bool)])             # gif true/false
+    def run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, change, total_change, episode, episodes_this_dataset, gif):
+        print("tracing run_episode")
         target_distances = get_distances(target_positions)
         meta = get_loss(target_distances, positions)
         initial_loss = tf.reduce_sum(meta)
         velocities = tf.zeros_like(positions)
         stop = initial_loss * STOP_LOSS_MULTIPLE
         loss = 0.
-        for step in range(MAX_STEPS):
+        for step in tf.range(MAX_STEPS):
             with tf.GradientTape() as tape:
                 velocities = velocities + agent([positions, features]) / masses
                 positions = tf.math.add(positions, velocities)
@@ -339,18 +355,23 @@ def trial(**kwargs):
             ema.apply(agent.weights)
             loss = tf.reduce_sum(meta)
             new_stop = loss * STOP_LOSS_MULTIPLE
+            tf.print(loss)
             if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
                 break
             elif tf.math.less(new_stop, stop):
                 stop = new_stop
-            if gif:
-                move_atoms(tf.squeeze(velocities, 0).numpy())
-                cmd.zoom()
-                cmd.png(os.path.join(pngs_path, f'{str(step)}.png'), width=IMAGE_SIZE, height=IMAGE_SIZE)
-        if gif:
-            make_gif(pdb_id, trial_name, pngs_path)
+            # if loss > stop or loss != loss:
+            #     break
+            # elif tf.math.less(new_stop, stop):
+            #     stop = new_stop
+        #     if gif:
+        #         move_atoms(tf.squeeze(velocities, 0).numpy())
+        #         cmd.zoom()
+        #         cmd.png(os.path.join(pngs_path, f'{str(step)}.png'), width=IMAGE_SIZE, height=IMAGE_SIZE)
+        # if gif:
+        #     make_gif(pdb_id, trial_name, pngs_path)
         change = ((loss - initial_loss) / initial_loss) * 100.
-        if tf.math.is_nan(change):
+        if change != change:
             change = 200.
         tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
         tf.summary.scalar('change', change)
@@ -359,43 +380,35 @@ def trial(**kwargs):
         episode = episode + 1
         return change, total_change, episode, episodes_this_dataset
 
-    run_training_episode = tf.function(run_episode, input_signature=[
-        tf.TensorSpec(shape=(), dtype=tf.string),              # type
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # target_positions
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # positions
-        tf.TensorSpec(shape=(1, None, 7), dtype=tf.float32),   # features
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # masses
-        tf.TensorSpec(shape=(15), dtype=tf.float32),           # quantum_target
-        tf.TensorSpec(shape=(1, None, 7), dtype=tf.float32),   # target_features
-        tf.TensorSpec(shape=(1), dtype=tf.int32),              # change
-        tf.TensorSpec(shape=(1), dtype=tf.int32),              # total_change
-        tf.TensorSpec(shape=(1), dtype=tf.int32),              # episode
-        tf.TensorSpec(shape=(1), dtype=tf.int32),              # episodes_this_dataset
-        tf.TensorSpec(shape=(), dtype=tf.bool)])             # gif true/false
+
 
 
     @tf.function
     def train(qm9, rxn, proteins):
-        with tf.device('/gpu:0'):
-            episodes_this_dataset = 0
-            total_change = 0.
-            episode = 0
-            change = 0.
-            gif = tf.constant(False)
-            for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in qm9:
-                change, total_change, episode, episodes_this_dataset = run_training_episode(type, target_positions, positions, features, masses, quantum_target, change, total_change, episode, episodes_this_dataset, gif)
-                if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
-                    break
-            episodes_this_dataset = 0
-            for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in rxn:
-                change, total_change, episode, episodes_this_dataset = run_training_episode(type, target_positions, positions, features, masses, quantum_target, change, total_change, episode, episodes_this_dataset, gif)
-                if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
-                    break
-            episodes_this_dataset = 0
-            for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in proteins:
-                change, total_change, episode, episodes_this_dataset = run_training_episode(type, target_positions, positions, features, masses, quantum_target, change, total_change, episode, episodes_this_dataset, gif)
-                if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
-                    break
+        print("tracing train")
+        episodes_this_dataset = 0
+        total_change = 0.
+        episode = 0
+        change = 0.
+        gif = False
+        for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in qm9:
+            print('quantum_target', quantum_target)
+            with tf.device('/gpu:0'):
+                change, total_change, episode, episodes_this_dataset = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, change, total_change, episode, episodes_this_dataset, gif)
+            if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
+                break
+        episodes_this_dataset = 0
+        for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in rxn:
+            with tf.device('/gpu:0'):
+                change, total_change, episode, episodes_this_dataset = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, change, total_change, episode, episodes_this_dataset, gif)
+            if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
+                break
+        episodes_this_dataset = 0
+        for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in proteins:
+            with tf.device('/gpu:0'):
+                change, total_change, episode, episodes_this_dataset = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, change, total_change, episode, episodes_this_dataset, gif)
+            if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
+                break
         return total_change
 
     changes = []
