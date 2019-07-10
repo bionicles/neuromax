@@ -36,6 +36,9 @@ STOP_LOSS_MULTIPLE = 1.2
 EPISODES_PER_DATASET = 2
 EPISODES_PER_TRIAL = 2
 REPEATS_PER_TRIAL = 2
+D_FEATURES = 7
+D_COMPRESSED = 5
+D_OUT = 3
 TENSORBOARD = False
 MAX_STEPS = 420
 N_RANDOM_STARTS = 10
@@ -59,13 +62,13 @@ dimensions = [
     skopt.space.Real(0.00001, 0.01, name='lr'),
     skopt.space.Integer(10, 10000000, name='decay')]  # major factor in step size
 hyperpriors = [
-    1,  # compressor_blocks,
+    2,  # compressor_blocks,
     'c_conv_wide_deep',  # compressor block type
-    1,  # compressor_layers
+    2,  # compressor_layers
     512,  # compressor_units
-    4,  # pair_blocks
+    2,  # pair_blocks
     'p_conv_wide_deep',  # pair block type
-    1,  # pair_layers
+    2,  # pair_layers
     512,  # pair_units,
     0.02,  # stddev
     'normal',
@@ -131,7 +134,7 @@ class ConvKernel(L.Layer):
 class ConvPair(L.Layer):
     def __init__(self, hp, d_features, d_output):
         super(ConvPair, self).__init__()
-        self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, 8, d_output, pair=True)
+        self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, d_features, d_output, pair=True)
 
     def call(self, inputs):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: self.kernel([a1, a2]), inputs), axis=0), inputs)
@@ -171,13 +174,12 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
 
 
 def get_block(block_type, hp, features, prior, positions=None):
-    print('get_block', block_type)
     if isinstance(prior, int):
-        print("prior is an int", prior)
+        print("\nprior is an int", prior)
         block_output = features
         d_output = prior
     else:
-        print("prior is an int of", prior)
+        print("\nprior is a tensor", prior)
         block_output = L.Concatenate(-1)([features, prior])
         d_output = prior.shape[-1]
     d_features = block_output.shape[-1]
@@ -186,15 +188,15 @@ def get_block(block_type, hp, features, prior, positions=None):
     elif block_type in ["p_conv_deep", 'p_conv_wide_deep']:
         block_output = ConvPair(hp, d_features, d_output)(block_output)
     elif block_type in ["c_res_deep", "c_res_wide_deep"]:
-        block_output = get_kernel(block_type, hp.c_layers, hp.c_units, hp, block_output.shape[-1], d_output)(block_output)
+        block_output = get_kernel(block_type, hp.c_layers, hp.c_units, hp, d_features, d_output)(block_output)
     elif block_type in ["p_res_deep", "p_res_wide_deep"]:
-        block_output = get_kernel(block_type, hp.p_layers, hp.p_units, hp, block_output.shape[-1], d_output)(block_output)
+        block_output = get_kernel(block_type, hp.p_layers, hp.p_units, hp, d_features, d_output)(block_output)
     if hp.norm is 'all':
         block_output = L.BatchNormalization()(block_output)
-    if isinstance(prior, int):
-        return block_output
-    else:
-        return L.Add()([prior, block_output])
+    if not isinstance(prior, int):
+        block_output = L.Add()([prior, block_output])
+    print('block output', block_output)
+    return block_output
 
 
 def get_agent(trial_number, hp, d_in=16, d_compressed=5, d_out=3):
@@ -322,8 +324,7 @@ def trial(**kwargs):
     #         lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
     #         optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     # except:
-    agent, trial_name = get_agent(trial_number, hp,
-                                  d_in=16, d_compressed=5, d_out=3)
+    agent, trial_name = get_agent(trial_number, hp, d_in=D_FEATURES, d_compressed=D_COMPRESSED, d_out=D_OUT)
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     averages = ema.apply(agent.weights)
     lr = tf.keras.experimental.CosineDecayRestarts(lr, hp.decay)
