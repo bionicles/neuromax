@@ -322,10 +322,7 @@ def trial(**kwargs):
     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    def run_episode(*args):
-        print("tracing run episode")
-        [print(arg) for arg in args]
-        type, target_positions, positions, features, masses, numbers, quantum_target, target_features, target_masses, target_numbers, gif = args
+    def run_episode(type, target_positions, positions, features, masses, quantum_target, change, total_change, episode, episodes_this_dataset, gif):
         target_distances = get_distances(target_positions)
         meta = get_loss(target_distances, positions)
         initial_loss = tf.reduce_sum(meta)
@@ -368,16 +365,13 @@ def trial(**kwargs):
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # positions
         tf.TensorSpec(shape=(1, None, 7), dtype=tf.float32),   # features
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # masses
-        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),   # atomic numbers
         tf.TensorSpec(shape=(15), dtype=tf.float32),           # quantum_target
         tf.TensorSpec(shape=(1, None, 7), dtype=tf.float32),   # target_features
-        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),   # target_masses
-        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),   # target_numbers
         tf.TensorSpec(shape=(1), dtype=tf.int32),              # change
         tf.TensorSpec(shape=(1), dtype=tf.int32),              # total_change
         tf.TensorSpec(shape=(1), dtype=tf.int32),              # episode
         tf.TensorSpec(shape=(1), dtype=tf.int32),              # episodes_this_dataset
-        tf.TensorSpec(shape=(), dtype=tf.bool)])             # gif 1 or 0
+        tf.TensorSpec(shape=(), dtype=tf.bool)])             # gif true/false
 
 
     @tf.function
@@ -387,7 +381,7 @@ def trial(**kwargs):
             total_change = 0.
             episode = 0
             change = 0.
-            gif = False
+            gif = tf.constantnn(False)
             for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in qm9:
                 change, total_change, episode, episodes_this_dataset = run_training_episode(type, target_positions, positions, features, masses, quantum_target, change, total_change, episode, episodes_this_dataset, gif)
                 if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
