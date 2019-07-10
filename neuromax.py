@@ -324,15 +324,9 @@ def trial(**kwargs):
     writer = tf.summary.create_file_writer(log_dir)
 
     def run_episode(*args):
-        target_features, target_masses, target_numbers = None, None, None
-        quantum_target = None
-        type = args[0]
-        if type is "xyz":
-            _, target_positions, positions, features, masses, numbers, quantum_target, gif = args
-        elif type is "rxn":
-            _, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers, gif = args
-        else:
-            _, target_positions, positions, features, masses, numbers, gif = args
+        print("tracing run episode")
+        [print(arg) for arg in args]
+        type, target_positions, positions, features, masses, numbers, quantum_target, target_features, target_masses, target_numbers, gif = args
         target_distances = get_distances(target_positions)
         meta = get_loss(target_distances, positions)
         initial_loss = tf.reduce_sum(meta)
@@ -361,31 +355,18 @@ def trial(**kwargs):
             make_gif(pdb_id, trial_name, pngs_path)
         return ((loss - initial_loss) / initial_loss) * 100.
 
-    run_qm9_training_episode = tf.function(run_episode, input_signature=[
+    run_training_episode = tf.function(run_episode, input_signature=[
         tf.TensorSpec(shape=(), dtype=tf.string),              # type
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # target_positions
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # positions
         tf.TensorSpec(shape=(1, None, 7), dtype=tf.float32),   # features
         tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # masses
         tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),   # atomic numbers
-        tf.TensorSpec(shape=(15), dtype=tf.float32)])          # quantum_target
-    run_rxn_training_episode = tf.function(run_episode, input_signature=[
-        tf.TensorSpec(shape=(1), dtype=tf.string),             # type
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # target_positions
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # positions
-        tf.TensorSpec(shape=(1, None, 7), dtype=tf.float32),   # features
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # masses
-        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),   # atomic numbers
+        tf.TensorSpec(shape=(15), dtype=tf.float32),           # quantum_target
         tf.TensorSpec(shape=(1, None, 7), dtype=tf.float32),   # target_features
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # target_masses
-        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32)])  # target_numbers
-    run_protein_training_episode = tf.function(run_episode, input_signature=[
-        tf.TensorSpec(shape=(1), dtype=tf.string),             # type
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # target_positions
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # positions
-        tf.TensorSpec(shape=(1, None, 7), dtype=tf.float32),   # features
-        tf.TensorSpec(shape=(1, None, 3), dtype=tf.float32),   # masses
-        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32)])  # atomic numbers
+        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),   # target_masses
+        tf.TensorSpec(shape=(1, None, 1), dtype=tf.float32),   # target_numbers
+        tf.TensorSpec(shape=(1), dtype=tf.int32)])             # gif 1 or 0
 
     @tf.function
     def train(qm9, rxn, proteins):
