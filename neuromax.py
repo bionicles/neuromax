@@ -67,7 +67,7 @@ hyperpriors = [
     2,  # compressor_layers
     512,  # compressor_units
     2,  # pair_blocks
-    'p_conv_wide_deep',  # pair block type
+    'p_conv_deep',  # pair block type
     2,  # pair_layers
     512,  # pair_units,
     0.02,  # stddev
@@ -141,39 +141,30 @@ class ConvPair(L.Layer):
 
 
 def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
-    print(f"get {block_type} {layers} layers {units} units")
+    print(f"get {block_type} layers {layers} units {units} features{d_features} output{d_output}")
     input = K.Input((d_features, ))
-    print('input shape', input.shape)
     if pair:
         input2 = K.Input((d_features, ))
-        print('input2 shape', input2.shape)
-        x1,y1,z1,f11,f12,f13,f14,f15 = L.Lambda(lambda x: tf.split(x, 8, -1))(input)
-        x2,y2,z2,f21,f22,f23,f24,f25 = L.Lambda(lambda x: tf.split(x, 8, -1))(input2)
-        xyz1 = L.Concatenate()([x1, y1, z1])
-        xyz2 = L.Concatenate()([x2, y2, z2])
-        f1 = L.Concatenate()([f11,f12,f13,f14,f15])
-        f2 = L.Concatenate()([f21,f22,f23,f24,f25])
-        print('xyz1 shape', xyz1.shape, 'xyz2 shape', xyz2.shape)
-        print('f1 shape', f1.shape, 'f2 shape', f2.shape)
+        arr1 = L.Lambda(lambda x: tf.split(x, d_features, -1))(input)
+        arr2 = L.Lambda(lambda x: tf.split(x, d_features, -1))(input2)
+        xyz1 = L.Concatenate()(arr1[0:3])
+        xyz2 = L.Concatenate()(arr2[0:3])
+        f1 = L.Concatenate()(arr1[3:])
+        f2 = L.Concatenate()(arr2[3:])
         dxyz = L.Subtract()([xyz1, xyz2])
-        print('dxyz shape', dxyz.shape)
         inputs = L.Concatenate()([dxyz, f1, f2])
-        print('inputs.shape', inputs.shape)
         output = get_layer(units, hp)(inputs)
-        print("output.shape", output.shape)
     else:
         output = get_layer(units, hp)(input)
     for layer in range(layers - 1):
         output = get_layer(units, hp)(output)
     if 'wide' in block_type:
         output = L.Concatenate(-1)([input, output])
-        print("wide concat output", output.shape)
     output = get_layer(d_output, hp)(output)
-    print("final shape", output.shape)
     return K.Model([input, input2], output) if pair else K.Model(input, output)
 
 
-def get_block(block_type, hp, features, prior, positions=None):
+def get_block(block_type, hp, features, prior):
     if isinstance(prior, int):
         print("\nprior is an int", prior)
         block_output = features
@@ -199,7 +190,7 @@ def get_block(block_type, hp, features, prior, positions=None):
     return block_output
 
 
-def get_agent(trial_number, hp, d_in=16, d_compressed=5, d_out=3):
+def get_agent(trial_number, hp, d_in, d_compressed, d_out):
     print('\ntrial', trial_number, '\n')
     [print(f'   {k}={v}') for k, v in hp.items()]
     positions = K.Input((None, 3))
