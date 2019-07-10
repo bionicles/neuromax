@@ -347,9 +347,7 @@ def trial(**kwargs):
             gradients = tape.gradient([meta], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
-            total_meta = tf.reduce_sum(meta)
-            total_overlap = tf.reduce_sum(overlap)
-            loss = total_meta + total_overlap
+            loss = tf.reduce_sum(meta)
             new_stop = loss * STOP_LOSS_MULTIPLE
             if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
                 break
