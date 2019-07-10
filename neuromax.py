@@ -216,12 +216,9 @@ def parse_item(example):
                         'id': tf.io.FixedLenFeature([], dtype=tf.string)}
     sequence_features = {'target_positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'target_features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-                         'target_masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-                         'target_numbers': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-                         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-                         'numbers': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
+                         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     target_positions = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 3])
     target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 7])
@@ -393,7 +390,7 @@ def trial(**kwargs):
         change = 0.
         gif = False
         for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in qm9:
-            print('quantum_target', quantum_target)
+            [tf.print(x) for x in [target_positions, positions, features, masses, quantum_target, target_features]]
             with tf.device('/gpu:0'):
                 change, total_change, episode, episodes_this_dataset = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, change, total_change, episode, episodes_this_dataset, gif)
             if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:

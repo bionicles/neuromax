@@ -117,8 +117,23 @@ def get_atomic_features(atom):
                      atom.get_free_valence(0)], dtype=np.float32)
 
 
-def get_quantum_target(path):
-    return tf.convert_to_tensor([float(element) for element in open(path).readlines(3)[1].split("\t")[1:-1]])
+def clean_xyz(path):
+    print(f"clean xyz at {path}")
+    try:
+        os.remove("./datasets/tmp.xyz")
+    except Exception as e:
+        print('couldnt delete tmp.xyz')
+    with open(path, "r") as start_file:
+        with open("./datasets/tmp.xyz", "a") as out_file:
+            for line in start_file.readlines()[1:]:
+                splits = line.split("\t")
+                if "gdb" in splits[0]:
+                    quantum_target = tf.convert_to_tensor([float(element) for element in splits[1:-1]])
+                elif "gdb" not in splits[0] and splits[0].isalpha():
+                    out_file.write('\t'.join(splits[0:4]) + '\n')
+                else:
+                    break
+            return quantum_target
 
 
 def get_reactants_products(path):
@@ -176,7 +191,8 @@ def load(type, id):
         elif os.path.exists(path):
             cmd.load(path)
     elif type is "xyz":
-        cmd.load(path)
+        quantum_target = clean_xyz(path)
+        cmd.load(os.path.join(".", "datasets", "tmp.xyz"))
     elif type is "rxn":
         reactants, products = get_reactants_products(path)
         print(f"{str(reactants)} ---> {str(products)}")
@@ -187,16 +203,13 @@ def load(type, id):
     clean_pymol()
     model = cmd.get_model('all', 1)
     target_positions = get_positions(model)
-    if type is "xyz":
-        quantum_target = get_quantum_target(path)
-    else:
+    if type is not "xyz":
         quantum_target = tf.zeros((15), dtype=tf.float32)
     if type is "rxn":
-        target_features = get_features(model) if type is "rxn" else None
-        target_masses = get_masses(model) if type is "rxn" else None
-        target_numbers = get_numbers(model) if type is "rxn" else None
+        target_features = get_features(model)
+        target_masses = get_masses(model)
+        target_numbers = get_numbers(model)
         target_features = tf.concat([target_features, target_masses, target_numbers], -1)
-    if type is 'rxn':
         cmd.delete('all')
         for reactant in reactants:
             reactant_path = os.path.join('.', 'datasets', 'mol', reactant)
@@ -224,6 +237,7 @@ def load(type, id):
 
 
 def make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features):
+    [print(x.shape) for x in [target_positions, positions, features, masses, quantum_target, target_features]]
     example = tf.train.SequenceExample()
     # non-sequential features
     example.context.feature["type"].bytes_list.value.append(bytes(type, 'utf-8'))
