@@ -224,21 +224,17 @@ def parse_item(example):
                          'numbers': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     target_positions = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 3])
-    target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 5])
-    target_masses = tf.reshape(tf.io.parse_tensor(sequence['target_masses'][0], tf.float32), [-1, 1])
-    target_numbers = tf.reshape(tf.io.parse_tensor(sequence['target_numbers'][0], tf.float32), [-1, 1])
+    target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 7])
     positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 5])
-    numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
     masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
-    numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
     quantum_target = tf.io.parse_tensor(context['quantum_target'], tf.float32)
     features = tf.concat([features, masses, numbers], -1)
     masses = tf.concat([masses, masses, masses], 1)
     n_atoms = tf.shape(positions)[0]
     type = context['type']
     id = context['id']
-    return (type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target, target_features, target_masses, target_numbers)
+    return (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features)
 
 
 def read_shards(datatype):
@@ -374,13 +370,13 @@ def trial(**kwargs):
         episode = 0
         change = 0.
         episodes_this_dataset = 0
-        for type, id, n_atoms, target_positions, positions, features, masses, numbers, quantum_target, _, _, _ in qm9:
+        for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in qm9:
             print("positions shape", positions.shape)
             print("features shape", features.shape)
             print("masses shape", masses.shape)
             print("numbers shape", numbers.shape)
             with tf.device('/gpu:0'):
-                change = run_qm9_training_episode(type, target_positions, positions, features, masses, numbers, quantum_target)
+                change = run_training_episode(type, target_positions, positions, features, masses, quantum_target)
                 if tf.math.is_nan(change):
                     change = 200.
             tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
@@ -391,9 +387,9 @@ def trial(**kwargs):
             if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
                 break
         episodes_this_dataset = 0
-        for type, id, n_atoms, target_positions, positions, features, masses, numbers, _, target_features, target_masses, target_numbers in rxn:
+        for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in rxn:
             with tf.device('/gpu:0'):
-                change = run_rxn_training_episode(type, target_positions, positions, features, masses, numbers, target_features, target_masses, target_numbers)
+                change = run_training_episode(type, target_positions, positions, features, masses, quantum_target, target_features)
             tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
             tf.summary.scalar('change', change)
             total_change = total_change + change
@@ -402,9 +398,9 @@ def trial(**kwargs):
             if episode >= EPISODES_PER_TRIAL or episodes_this_dataset >= EPISODES_PER_DATASET:
                 break
         episodes_this_dataset = 0
-        for type, id, n_atoms, target_positions, positions, features, masses, numbers, _, _, _, _ in proteins:
+        for type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features in proteins:
             with tf.device('/gpu:0'):
-                change = run_protein_training_episode(type, target_positions, positions, features, masses, numbers)
+                change = run_training_episode(type, target_positions, positions, features, masses, numbers)
             tf.print(type, 'episode', episode, 'id', id, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
             tf.summary.scalar('change', change)
             total_change = total_change + change

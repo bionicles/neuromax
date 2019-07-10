@@ -191,6 +191,7 @@ def load(type, id):
     target_features = get_features(model) if type is "rxn" else None
     target_masses = get_masses(model) if type is "rxn" else None
     target_numbers = get_numbers(model) if type is "rxn" else None
+    target_features = tf.concat([target_features, target_masses, target_numbers], -1)
     if type is 'rxn':
         cmd.delete('all')
         for reactant in reactants:
@@ -215,13 +216,11 @@ def load(type, id):
     print("features", features)
     time.sleep(3)
     return make_example(type, id, target_positions, positions, features,
-                        masses, numbers, quantum_target, target_features,
-                        target_masses, target_numbers)
+                        masses, quantum_target, target_features)
 
 
 def make_example(type, id, target_positions, positions, features, masses,
-                 numbers, quantum_target=None, target_features=None,
-                 target_masses=None, target_numbers=None):
+                 quantum_target=None, target_features=None):
     example = tf.train.SequenceExample()
     # non-sequential features
     example.context.feature["type"].bytes_list.value.append(bytes(type, 'utf-8'))
@@ -234,18 +233,12 @@ def make_example(type, id, target_positions, positions, features, masses,
     if target_features is not None:
         fl_target_features = example.feature_lists.feature_list["target_features"]
         fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
-        fl_target_masses = example.feature_lists.feature_list["target_masses"]
-        fl_target_masses.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_masses).numpy())
-        fl_target_numbers = example.feature_lists.feature_list["target_numbers"]
-        fl_target_numbers.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_numbers).numpy())
     fl_positions = example.feature_lists.feature_list["positions"]
     fl_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(positions).numpy())
     fl_features = example.feature_lists.feature_list["features"]
     fl_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(features).numpy())
     fl_masses = example.feature_lists.feature_list["masses"]
     fl_masses.feature.add().bytes_list.value.append(tf.io.serialize_tensor(masses).numpy())
-    fl_numbers = example.feature_lists.feature_list["numbers"]
-    fl_numbers.feature.add().bytes_list.value.append(tf.io.serialize_tensor(numbers).numpy())
     # serialized
     return example.SerializeToString()
 
