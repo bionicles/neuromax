@@ -15,6 +15,8 @@ MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 1, 64
 P_UNDOCK = 0.5
 P_UNFOLD = 0.5
 
+# crystals -> https://github.com/materialsvirtuallab/megnet!! TODO!
+
 # quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
 # chem -> datasets/rxn: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-rxn.tar.gz
 # chem -> datasets/mol: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-mol.tar.gz
