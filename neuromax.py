@@ -91,7 +91,7 @@ class NoisyDropConnectDense(L.Dense):
 
 
 def get_layer(units, hp):
-    return NoisyDropConnectDense(units, activation="tanh", layer=hp.layer, stddev=hp.stddev)
+    return NoisyDropConnectDense(units, activation="tanh", stddev=hp.stddev)
 
 
 class ConvPair(L.Layer):
@@ -230,9 +230,9 @@ def get_loss(initial, xyz):
 def get_distances(A, B):
     A = tf.squeeze(A, 0)
     B = tf.squeeze(B, 0)
-    na = tf.reshape(tf.reduce_sum(tf.square(A), 1), [-1, 1])
-    nb = tf.reshape(tf.reduce_sum(tf.square(B), 1), [1, -1])
-    return tf.sqrt(tf.maximum(na - 2 * tf.matmul(A, B, False, True) + nb, 0.0))
+    na = tf.reshape(tf.reduce_sum(tf.abs(A), 1), [-1, 1])
+    nb = tf.reshape(tf.reduce_sum(tf.abs(B), 1), [1, -1])
+    return na - 2 * tf.matmul(A, B, False, True) + nb
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -261,8 +261,11 @@ def trial(**kwargs):
     @tf.function
     def run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features):
         print("tracing run_episode")
-        target_distances = get_distances(target_positions, target_positions)
-        meta = get_loss(target_distances, positions)
+        target = tf.concat([target_positions, target_features], -1)
+        target_distances = get_distances(target, target)
+        current = tf.concat([positions, features], -1)
+        distances = get_distances(current, current)
+        meta = get_distances(target_distances, distances)
         initial_loss = tf.reduce_sum(meta)
         velocities = tf.zeros_like(positions)
         stop = initial_loss * STOP_LOSS_MULTIPLE
@@ -287,15 +290,12 @@ def trial(**kwargs):
     @tf.function
     def train(datasets):
         print("tracing train")
-        episodes_this_dataset = 0
         total_change = 0.
-        episode = 0
         change = 0.
-        gif = False
         for dataset in datasets:
-            for episode, (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features) in dataset:
+            for episode, (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features) in dataset.enumerate():
                 with tf.device('/gpu:0'):
-                    change = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, change, total_change, episode, episodes_this_dataset, gif)
+                    change = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features)
                 if tf.math.is_nan(change):
                     change = 200.
                 tf.print(type, 'episode', episode, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
