@@ -30,23 +30,26 @@ atom_index = 0
 best_trial = ''
 best_args = []
 best = 12345678900
-# parameters
+# search
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
-STOP_LOSS_MULTIPLE = 1.2
 EPISODES_PER_DATASET = 2
 EPISODES_PER_TRIAL = 2
 N_EPOCHS = 2
-D_FEATURES = 7
-D_OUT = 3
-TENSORBOARD = False
-MAX_STEPS = 420
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
+# episodes
+STOP_LOSS_MULTIPLE = 1.2
+STARTING_TEMPERATURE = 273.15
+STEP_DIVISOR = 10.
+TENSORBOARD = False
+MAX_STEPS = 420
 # gif parameters
 GIF_STYLE = "spheres"
 IMAGE_SIZE = 256
 N_MOVIES = 1
-# hyperparameters
+# agent
+D_FEATURES = 7
+D_OUT = 3
 dimensions = [
     skopt.space.Integer(1, 8, name='p_blocks'),
     skopt.space.Categorical(['p_res_deep', 'p_res_wide_deep', 'p_conv_deep', 'p_conv_wide_deep'], name='p'),
@@ -268,17 +271,26 @@ def trial(**kwargs):
         meta = get_distances(target_distances, distances)
         initial_loss = tf.reduce_sum(meta)
         velocities = tf.zeros_like(positions)
+        forces = tf.zeros_like(positions)
+        total_forces = tf.zeros_like(positions)
         stop = initial_loss * STOP_LOSS_MULTIPLE
         loss = 0.
         for step in tf.range(MAX_STEPS):
             with tf.GradientTape() as tape:
-                velocities = velocities + agent([positions, features]) / masses
-                positions = tf.math.add(positions, velocities)
-                meta = get_loss(target_distances, positions)
-            gradients = tape.gradient([meta], agent.trainable_weights)
+                forces = agent([positions, features])
+                total_forces = total_forces + forces
+                acceleration = forces / masses
+                velocities = velocities + acceleration
+                noise_stddev = 0.001 * STARTING_TEMPERATURE * tf.math.exp(-1 * step / STEP_DIVISOR)
+                noise = tf.random.normal(tf.shape(positions), stddev=noise_stddev)
+                positions = positions + velocities + noise
+                current = tf.concat([positions, features], -1)
+                distances = get_distances(current, current)
+                meta = get_distances(target_distances, current)
+            gradients = tape.gradient([meta, total_forces, forces], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
-            loss = tf.reduce_sum(meta)
+            loss = tf.reduce_sum(meta) + tf.reduce_sum(total_forces) + tf.reduce_sum(forces)
             new_stop = loss * STOP_LOSS_MULTIPLE
             tf.print(loss)
             if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
