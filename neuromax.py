@@ -52,7 +52,7 @@ D_FEATURES = 7
 D_OUT = 3
 dimensions = [
     skopt.space.Integer(1, 8, name='p_blocks'),
-    skopt.space.Categorical(['p_res_deep', 'p_res_wide_deep', 'p_conv_deep', 'p_conv_wide_deep'], name='p'),
+    skopt.space.Categorical(['p_conv_deep', 'p_conv_wide_deep'], name='p'),
     skopt.space.Integer(1, 3, name='p_layers'),
     skopt.space.Integer(1, 1024, name='p_units'),
     skopt.space.Real(0.001, 0.1, name='stddev'),
@@ -115,7 +115,7 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
     for layer in range(layers - 1):
         output = get_layer(units, hp)(output)
     if 'wide' in block_type:
-        output = L.Concatenate(-1)([input, output])
+        output = L.Concatenate(-1)([inputs, output])
     output = get_layer(d_output, hp)(output)
     return K.Model([atom1, atom2], output)
 
@@ -130,8 +130,6 @@ def get_block(block_type, hp, features, prior):
     d_features = block_output.shape[-1]
     if 'conv' in block_type:
         block_output = ConvPair(hp, d_features, d_output)(block_output)
-    elif 'res' in block_type:
-        block_output = get_kernel(block_type, hp.p_layers, hp.p_units, hp, d_features, d_output)(block_output)
     if hp.norm is 'all':
         block_output = L.BatchNormalization()(block_output)
     if not isinstance(prior, int):
