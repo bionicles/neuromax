@@ -228,6 +228,11 @@ def make_gif(pdb_name, trial_name, pngs_path):
     imageio.mimsave(gif_path + pdb_name + ".gif", images)
 
 
+@tf.function
+def show(m):
+    tf.print(tf.shape(m))
+
+
 def cos(A, B):
     Aflat = tf.keras.backend.flatten(A)
     Bflat = tf.keras.backend.flatten(B)
@@ -246,13 +251,14 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         feature_distance = 1000 * get_distances(source_numbers, target_numbers)
         feature_weight = tf.math.exp(-igsp_step / n_source_atoms)
         euclidean_weight = 1 - feature_weight + 0.001
-        compound_distance = euclidean_weight * euclidean_distance + feature_weight * feature_distance
-        rows, columns = scipy.optimize.linear_sum_assignment(compound_distance)
+        compound_distance = tf.cast(euclidean_weight, tf.float32) * tf.cast(euclidean_distance, tf.float32) + tf.cast(feature_weight, tf.float32) *tf.cast( feature_distance, tf.float32)
+        show(compound_distance)
+        rows, columns = tf.numpy_function(scipy.optimize.linear_sum_assignment, [compound_distance], [tf.int32, tf.int32])
         ordered_source_positions = tf.gather(source_positions, columns)
         ordered_target_positions = tf.gather(target_positions, columns)
         ordered_source_positions = tf.gather(source_positions, columns) - tf.reduce_mean(ordered_source_positions, axis=0)
         ordered_target_positions = tf.gather(target_positions, rows) - tf.reduce_mean(ordered_target_positions, axis=0)
-        covariance = tf.dot(ordered_source_positions, tf.transpose(ordered_target_positions))
+        covariance = B.dot(ordered_source_positions, tf.transpose(ordered_target_positions))
         s, u, v = tf.linalg.svd(covariance)
         d = tf.linalg.det(v * tf.transpose(u))
         temporary_rotation = v * tf.linalg.diag([1, 1, d]) * tf.transpose(u)
