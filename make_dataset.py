@@ -235,6 +235,7 @@ def load(type, id):
     features = tf.concat([features, masses, numbers], -1)
     if type is not "rxn":
         target_features = features
+        target_numbers = numbers
     return make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
 
 
