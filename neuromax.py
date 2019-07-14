@@ -323,7 +323,7 @@ def trial(**kwargs):
                 total_forces = total_forces + forces
                 acceleration = forces / masses
                 velocities = velocities + acceleration
-                noise_stddev = 0.001 * STARTING_TEMPERATURE * tf.math.exp(-1 * step / STEP_DIVISOR)
+                noise_stddev = 0.001 * STARTING_TEMPERATURE * tf.math.exp(-1 * float(step) / STEP_DIVISOR)
                 noise = tf.random.normal(tf.shape(positions), stddev=noise_stddev)
                 positions = positions + velocities + noise
                 current = tf.concat([positions, features], -1)
