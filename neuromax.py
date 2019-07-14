@@ -269,7 +269,7 @@ def get_losses(target_positions, target_numbers, positions, numbers, masses, vel
     aligned = tf.linalg.matmul(rotation, (tf.gather(positions, columns) + translation))
     distances = tf.linalg.get_diag(get_distances(aligned, tf.gather(target_positions, rows)))
     work = tf.linalg.matmul(tf.gather(masses, columns), (2 * distances - tf.gather(velocities, columns)))
-    return [work, total_forces, forces]
+    return (work, total_forces, forces)
 
 
 @tf.function(input_signature=[tf.TensorSpec(shape=(None, None, None), dtype=tf.float32),
@@ -306,15 +306,11 @@ def trial(**kwargs):
     @tf.function
     def run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers):
         print("tracing run_episode")
-        target = tf.concat([target_positions, target_features], -1)
-        target_distances = get_distances(target, target)
-        current = tf.concat([positions, features], -1)
-        distances = get_distances(current, current)
-        meta = get_distances(target_distances, distances)
-        initial_loss = tf.reduce_sum(meta)
-        velocities = tf.zeros_like(positions)
-        forces = tf.zeros_like(positions)
         total_forces = tf.zeros_like(positions)
+        forces = tf.zeros_like(positions)
+        velocities = tf.zeros_like(positions)
+        work, total_forces, forces = get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces)
+        initial_loss = tf.reduce_sum(work)
         stop = initial_loss * STOP_LOSS_MULTIPLE
         loss = 0.
         for step in tf.range(MAX_STEPS):
@@ -326,13 +322,11 @@ def trial(**kwargs):
                 noise_stddev = 0.001 * STARTING_TEMPERATURE * tf.math.exp(-1 * float(step) / STEP_DIVISOR)
                 noise = tf.random.normal(tf.shape(positions), stddev=noise_stddev)
                 positions = positions + velocities + noise
-                current = tf.concat([positions, features], -1)
-                distances = get_distances(current, current)
-                meta = get_distances(target_distances, current)
-            gradients = tape.gradient([meta, total_forces, forces], agent.trainable_weights)
+                work, total_forces, forces = get_losses(positions, numbers, target_positions, numbers)
+            gradients = tape.gradient([work, total_forces, forces], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
-            loss = tf.reduce_sum(meta) + tf.reduce_sum(total_forces) + tf.reduce_sum(forces)
+            loss = tf.reduce_sum(work) + tf.reduce_sum(total_forces) + tf.reduce_sum(forces)
             new_stop = loss * STOP_LOSS_MULTIPLE
             tf.print(loss)
             if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
