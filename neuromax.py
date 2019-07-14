@@ -8,6 +8,7 @@ import webbrowser
 import random
 import imageio
 import shutil
+import scipy
 import skopt
 import math
 import time
@@ -158,14 +159,18 @@ def parse_item(example):
                         'id': tf.io.FixedLenFeature([], dtype=tf.string)}
     sequence_features = {'target_positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'target_features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'target_numbers': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'numbers': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
                          'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     target_positions = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 3])
     target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 7])
+    target_numbers = tf.reshape(tf.io.parse_tensor(sequence['target_numbers'][0], tf.float32), [-1, 1])
     positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 7])
+    numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
     masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
     quantum_target = tf.io.parse_tensor(context['quantum_target'], tf.float32)
     masses = tf.concat([masses, masses, masses], 1)
@@ -173,7 +178,8 @@ def parse_item(example):
     type = context['type']
     id = context['id']
     target_features = features
-    return (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features)
+    return (type, id, n_atoms, target_positions, positions, features, masses,
+            quantum_target, target_features, target_numbers, numbers)
 
 
 def read_shards(datatype):
@@ -222,18 +228,56 @@ def make_gif(pdb_name, trial_name, pngs_path):
     imageio.mimsave(gif_path + pdb_name + ".gif", images)
 
 
-@tf.function
-def get_loss(initial, xyz):
-    return tf.math.square(tf.math.subtract(initial, get_distances(xyz, xyz)))
+def cos(A, B):
+    Aflat = tf.keras.backend.flatten(A)
+    Bflat = tf.keras.backend.flatten(B)
+    return (tf.math.dot( Aflat, Bflat ) /
+            tf.math.maximum( tf.norm(Aflat) * tf.norm(Bflat), 1e-10 ))
+
+
+def igsp(source_positions, source_numbers, target_positions, target_numbers):
+    translation = tf.reduce_mean(target_positions, axis=0) - tf.reduce_mean(source_positions, axis=0)
+    source_positions_copy = tf.identity(source_positions)
+    n_source_atoms = tf.shape(source_positions)[0]
+    change_in_rotation = 1000
+    igsp_step = 0
+    while change_in_rotation > (10 * 3.14159/180) and igsp_step < 20:
+        euclidean_distance = get_distances(source_positions_copy, target_positions)
+        feature_distance = 1000 * get_distances(source_numbers, target_numbers)
+        feature_weight = tf.math.exp(-igsp_step / n_source_atoms)
+        euclidean_weight = 1 - feature_weight + 0.001
+        compound_distance = euclidean_weight * euclidean_distance + feature_weight * feature_distance
+        rows, columns = scipy.optimize.linear_sum_assignment(compound_distance)
+        ordered_source_positions = tf.gather(source_positions, columns)
+        ordered_target_positions = tf.gather(target_positions, columns)
+        ordered_source_positions = tf.gather(source_positions, columns) - tf.reduce_mean(ordered_source_positions, axis=0)
+        ordered_target_positions = tf.gather(target_positions, rows) - tf.reduce_mean(ordered_target_positions, axis=0)
+        covariance = tf.dot(ordered_source_positions, tf.transpose(ordered_target_positions))
+        s, u, v = tf.linalg.svd(covariance)
+        d = tf.linalg.det(v * tf.transpose(u))
+        temporary_rotation = v * tf.linalg.diag([1, 1, d]) * tf.transpose(u)
+        source_positions_copy = temporary_rotation * source_positions
+        change_in_rotation = cos(rotation, temporary_rotation)
+        igsp_step += 1
+    return rows, columns, translation, rotation
 
 
 @tf.function
-def get_distances(A, B):
-    A = tf.squeeze(A, 0)
-    B = tf.squeeze(B, 0)
-    na = tf.reshape(tf.reduce_sum(tf.abs(A), 1), [-1, 1])
-    nb = tf.reshape(tf.reduce_sum(tf.abs(B), 1), [1, -1])
-    return na - 2 * tf.matmul(A, B, False, True) + nb
+def get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces):
+    total_forces = total_forces + forces
+    rows, columns, translation, rotation = igsp(positions, numbers, target_positions, target_numbers)
+    aligned = tf.linalg.matmul(rotation, (tf.gather(positions, columns) + translation))
+    distances = tf.linalg.get_diag(get_distances(aligned, tf.gather(target_positions, rows)))
+    work = tf.linalg.matmul(tf.gather(masses, columns), (2 * distances - tf.gather(velocities, columns)))
+    return [work, total_forces, forces]
+
+
+@tf.function(input_signature=[tf.TensorSpec(shape=(None, None, None), dtype=tf.float32),
+                              tf.TensorSpec(shape=(None, None, None), dtype=tf.float32)])
+def get_distances(a, b):  # target is treated like current
+    a = tf.squeeze(a)
+    b = tf.squeeze(b)
+    return tf.reduce_sum(tf.math.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)  # N, N, 1
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)

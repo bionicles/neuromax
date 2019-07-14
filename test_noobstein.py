@@ -1,6 +1,6 @@
 import tensorflow as tf
 import ot
-
+B = tf.keras.backend
 D_SPACE = 3
 D_FEATURES = 7
 DTYPE = tf.float32
@@ -45,8 +45,8 @@ def read_shards(datatype):
 
 
 @tf.function(input_signature=[tf.TensorSpec(shape=(None, D_SPACE), dtype=DTYPE)])
-def get_distances(xyz):  # target is treated like current
-    return tf.reduce_sum(tf.math.abs(tf.expand_dims(xyz, 0) - tf.expand_dims(xyz, 1)), axis=-1)  # N, N, 1
+def get_distances(a, b):  # target is treated like current
+    return tf.reduce_sum(tf.math.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)  # N, N, 1
 
 
 
@@ -56,38 +56,38 @@ def show(m):
 
 
 
-def quaternion_mult(q,r):
-    return [r[0]q[0]-r[1]q[1]-r[2]q[2]-r[3]q[3],
-            r[0]q[1]+r[1]q[0]-r[2]q[3]+r[3]q[2],
-            r[0]q[2]+r[1]q[3]+r[2]q[0]-r[3]q[1],
-            r[0]q[3]-r[1]q[2]+r[2]q[1]+r[3]q[0]]
+def cos(A, B):
+    Aflat = tf.keras.backend.flatten(A)
+    Bflat = tf.keras.backend.flatten(B)
+    return (tf.math.dot( Aflat, Bflat ) /
+            tf.math.maximum( tf.norm(Aflat) * tf.norm(Bflat), 1e-10 ))
 
-def point_rotation_by_quaternion(point,q):
-    r = [0]+point
-    q_conj = [q[0],-1q[1],-1q[2],-1*q[3]]
-    return quaternion_mult(quaternion_mult(q,r),q_conj)[1:]
 
-def icp(source_positions, source_numbers, target_positions, target_numbers):
+def igsp(source_positions, source_numbers, target_positions, target_numbers):
+    translation = tf.reduce_mean(target_positions, axis=0) - tf.reduce_mean(source_positions, axis=0)
+    source_positions_copy = tf.identity(source_positions)
+    n_source_atoms = tf.shape(source_positions)[0]
+    change_in_rotation =  1000
+    igsp_step = 0
+    while change_in_rotation > (10 * 3.14159/180) and igsp_step < 20:
+        euclidean_distance = get_distances(source_positions_copy, target_positions)
+        feature_distance = 1000 * get_distances(source_numbers, target_numbers)
+        feature_weight = tf.math.exp(-igsp_step / n_source_atoms)
+        euclidean_weight = 1 - feature_weight + 0.001
+        compound_distance = euclidean_weight * euclidean_distance + feature_weight * feature_distance
+        rows, columns = scipy.optimize.linear_sum_assignment(compound_distance)
+        ordered_source_positions = tf.gather(source_positions, columns) - tf.reduce_mean(ordered_source_positions, axis=0)
+        ordered_target_positions = tf.gather(target_positions, rows) - tf.reduce_mean(ordered_target_positions, axis=0)
+        covariance = tf.dot(ordered_source_positions, tf.transpose(ordered_target_positions))
+        s, u, v = tf.linalg.svd(covariance)
+        d = tf.det(v * tf.transpose(u))
+        temporary_rotation = v * tf.linalg.diag([1,1,d]) * tf.transpose(u)
+        source_positions_copy = temporary_rotation * source_positions
+        change_in_rotation = cos(rotation, temporary_rotation)
+        igsp_step += 1
+    return rows, columns, translation, rotation
 
-    # Initialization
-    Rt = tf.linalg.identity() # identity matrix?
-    Delta_r =  1000
-    delta_t = 1000
-    k = 0
-    while translation > translation_cutoff and rotation > rotation_cutoff:
-        euclidean_distance = get_distances(source_positions, target_positions)
-        W_fd = tf.math.exp(-k / m)  # number of atoms of current
-        W_ed = 1 - W_fd
-        compound_distance = euclidean_weight*euclidean_distance + feature_weight * feature_distance
-        if k == 0:
-            Tcd = mean(compound_distance) + p[0] segma_CD
-        else:
-            Tcd = p[1]*euclidean_weight * mean(ex_euclidean_distance) + p[2]*W_fd*mean(ex_feature_distance) # p threshold param
-        e(p, q)  # WTF is that, 10 step in the algorithm
-        M = scipy.optimize.linear_sum_assignment(Tcd)  # set of correspondences between target and current
-        Rtemp = SVD(M)
-        current_position = Rtemp*current_position
-        delta_r and delta_t from Rtemp
+def get_loss(target_positions, positions, velocities, masses):
 
 
 # @tf.function
