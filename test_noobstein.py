@@ -18,16 +18,18 @@ def parse_item(example):
     context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
     target_positions = tf.reshape(tf.io.parse_tensor(sequence['target_positions'][0], tf.float32), [-1, 3])
     target_features = tf.reshape(tf.io.parse_tensor(sequence['target_features'][0], tf.float32), [-1, 7])
+    target_numbers = tf.reshape(tf.io.parse_tensor(sequence['target_numbers'][0], tf.float32), [-1, 1])
     positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
     features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 7])
     masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
+    numbers = tf.reshape(tf.io.parse_tensor(sequence['numbers'][0], tf.float32), [-1, 1])
     quantum_target = tf.io.parse_tensor(context['quantum_target'], tf.float32)
     masses = tf.concat([masses, masses, masses], 1)
     n_atoms = tf.shape(positions)[0]
     type = context['type']
     id = context['id']
     target_features = features
-    return (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features)
+    return (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
 
 
 def read_shards(datatype):
@@ -65,23 +67,22 @@ def point_rotation_by_quaternion(point,q):
     q_conj = [q[0],-1q[1],-1q[2],-1*q[3]]
     return quaternion_mult(quaternion_mult(q,r),q_conj)[1:]
 
-def icp(source_positions, source_features, target_positions, target_features):
+def icp(source_positions, source_numbers, target_positions, target_numbers):
 
     # Initialization
-    k = 0
-    Rt = identity # identity matrix?
+    Rt = tf.linalg.identity() # identity matrix?
     Delta_r =  1000
     delta_t = 1000
     k = 0
-    while segma_t < vect(segma_r, delta_t) < delta_r: # segma: standard deviation
-        euclidean_distance = tf.tensor(current_position, target_position)
-        W_fd = exp(-k/m)  # number of atoms of current
+    while translation > translation_cutoff and rotation > rotation_cutoff:
+        euclidean_distance = get_distances(source_positions, target_positions)
+        W_fd = tf.math.exp(-k / m)  # number of atoms of current
         W_ed = 1 - W_fd
-        compound_distance = euclidean_weight*euclidean_distance +  feature_weight * feature_distance
+        compound_distance = euclidean_weight*euclidean_distance + feature_weight * feature_distance
         if k == 0:
             Tcd = mean(compound_distance) + p[0] segma_CD
         else:
-            Tcd = p[1]*W_ed*mean(ex_euclidean_distance) + p[2]*W_fd*mean(ex_feature_distance) # p threshold param
+            Tcd = p[1]*euclidean_weight * mean(ex_euclidean_distance) + p[2]*W_fd*mean(ex_feature_distance) # p threshold param
         e(p, q)  # WTF is that, 10 step in the algorithm
         M = scipy.optimize.linear_sum_assignment(Tcd)  # set of correspondences between target and current
         Rtemp = SVD(M)

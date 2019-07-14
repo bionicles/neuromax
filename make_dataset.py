@@ -235,10 +235,10 @@ def load(type, id):
     features = tf.concat([features, masses, numbers], -1)
     if type is not "rxn":
         target_features = features
-    return make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features)
+    return make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
 
 
-def make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features):
+def make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers):
     [print(x.shape) for x in [target_positions, positions, features, masses, quantum_target, target_features]]
     example = tf.train.SequenceExample()
     # non-sequential features
@@ -250,10 +250,14 @@ def make_example(type, id, target_positions, positions, features, masses, quantu
     fl_target_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_positions).numpy())
     fl_target_features = example.feature_lists.feature_list["target_features"]
     fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
+    fl_target_numbers = example.feature_lists.feature_list["target_numbers"]
+    fl_target_numbers.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_numbers).numpy())
     fl_positions = example.feature_lists.feature_list["positions"]
     fl_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(positions).numpy())
     fl_features = example.feature_lists.feature_list["features"]
     fl_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(features).numpy())
+    fl_numbers = example.feature_lists.feature_list["numbers"]
+    fl_numbers.feature.add().bytes_list.value.append(tf.io.serialize_tensor(numbers).numpy())
     fl_masses = example.feature_lists.feature_list["masses"]
     fl_masses.feature.add().bytes_list.value.append(tf.io.serialize_tensor(masses).numpy())
     # serialized
