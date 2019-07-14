@@ -304,7 +304,7 @@ def trial(**kwargs):
     writer = tf.summary.create_file_writer(log_dir)
 
     @tf.function
-    def run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features):
+    def run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers):
         print("tracing run_episode")
         target = tf.concat([target_positions, target_features], -1)
         target_distances = get_distances(target, target)
@@ -347,9 +347,9 @@ def trial(**kwargs):
         total_change = 0.
         change = 0.
         for dataset in datasets:
-            for episode, (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features) in dataset.enumerate():
+            for episode, (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers) in dataset.enumerate():
                 with tf.device('/gpu:0'):
-                    change = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features)
+                    change = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
                 if tf.math.is_nan(change):
                     change = 200.
                 tf.print(type, 'episode', episode, 'with', n_atoms, 'atoms', change, "% change (lower is better)")
