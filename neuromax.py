@@ -244,8 +244,6 @@ def radians_to_degrees(radians):
 # @tf.function
 def igsp(source_positions, source_numbers, target_positions, target_numbers):
     source_positions, source_numbers, target_positions, target_numbers = [tf.squeeze(x, 0) for x in [source_positions, source_numbers, target_positions, target_numbers]]
-    [print(x.shape) for x in [source_positions, source_numbers, target_positions, target_numbers]]
-    print("tracing igsp")
     columns, rows = tf.range(tf.shape(target_positions)[0]), tf.range(tf.shape(target_positions)[0])
     translation = tf.reduce_mean(target_positions, axis=0) - tf.reduce_mean(source_positions, axis=0)
     source_positions_copy = tf.identity(source_positions)
@@ -273,52 +271,37 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         source_positions_copy = B.dot(source_positions_copy, temporary_rotation)
         change_in_rotation = tf.math.abs(tf.math.reduce_sum(cos(rotation, temporary_rotation), axis=-1))
         change_in_rotation = radians_to_degrees(change_in_rotation)
-        print('change in rotation', change_in_rotation, 'degrees')
         rotation = temporary_rotation * rotation
         igsp_step += 1
-    print('done with igsp!')
     return rows, columns, translation, rotation
 
 
 # @tf.function
 def get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces):
-    show(positions)
-    show(numbers)
     total_forces = total_forces + forces
     rows, columns, translation, rotation = igsp(positions, numbers, target_positions, target_numbers)
     aligned = tf.linalg.matmul((positions + translation), rotation)
     gathered_positions = tf.squeeze(tf.gather(aligned, columns, axis=1), 0)
-    gathered_velocities = tf.squeeze(velocities, 0)
-    gathered_velocities = tf.reduce_sum(velocities, -1)
-    gathered_masses, _, _ = tf.split(masses, 3, axis=-1)
     gathered_target = tf.squeeze(tf.gather(target_positions, rows, axis=1), 0)
     distances = tf.linalg.diag_part(get_distances(gathered_positions, gathered_target))
-    # distances = tf.expand_dims(distances, 0)
-    # distances = tf.expand_dims(distances, -1)
+    gathered_velocities = tf.squeeze(tf.gather(velocities, columns, axis=1), 0)
+    gathered_velocities = tf.reduce_sum(gathered_velocities, -1)
+    gathered_masses = tf.squeeze(tf.gather(masses, columns, axis=1), 0)
+    gathered_masses, _, _ = tf.split(gathered_masses, 3, axis=-1)
+    gathered_masses = tf.squeeze(gathered_masses, -1)
+    work = 2 * distances - gathered_velocities
+    work = tf.einsum('i,i->i', gathered_masses, work)
+    zeros = tf.zeros(positions.shape[1])
     columns = tf.expand_dims(columns, -1)
-    # columns = tf.expand_dims(columns, -1)
-    zeros = tf.zeros(gathered_masses.shape[1])
-
-    print("tensor", zeros)
-    print('indices', columns)
-    print("updates", distances)
-
-    distances = tf.tensor_scatter_nd_update(zeros, columns, distances)
-    distances = tf.expand_dims(distances, 0)
-    distances = tf.expand_dims(distances, -1)
-    print("distances", distances.shape)
-    print("gathered positions", gathered_positions.shape)
-    print("gathered velocities", gathered_velocities.shape)
-    print("gathered masses", gathered_masses.shape)
-    work = tf.linalg.matmul(gathered_masses, (2 * distances - gathered_velocities))
+    work = tf.tensor_scatter_nd_update(zeros, columns, work)
+    work = tf.expand_dims(work, 0)
+    work = tf.expand_dims(work, -1)
     return (work, total_forces, forces)
 
 
 # @tf.function(input_signature=[tf.TensorSpec(shape=(None, None, None), dtype=tf.float32),
 #                               tf.TensorSpec(shape=(None, None, None), dtype=tf.float32)])
 def get_distances(a, b):  # target is treated like current
-    # a = tf.squeeze(a)
-    # b = tf.squeeze(b)
     return tf.reduce_sum(tf.math.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)  # N, N, 1
 
 
@@ -370,7 +353,7 @@ def trial(**kwargs):
             ema.apply(agent.weights)
             loss = tf.reduce_sum(work) + tf.reduce_sum(total_forces) + tf.reduce_sum(forces)
             new_stop = loss * STOP_LOSS_MULTIPLE
-            tf.print(loss)
+            # tf.print(loss)
             if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
                 break
             elif tf.math.less(new_stop, stop):
