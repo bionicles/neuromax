@@ -234,8 +234,8 @@ def show(m):
 
 
 def cos(a, b):
-    Aflat = tf.cast(tf.keras.backend.flatten(a),  tf.bfloat16)
-    Bflat = tf.cast(tf.keras.backend.flatten(b),  tf.bfloat16)
+    Aflat = tf.cast(tf.keras.backend.flatten(a),  tf.float32)
+    Bflat = tf.cast(tf.keras.backend.flatten(b),  tf.float32)
     return (Aflat * Bflat) / tf.math.maximum(tf.norm(Aflat) * tf.norm(Bflat), 1e-10)
 
 @tf.function
@@ -263,7 +263,7 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         d = tf.linalg.det(v * tf.transpose(u))
         temporary_rotation = v * tf.linalg.diag([1, 1, d]) * tf.transpose(u)
         source_positions_copy = temporary_rotation * source_positions
-        change_in_rotation = cos(rotation, temporary_rotation)
+        change_in_rotation = tf.math.reduce_mean(cos(rotation, temporary_rotation), axis=-1)
         rotation = temporary_rotation
         igsp_step += 1
     return rows, columns, translation, rotation
