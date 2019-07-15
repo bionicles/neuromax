@@ -295,12 +295,14 @@ def get_losses(target_positions, target_numbers, positions, numbers, masses, vel
     distances = tf.linalg.diag_part(get_distances(gathered_positions, gathered_target))
     # distances = tf.expand_dims(distances, 0)
     # distances = tf.expand_dims(distances, -1)
-    # columns = tf.expand_dims(columns, 0)
+    columns = tf.expand_dims(columns, -1)
     # columns = tf.expand_dims(columns, -1)
-    print("updates", distances.shape)
-    print('indices', columns.shape)
     zeros = tf.zeros(gathered_masses.shape[1])
-    print("tensor", zeros.shape)
+
+    print("tensor", zeros)
+    print('indices', columns)
+    print("updates", distances)
+
     distances = tf.tensor_scatter_nd_update(zeros, columns, distances)
     distances = tf.expand_dims(distances, 0)
     distances = tf.expand_dims(distances, -1)
