@@ -33,8 +33,8 @@ best_args = []
 best = 12345678900
 # search
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
-EPISODES_PER_DATASET = 2
-EPISODES_PER_TRIAL = 2
+EPISODES_PER_DATASET = 100
+EPISODES_PER_TRIAL = 100
 N_EPOCHS = 2
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
@@ -246,13 +246,13 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
     source_positions, source_numbers, target_positions, target_numbers = [tf.squeeze(x, 0) for x in [source_positions, source_numbers, target_positions, target_numbers]]
     columns, rows = tf.range(tf.shape(target_positions)[0]), tf.range(tf.shape(target_positions)[0])
     translation = tf.reduce_mean(target_positions, axis=0) - tf.reduce_mean(source_positions, axis=0)
-    source_positions_copy = tf.identity(source_positions)
+    source_positions_copy = tf.identity(source_positions) + translation
     n_source_atoms = tf.shape(source_positions)[0]
     n_target_atoms = tf.shape(target_positions)[0]
     rotation = tf.linalg.diag([1.,1.,1.])
     change_in_rotation = 1000
     igsp_step = 0
-    while tf.math.logical_and((float(change_in_rotation) > 10.), igsp_step < 3):
+    while tf.math.logical_and((float(change_in_rotation) > 10.), igsp_step < 1):
         euclidean_distance = get_distances(source_positions_copy, target_positions)
         feature_distance = get_distances(source_numbers, target_numbers)
         feature_distance = feature_distance * 1000.
@@ -262,8 +262,8 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         rows, columns = tf.numpy_function(scipy.optimize.linear_sum_assignment, [compound_distance], [tf.int32, tf.int32])
         ordered_source_positions = tf.gather(source_positions, columns)
         ordered_target_positions = tf.gather(target_positions, columns)
-        ordered_source_positions = tf.gather(source_positions, columns) - tf.reduce_mean(ordered_source_positions, axis=0)
-        ordered_target_positions = tf.gather(target_positions, rows) - tf.reduce_mean(ordered_target_positions, axis=0)
+        ordered_source_positions = ordered_source_positions - tf.reduce_mean(ordered_source_positions, axis=0)
+        ordered_target_positions = ordered_target_positions - tf.reduce_mean(ordered_target_positions, axis=0)
         covariance = B.dot(tf.transpose(ordered_source_positions), ordered_target_positions)
         s, u, v = tf.linalg.svd(covariance)
         d = tf.linalg.det(v * tf.transpose(u))
@@ -271,16 +271,14 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         source_positions_copy = B.dot(source_positions_copy, temporary_rotation)
         change_in_rotation = tf.math.acos((tf.linalg.trace(rotation * tf.transpose(temporary_rotation)) - 1.) / 2.)
         change_in_rotation = radians_to_degrees(change_in_rotation)
-        print('step', igsp_step, change_in_rotation.numpy(), "degree rotation")
+        # print('rotate', change_in_rotation.numpy(), "degrees and translate by", translation.numpy())
         change_in_rotation = tf.math.abs(change_in_rotation)
         rotation = temporary_rotation * rotation
         igsp_step += 1
     return rows, columns, translation, rotation
 
 
-# @tf.function
-def get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces):
-    total_forces = total_forces + forces
+def get_work_loss(target_positions, target_numbers, positions, numbers, masses, velocities):
     rows, columns, translation, rotation = igsp(positions, numbers, target_positions, target_numbers)
     aligned = tf.linalg.matmul((positions + translation), rotation)
     gathered_positions = tf.squeeze(tf.gather(aligned, columns, axis=1), 0)
@@ -298,12 +296,18 @@ def get_losses(target_positions, target_numbers, positions, numbers, masses, vel
     work = tf.tensor_scatter_nd_update(zeros, columns, work)
     work = tf.expand_dims(work, 0)
     work = tf.expand_dims(work, -1)
-    return (work, tf.math.abs(total_forces), tf.math.abs(forces))
+    return work
 
+
+def get_meta_loss(target_distances, positions):
+    temp_pos = tf.squeeze(positions, 0)
+    distances = get_distances(temp_pos, temp_pos)
+    loss = tf.math.abs(target_distances - distances)
+    return loss
 
 # @tf.function(input_signature=[tf.TensorSpec(shape=(None, None, None), dtype=tf.float32),
 #                               tf.TensorSpec(shape=(None, None, None), dtype=tf.float32)])
-def get_distances(a, b):  # target is treated like current
+def get_distances(a, b):
     return tf.reduce_sum(tf.math.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)  # N, N, 1
 
 
@@ -333,13 +337,16 @@ def trial(**kwargs):
     # @tf.function
     def run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers):
         print("tracing run_episode")
-        total_forces = tf.zeros_like(positions)
-        forces = tf.zeros_like(positions)
+        total_forces = tf.zeros(positions.shape)
         velocities = tf.zeros_like(positions)
-        work, total_forces, forces = get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces)
-        initial_loss = tf.reduce_sum(work)
-        stop = initial_loss * STOP_LOSS_MULTIPLE
+        forces = tf.zeros(positions.shape)
+        type = type.numpy().item().decode()
+        if type != "rxn":
+            temp_target = tf.squeeze(target_positions, 0)
+            target_distances = get_distances(temp_target, temp_target)
         loss = 0.
+        initial_loss = 0.
+        stop = initial_loss * STOP_LOSS_MULTIPLE
         for step in tf.range(MAX_STEPS):
             with tf.GradientTape() as tape:
                 forces = agent([positions, features])
@@ -349,17 +356,28 @@ def trial(**kwargs):
                 noise_stddev = 0.001 * STARTING_TEMPERATURE * tf.math.exp(-1 * float(step) / STEP_DIVISOR)
                 noise = tf.random.normal(tf.shape(positions), stddev=noise_stddev)
                 positions = positions + velocities + noise
-                work, total_forces, forces = get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces)
-            gradients = tape.gradient([work, total_forces, forces], agent.trainable_weights)
+                if type == "rxn":
+                    loss = get_work_loss(target_positions, target_numbers, positions, numbers, masses, velocities)
+                else:
+                    loss = get_meta_loss(target_distances, positions)
+            gradients = tape.gradient([
+                loss, tf.math.abs(total_forces), tf.math.abs(forces)
+                ], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
-            loss = tf.reduce_sum(work) + tf.reduce_sum(total_forces) + tf.reduce_sum(forces)
+            loss = tf.reduce_sum(loss)
             new_stop = loss * STOP_LOSS_MULTIPLE
-            # tf.print(loss)
-            if tf.math.logical_or(tf.math.greater(loss, stop), tf.math.is_nan(loss)):
+            tf.print('step', step, '- loss:', loss, '- stop:', stop)
+            if step.numpy().item() > 0 and (loss > stop or loss != loss):
+                print('stopping')
                 break
-            elif tf.math.less(new_stop, stop):
+            elif new_stop < stop and step.numpy().item() > 0:
+                print('changing stop')
                 stop = new_stop
+            elif step.numpy().item() == 0:
+                print('setting stop')
+                stop = new_stop
+                initial_loss = loss
         return ((loss - initial_loss) / initial_loss) * 100.
 
     # @tf.function
@@ -369,8 +387,12 @@ def trial(**kwargs):
         change = 0.
         for dataset in datasets:
             for episode, (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers) in dataset.enumerate():
-                with tf.device('/gpu:0'):
-                    change = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
+                print('')
+                print("episode", episode.numpy().item())
+                print(f'type: {type.numpy().item()} - id: {id.numpy().item()} - atoms: {n_atoms.numpy().item()}')
+                # [print(x.shape) for x in [target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers]]
+                # with tf.device('/gpu:0'):
+                change = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
                 if tf.math.is_nan(change):
                     change = 200.
                 tf.print(type, 'episode', episode, 'with', n_atoms, 'atoms', change, "% change (lower is better)")

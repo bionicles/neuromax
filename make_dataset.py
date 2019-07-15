@@ -8,13 +8,13 @@ import time
 import csv
 import os
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
-SHARDS_PER_DATASET = 1
+SHARDS_PER_DATASET = 2
 ITEMS_PER_SHARD = 4
 DTYPE = tf.float32
-MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = 1, 64
-P_UNDOCK = 0.5
+MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = -64, 64
+P_UNDOCK = 1
 P_UNFOLD = 0.5
-
+MAX_ATOMS = 6000
 # crystals -> https://github.com/materialsvirtuallab/megnet!! TODO!
 
 # quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
@@ -51,12 +51,17 @@ def load_proteins():
 
 
 def undock(chains, type):
+    print('undocking chains', chains, 'type', type)
     for chainOrName in chains:
-        selection_string = f'chain {chainOrName}' if type is 'cif' else chainOrName
+        if type == 'cif':
+            selection_string = f'chain {chainOrName}'
+        else:
+            selection_string = chainOrName
         translation_vector = [
             random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
             random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE),
             random.randrange(MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE)]
+        print('translate', selection_string, translation_vector)
         cmd.translate(translation_vector, selection_string)
         cmd.rotate('x', random.randrange(-360, 360), selection_string)
         cmd.rotate('y', random.randrange(-360, 360), selection_string)
@@ -219,16 +224,25 @@ def load(type, id):
         clean_pymol()
         model = cmd.get_model('all', 1)
     # make the model inputs
-    if type is 'cif':
+    if type == 'cif':
+        print('type is cif')
         chains = cmd.get_chains('all')
         if random.random() < P_UNDOCK:
+            print('undocking')
             undock(chains, type)
         if random.random() < P_UNFOLD:
+            print('unfolding')
             unfold(chains)
-    if type is 'rxn':
+    if type == 'rxn' or type == 'xyz':
+        print('type is rxn or xyz, undocking')
         names = cmd.get_names('all')
         undock(names, type)
+    model = cmd.get_model('all', 1)
     positions = get_positions(model)
+    if positions.shape[0] > MAX_ATOMS:
+        print(f"{positions.shape[0]} IS TOO MANY ATOMS")
+        return False
+    print(positions, target_positions)
     features = get_features(model)
     masses = get_masses(model)
     numbers = get_numbers(model)
@@ -288,13 +302,16 @@ def write_shards():
                     break
             try:
                 data = load(type, dataset_item.lower())
-                writer.write(data)
-                print('wrote', dataset_item, 'to', shard_path)
+                if data:
+                    writer.write(data)
+                    print('wrote', dataset_item, 'to', shard_path)
+                    item_number += 1
+                else:
+                    print('skipped writing', dataset_item, 'to', shard_path)
             except Exception as e:
                 print('failed on', shard_number, dataset_item, shard_path)
                 print(e)
                 problems.append([shard_number, dataset_item, e])
-            item_number += 1
     print('problem children:')
     [print(problem) for problem in problems]
     print('done!')
