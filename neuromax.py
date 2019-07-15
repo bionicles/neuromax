@@ -247,6 +247,7 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
     translation = tf.reduce_mean(target_positions, axis=0) - tf.reduce_mean(source_positions, axis=0)
     source_positions_copy = tf.identity(source_positions)
     n_source_atoms = tf.shape(source_positions)[0]
+    n_target_atoms = tf.shape(target_positions)[0]
     rotation = tf.linalg.diag([1.,1.,1.])
     change_in_rotation = 1000
     igsp_step = 0
@@ -256,22 +257,19 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         feature_distance = feature_distance * 1000.
         feature_weight = tf.math.exp(-igsp_step / n_source_atoms)
         euclidean_weight = 1 - feature_weight + 0.001
-        print('before compound distance')
-        print('feature distance', feature_distance)
-        print('euclidean distance', euclidean_distance)
         compound_distance = tf.cast(euclidean_weight, tf.float32) * tf.cast(euclidean_distance, tf.float32) + tf.cast(feature_weight, tf.float32) *tf.cast( feature_distance, tf.float32)
-        print('after compound distance')
         rows, columns = tf.numpy_function(scipy.optimize.linear_sum_assignment, [compound_distance], [tf.int32, tf.int32])
         ordered_source_positions = tf.gather(source_positions, columns)
         ordered_target_positions = tf.gather(target_positions, columns)
         ordered_source_positions = tf.gather(source_positions, columns) - tf.reduce_mean(ordered_source_positions, axis=0)
         ordered_target_positions = tf.gather(target_positions, rows) - tf.reduce_mean(ordered_target_positions, axis=0)
-        covariance = B.dot(ordered_source_positions, tf.transpose(ordered_target_positions))
+        covariance = B.dot(tf.transpose(ordered_source_positions), ordered_target_positions)
         s, u, v = tf.linalg.svd(covariance)
-        print('before det', v.shape, u.shape)
         d = tf.linalg.det(v * tf.transpose(u))
-        temporary_rotation = v * tf.linalg.diag([1, 1, d]) * tf.transpose(u)
+        temporary_rotation = v * tf.linalg.diag([1,1,d]) * tf.transpose(u)
+        print('before rotate', temporary_rotation.shape, source_positions_copy.shape)
         source_positions_copy = temporary_rotation * source_positions_copy
+        print('after rotate', source_positions_copy.shape)
         change_in_rotation = tf.math.reduce_mean(cos(rotation, temporary_rotation), axis=-1)
         rotation = temporary_rotation
         igsp_step += 1
