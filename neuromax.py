@@ -238,13 +238,14 @@ def cos(a, b):
     Bflat = tf.cast(tf.keras.backend.flatten(b),  tf.float32)
     return (Aflat * Bflat) / tf.math.maximum(tf.norm(Aflat) * tf.norm(Bflat), 1e-10)
 
-@tf.function
+# @tf.function
 def igsp(source_positions, source_numbers, target_positions, target_numbers):
+    print("tracing igsp")
     columns, rows = tf.range(tf.shape(target_positions)[0]), tf.range(tf.shape(target_positions)[0])
     translation = tf.reduce_mean(target_positions, axis=0) - tf.reduce_mean(source_positions, axis=0)
     source_positions_copy = tf.identity(source_positions)
     n_source_atoms = tf.shape(source_positions)[0]
-    rotation = tf.linalg.diag([1,1,1])
+    rotation = tf.linalg.diag([1.,1.,1.])
     change_in_rotation = 1000
     igsp_step = 0
     while tf.math.logical_and(float(change_in_rotation) > (10. * 3.14159/180), igsp_step < 20):
@@ -269,7 +270,7 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
     return rows, columns, translation, rotation
 
 
-@tf.function
+# @tf.function
 def get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces):
     show(positions)
     show(numbers)
@@ -281,8 +282,8 @@ def get_losses(target_positions, target_numbers, positions, numbers, masses, vel
     return (work, total_forces, forces)
 
 
-@tf.function(input_signature=[tf.TensorSpec(shape=(None, None, None), dtype=tf.float32),
-                              tf.TensorSpec(shape=(None, None, None), dtype=tf.float32)])
+# @tf.function(input_signature=[tf.TensorSpec(shape=(None, None, None), dtype=tf.float32),
+#                               tf.TensorSpec(shape=(None, None, None), dtype=tf.float32)])
 def get_distances(a, b):  # target is treated like current
     a = tf.squeeze(a)
     b = tf.squeeze(b)
@@ -312,7 +313,7 @@ def trial(**kwargs):
     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    @tf.function
+    # @tf.function
     def run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers):
         print("tracing run_episode")
         total_forces = tf.zeros_like(positions)
@@ -344,13 +345,15 @@ def trial(**kwargs):
                 stop = new_stop
         return ((loss - initial_loss) / initial_loss) * 100.
 
-    @tf.function
+    # @tf.function
     def train(datasets):
         print("tracing train")
         total_change = 0.
         change = 0.
         for dataset in datasets:
             for episode, (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers) in dataset.enumerate():
+                [print(x.numpy()) for x in [type, id, n_atoms]]
+                [print(x.shape) for x in [target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers]]
                 with tf.device('/gpu:0'):
                     change = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
                 if tf.math.is_nan(change):
@@ -369,7 +372,7 @@ def trial(**kwargs):
                 qm9 = qm9.shuffle(buffer_size=n_qm9_records)
                 rxn = rxn.shuffle(buffer_size=n_rxn_records)
                 proteins = proteins.shuffle(buffer_size=n_proteins)
-            total_change = train([qm9, rxn, proteins])
+            total_change = train([rxn])
             total_change = total_change.numpy().item(0)
             print('repeat', epoch_number + 1, 'total change:', total_change, '%')
             changes.append(total_change)
