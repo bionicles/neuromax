@@ -252,7 +252,7 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
     rotation = tf.linalg.diag([1.,1.,1.])
     change_in_rotation = 1000
     igsp_step = 0
-    while tf.math.logical_and((float(change_in_rotation) > 10.), igsp_step < 20):
+    while tf.math.logical_and((float(change_in_rotation) > 10.), igsp_step < 3):
         euclidean_distance = get_distances(source_positions_copy, target_positions)
         feature_distance = get_distances(source_numbers, target_numbers)
         feature_distance = feature_distance * 1000.
@@ -269,8 +269,10 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         d = tf.linalg.det(v * tf.transpose(u))
         temporary_rotation = v * tf.linalg.diag([1,1,d]) * tf.transpose(u)
         source_positions_copy = B.dot(source_positions_copy, temporary_rotation)
-        change_in_rotation = tf.math.abs(tf.math.reduce_sum(cos(rotation, temporary_rotation), axis=-1))
+        change_in_rotation = tf.math.acos((tf.linalg.trace(rotation * tf.transpose(temporary_rotation)) - 1.) / 2.)
         change_in_rotation = radians_to_degrees(change_in_rotation)
+        print('step', igsp_step, change_in_rotation.numpy(), "degree rotation")
+        change_in_rotation = tf.math.abs(change_in_rotation)
         rotation = temporary_rotation * rotation
         igsp_step += 1
     return rows, columns, translation, rotation
@@ -296,7 +298,7 @@ def get_losses(target_positions, target_numbers, positions, numbers, masses, vel
     work = tf.tensor_scatter_nd_update(zeros, columns, work)
     work = tf.expand_dims(work, 0)
     work = tf.expand_dims(work, -1)
-    return (work, total_forces, forces)
+    return (work, tf.math.abs(total_forces), tf.math.abs(forces))
 
 
 # @tf.function(input_signature=[tf.TensorSpec(shape=(None, None, None), dtype=tf.float32),
@@ -367,8 +369,6 @@ def trial(**kwargs):
         change = 0.
         for dataset in datasets:
             for episode, (type, id, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers) in dataset.enumerate():
-                [print(x.numpy()) for x in [type, id, n_atoms]]
-                [print(x.shape) for x in [target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers]]
                 with tf.device('/gpu:0'):
                     change = run_episode(type, n_atoms, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
                 if tf.math.is_nan(change):
@@ -387,7 +387,7 @@ def trial(**kwargs):
                 qm9 = qm9.shuffle(buffer_size=n_qm9_records)
                 rxn = rxn.shuffle(buffer_size=n_rxn_records)
                 proteins = proteins.shuffle(buffer_size=n_proteins)
-            total_change = train([rxn])
+            total_change = train([qm9, rxn, proteins])
             total_change = total_change.numpy().item(0)
             print('repeat', epoch_number + 1, 'total change:', total_change, '%')
             changes.append(total_change)
