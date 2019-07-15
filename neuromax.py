@@ -234,8 +234,8 @@ def show(m):
 
 
 def cos(a, b):
-    Aflat = tf.keras.backend.flatten(a)
-    Bflat = tf.keras.backend.flatten(b)
+    Aflat = tf.cast(tf.keras.backend.flatten(a),  tf.bfloat16)
+    Bflat = tf.cast(tf.keras.backend.flatten(b),  tf.bfloat16)
     return (Aflat * Bflat) / tf.math.maximum(tf.norm(Aflat) * tf.norm(Bflat), 1e-10)
 
 @tf.function
@@ -247,7 +247,7 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
     rotation = tf.linalg.diag([1,1,1])
     change_in_rotation = 1000
     igsp_step = 0
-    while tf.math.logical_and(change_in_rotation > (10. * 3.14159/180), igsp_step < 20):
+    while tf.math.logical_and(float(change_in_rotation) > (10. * 3.14159/180), igsp_step < 20):
         euclidean_distance = get_distances(source_positions_copy, target_positions)
         feature_distance = 1000 * get_distances(source_numbers, target_numbers)
         feature_weight = tf.math.exp(-igsp_step / n_source_atoms)
