@@ -238,6 +238,9 @@ def cos(a, b):
     Bflat = tf.cast(tf.keras.backend.flatten(b),  tf.float32)
     return (Aflat * Bflat) / tf.math.maximum(tf.norm(Aflat) * tf.norm(Bflat), 1e-10)
 
+def radians_to_degrees(radians):
+    return (radians / 3.14159) * 180
+
 # @tf.function
 def igsp(source_positions, source_numbers, target_positions, target_numbers):
     source_positions, source_numbers, target_positions, target_numbers = [tf.squeeze(x, 0) for x in [source_positions, source_numbers, target_positions, target_numbers]]
@@ -251,7 +254,7 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
     rotation = tf.linalg.diag([1.,1.,1.])
     change_in_rotation = 1000
     igsp_step = 0
-    while tf.math.logical_and(float(change_in_rotation) > (10. * 3.14159/180), igsp_step < 20):
+    while tf.math.logical_and((float(change_in_rotation) > 10.), igsp_step < 20):
         euclidean_distance = get_distances(source_positions_copy, target_positions)
         feature_distance = get_distances(source_numbers, target_numbers)
         feature_distance = feature_distance * 1000.
@@ -267,12 +270,13 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         s, u, v = tf.linalg.svd(covariance)
         d = tf.linalg.det(v * tf.transpose(u))
         temporary_rotation = v * tf.linalg.diag([1,1,d]) * tf.transpose(u)
-        print('before rotate', temporary_rotation.shape, source_positions_copy.shape)
         source_positions_copy = B.dot(source_positions_copy, temporary_rotation)
-        print('after rotate', source_positions_copy.shape)
-        change_in_rotation = tf.math.reduce_mean(cos(rotation, temporary_rotation), axis=-1)
-        rotation = temporary_rotation
+        change_in_rotation = tf.math.abs(tf.math.reduce_sum(cos(rotation, temporary_rotation), axis=-1))
+        change_in_rotation = radians_to_degrees(change_in_rotation)
+        print('change in rotation', change_in_rotation, 'degrees')
+        rotation = temporary_rotation * rotation
         igsp_step += 1
+    print('done with igsp!')
     return rows, columns, translation, rotation
 
 
@@ -282,9 +286,18 @@ def get_losses(target_positions, target_numbers, positions, numbers, masses, vel
     show(numbers)
     total_forces = total_forces + forces
     rows, columns, translation, rotation = igsp(positions, numbers, target_positions, target_numbers)
-    aligned = tf.linalg.matmul(rotation, (tf.gather(positions, columns) + translation))
-    distances = tf.linalg.diag_part(get_distances(aligned, tf.gather(target_positions, rows)))
-    work = tf.linalg.matmul(tf.gather(masses, columns), (2 * distances - tf.gather(velocities, columns)))
+    aligned = tf.linalg.matmul((positions + translation), rotation)
+    gathered_positions = tf.squeeze(tf.gather(aligned, columns, axis=1), 0)
+    gathered_velocities = tf.squeeze(tf.gather(velocities, columns, axis=1), 0)
+    gathered_velocities = tf.reduce_sum(velocities, axis=-1)
+    gathered_masses = tf.squeeze(tf.gather(masses, columns, axis=1), 0)
+    gathered_masses = tf.reduce_mean(masses, axis=-1)
+    gathered_target = tf.squeeze(tf.gather(target_positions, rows, axis=1), 0)
+    distances = tf.linalg.diag_part(get_distances(gathered_positions, gathered_target))
+    print("distances", distances.shape)
+    print("gathered velocities", gathered_velocities.shape)
+    print("gathered masses", gathered_masses.shape)
+    work = tf.linalg.matmul(gathered_masses, (2 * distances - gathered_velocities))
     return (work, total_forces, forces)
 
 
