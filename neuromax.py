@@ -268,7 +268,7 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         d = tf.linalg.det(v * tf.transpose(u))
         temporary_rotation = v * tf.linalg.diag([1,1,d]) * tf.transpose(u)
         print('before rotate', temporary_rotation.shape, source_positions_copy.shape)
-        source_positions_copy = temporary_rotation * source_positions_copy
+        source_positions_copy = B.dot(source_positions_copy, temporary_rotation)
         print('after rotate', source_positions_copy.shape)
         change_in_rotation = tf.math.reduce_mean(cos(rotation, temporary_rotation), axis=-1)
         rotation = temporary_rotation
