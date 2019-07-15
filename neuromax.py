@@ -233,26 +233,26 @@ def show(m):
     tf.print(tf.shape(m))
 
 
-def cos(A, B):
-    Aflat = tf.keras.backend.flatten(A)
-    Bflat = tf.keras.backend.flatten(B)
-    return (tf.math.dot( Aflat, Bflat ) /
-            tf.math.maximum( tf.norm(Aflat) * tf.norm(Bflat), 1e-10 ))
+def cos(a, b):
+    Aflat = tf.keras.backend.flatten(a)
+    Bflat = tf.keras.backend.flatten(b)
+    return (Aflat * Bflat) / tf.math.maximum(tf.norm(Aflat) * tf.norm(Bflat), 1e-10)
 
-
+@tf.function
 def igsp(source_positions, source_numbers, target_positions, target_numbers):
+    columns, rows = tf.range(tf.shape(target_positions)[0]), tf.range(tf.shape(target_positions)[0])
     translation = tf.reduce_mean(target_positions, axis=0) - tf.reduce_mean(source_positions, axis=0)
     source_positions_copy = tf.identity(source_positions)
     n_source_atoms = tf.shape(source_positions)[0]
+    rotation = tf.linalg.diag([1,1,1])
     change_in_rotation = 1000
     igsp_step = 0
-    while change_in_rotation > (10 * 3.14159/180) and igsp_step < 20:
+    while tf.math.logical_and(change_in_rotation > (10. * 3.14159/180), igsp_step < 20):
         euclidean_distance = get_distances(source_positions_copy, target_positions)
         feature_distance = 1000 * get_distances(source_numbers, target_numbers)
         feature_weight = tf.math.exp(-igsp_step / n_source_atoms)
         euclidean_weight = 1 - feature_weight + 0.001
         compound_distance = tf.cast(euclidean_weight, tf.float32) * tf.cast(euclidean_distance, tf.float32) + tf.cast(feature_weight, tf.float32) *tf.cast( feature_distance, tf.float32)
-        show(compound_distance)
         rows, columns = tf.numpy_function(scipy.optimize.linear_sum_assignment, [compound_distance], [tf.int32, tf.int32])
         ordered_source_positions = tf.gather(source_positions, columns)
         ordered_target_positions = tf.gather(target_positions, columns)
@@ -264,16 +264,19 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         temporary_rotation = v * tf.linalg.diag([1, 1, d]) * tf.transpose(u)
         source_positions_copy = temporary_rotation * source_positions
         change_in_rotation = cos(rotation, temporary_rotation)
+        rotation = temporary_rotation
         igsp_step += 1
     return rows, columns, translation, rotation
 
 
 @tf.function
 def get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces):
+    show(positions)
+    show(numbers)
     total_forces = total_forces + forces
     rows, columns, translation, rotation = igsp(positions, numbers, target_positions, target_numbers)
     aligned = tf.linalg.matmul(rotation, (tf.gather(positions, columns) + translation))
-    distances = tf.linalg.get_diag(get_distances(aligned, tf.gather(target_positions, rows)))
+    distances = tf.linalg.diag_part(get_distances(aligned, tf.gather(target_positions, rows)))
     work = tf.linalg.matmul(tf.gather(masses, columns), (2 * distances - tf.gather(velocities, columns)))
     return (work, total_forces, forces)
 
@@ -328,7 +331,7 @@ def trial(**kwargs):
                 noise_stddev = 0.001 * STARTING_TEMPERATURE * tf.math.exp(-1 * float(step) / STEP_DIVISOR)
                 noise = tf.random.normal(tf.shape(positions), stddev=noise_stddev)
                 positions = positions + velocities + noise
-                work, total_forces, forces = get_losses(positions, numbers, target_positions, numbers)
+                work, total_forces, forces = get_losses(target_positions, target_numbers, positions, numbers, masses, velocities, total_forces, forces)
             gradients = tape.gradient([work, total_forces, forces], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
