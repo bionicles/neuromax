@@ -240,6 +240,8 @@ def cos(a, b):
 
 # @tf.function
 def igsp(source_positions, source_numbers, target_positions, target_numbers):
+    source_positions, source_numbers, target_positions, target_numbers = [tf.squeeze(x, 0) for x in [source_positions, source_numbers, target_positions, target_numbers]]
+    [print(x.shape) for x in [source_positions, source_numbers, target_positions, target_numbers]]
     print("tracing igsp")
     columns, rows = tf.range(tf.shape(target_positions)[0]), tf.range(tf.shape(target_positions)[0])
     translation = tf.reduce_mean(target_positions, axis=0) - tf.reduce_mean(source_positions, axis=0)
@@ -250,10 +252,15 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
     igsp_step = 0
     while tf.math.logical_and(float(change_in_rotation) > (10. * 3.14159/180), igsp_step < 20):
         euclidean_distance = get_distances(source_positions_copy, target_positions)
-        feature_distance = 1000 * get_distances(source_numbers, target_numbers)
+        feature_distance = get_distances(source_numbers, target_numbers)
+        feature_distance = feature_distance * 1000.
         feature_weight = tf.math.exp(-igsp_step / n_source_atoms)
         euclidean_weight = 1 - feature_weight + 0.001
+        print('before compound distance')
+        print('feature distance', feature_distance)
+        print('euclidean distance', euclidean_distance)
         compound_distance = tf.cast(euclidean_weight, tf.float32) * tf.cast(euclidean_distance, tf.float32) + tf.cast(feature_weight, tf.float32) *tf.cast( feature_distance, tf.float32)
+        print('after compound distance')
         rows, columns = tf.numpy_function(scipy.optimize.linear_sum_assignment, [compound_distance], [tf.int32, tf.int32])
         ordered_source_positions = tf.gather(source_positions, columns)
         ordered_target_positions = tf.gather(target_positions, columns)
@@ -261,9 +268,10 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
         ordered_target_positions = tf.gather(target_positions, rows) - tf.reduce_mean(ordered_target_positions, axis=0)
         covariance = B.dot(ordered_source_positions, tf.transpose(ordered_target_positions))
         s, u, v = tf.linalg.svd(covariance)
+        print('before det', v.shape, u.shape)
         d = tf.linalg.det(v * tf.transpose(u))
         temporary_rotation = v * tf.linalg.diag([1, 1, d]) * tf.transpose(u)
-        source_positions_copy = temporary_rotation * source_positions
+        source_positions_copy = temporary_rotation * source_positions_copy
         change_in_rotation = tf.math.reduce_mean(cos(rotation, temporary_rotation), axis=-1)
         rotation = temporary_rotation
         igsp_step += 1
@@ -285,8 +293,8 @@ def get_losses(target_positions, target_numbers, positions, numbers, masses, vel
 # @tf.function(input_signature=[tf.TensorSpec(shape=(None, None, None), dtype=tf.float32),
 #                               tf.TensorSpec(shape=(None, None, None), dtype=tf.float32)])
 def get_distances(a, b):  # target is treated like current
-    a = tf.squeeze(a)
-    b = tf.squeeze(b)
+    # a = tf.squeeze(a)
+    # b = tf.squeeze(b)
     return tf.reduce_sum(tf.math.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)  # N, N, 1
 
 
