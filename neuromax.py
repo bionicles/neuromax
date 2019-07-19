@@ -56,21 +56,21 @@ N_MOVIES = 1
 D_FEATURES = 7
 D_OUT = 3
 dimensions = [
-    skopt.space.Integer(1, 8, name='p_blocks'),
+    skopt.space.Integer(1, 4, name='p_blocks'),
     skopt.space.Categorical(['p_conv_deep', 'p_conv_wide_deep'], name='p'),
-    skopt.space.Integer(1, 3, name='p_layers'),
-    skopt.space.Integer(1, 1024, name='p_units'),
+    skopt.space.Integer(2, 3, name='p_layers'),
+    skopt.space.Integer(65, 1024, name='p_units'),
     skopt.space.Real(0.001, 0.1, name='stddev'),
     skopt.space.Categorical(['first', 'all'], name='norm'),
     skopt.space.Real(0.00001, 0.01, name='lr'),
     skopt.space.Integer(10, 10000000, name='decay')]  # major factor in step size
 hyperpriors = [
-    2,  # pair_blocks
-    'p_conv_deep',  # pair block type
+    4,  # pair_blocks
+    'p_conv_wide_deep',  # pair block type
     2,  # pair_layers
-    512,  # pair_units,
+    1024,  # pair_units,
     0.02,  # stddev
-    'first',  # norm
+    'all',  # norm
     0.004,  # lr
     10000000]  # decay_steps
 
@@ -120,6 +120,7 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
     atom1 = K.Input((d_features, ))
     atom2 = K.Input((d_features, ))
     inputs = L.Subtract()([atom1, atom2])
+    inputs = L.Concatenate()([inputs, atom1, atom2])
     output = get_layer(units, hp)(inputs)
     for layer in range(layers - 1):
         output = get_layer(units, hp)(output)
@@ -270,25 +271,31 @@ def get_work_loss(n_source_atoms, n_target_atoms, target_positions, target_numbe
     gathered_positions = tf.squeeze(tf.gather(aligned, columns, axis=1), 0)
     gathered_target = tf.squeeze(tf.gather(target_positions, rows, axis=1), 0)
     distances = tf.linalg.diag_part(get_distances(gathered_positions, gathered_target))
-    gathered_velocities = tf.reduce_sum(tf.squeeze(tf.gather(velocities, columns, axis=1), 0), -1)
     gathered_masses, _, _ = tf.split(tf.squeeze(tf.gather(masses, columns, axis=1), 0), 3, axis=-1)
-    gathered_masses = tf.squeeze(gathered_masses, -1)
-    work = 2. * distances - gathered_velocities
-    work = tf.multiply(gathered_masses, work)
-    return work
+    return tf.multiply(tf.squeeze(gathered_masses, -1), (2. * distances))
 
+
+
+# @tf.function
+# def get_distances(a, b):  # L1
+#     print("tracing get_distances")
+#     return tf.reduce_sum(tf.math.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)  # N, N, 1
+
+
+# @tf.function
+# def get_distances(a, b):  # L1
+#     print("tracing get_distances")
+#     return tf.math.sqrt(tf.reduce_sum(tf.math.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1))  # N, N, 1
 
 @tf.function
-def get_meta_loss(target_distances, positions):
-    print("tracing get_meta_loss")
-    positions = tf.squeeze(positions, 0)
-    return K.losses.MAE(target_distances, get_distances(positions, positions))
-
-
-@tf.function
-def get_distances(a, b):
+def get_distances(a, b):  # L2
     print("tracing get_distances")
-    return tf.reduce_sum(tf.math.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)  # N, N, 1
+    return B.sqrt(B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1))
+# @tf.function
+# def get_distances(a, b):  # L1
+#     print("tracing get_distances")
+#     return B.sum(B.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1))
+
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -336,14 +343,16 @@ def trial(**kwargs):
                 #     loss = get_meta_loss(target_distances, positions)
                 # elif is_rxn:
                 loss = get_work_loss(n_source_atoms, n_target_atoms, target_positions, target_numbers, positions, numbers, masses, velocities)
-            gradients = tape.gradient([loss], agent.trainable_weights)
+            gradients = tape.gradient([loss, tf.abs(total_forces), tf.abs(forces)], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
             loss = tf.reduce_sum(loss)
+            tf.print(step, loss, stop)
             new_stop = loss * 1.2
             if step < 1:
                 initial_loss = loss
-            if new_stop < stop or stop == 0.:
+                stop = new_stop
+            if new_stop < stop:
                 stop = new_stop
             elif step > 0 and (loss > stop or loss != loss):
                 break
