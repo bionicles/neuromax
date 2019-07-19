@@ -248,7 +248,8 @@ def igsp(source_positions, source_numbers, target_positions, target_numbers):
     for igsp_step in range(3):
         euclidean_distances = get_distances(source_positions_copy, target_positions_copy)
         compound_distances = euclidean_distances + 10. * feature_distances
-        rows, columns = scipy.optimize.linear_sum_assignment(compound_distances)
+        print(tf.shape(compound_distances))
+        rows, columns = tf.numpy_function(scipy.optimize.linear_sum_assignment, [compound_distances], [tf.int64, tf.int64])
         rows = tf.convert_to_tensor(rows, tf.int32)
         columns = tf.convert_to_tensor(columns, tf.int32)
         ordered_source_positions = tf.gather(source_positions_copy, columns)
