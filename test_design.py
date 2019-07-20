@@ -1,5 +1,6 @@
 import networkx as nx
-# import tensorflow as tf
+import tensorflow as tf
+import random
 
 
 def get_graph():
@@ -28,3 +29,23 @@ def screenshot(G, step):
 
 
 screenshot(G, "kamel_is_cool")
+
+
+def differentiate_boxes(G):
+    for node in G.nodes(data=True):
+        node_id, node_data = node
+        if node_data["shape"] is "square":
+            layer = "dense"
+            activation = random.choice(["linear", "tanh"])
+            label = f"{layer} {activation}"
+            print(f"setting {node_id} to {label}")
+            node[1]["activation"] = activation
+            node[1]["layer"] = layer
+            node[1]["label"] = label
+            node[1]["color"] = "yellow" if activation is "linear" else "green"
+        print(node_id, ":", node_data)
+    return G
+
+
+G2 = differentiate_boxes(G)
+screenshot(G2, "architecture_search_is_fun")
