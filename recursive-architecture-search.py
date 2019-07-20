@@ -181,7 +181,7 @@ def get_separate_boxes(tasks):
         action_items = tasks[task_name]["action_items"]
         for item in action_items:
             print("adding", item)
-             print("item", item)
+            print("item", item)
             # add the action to the input
             node_name = task_name+"-"+item[0]+"-action-space-shape"
             print("add node", node_name)

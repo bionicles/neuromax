@@ -63,21 +63,17 @@ dimensions = [
     skopt.space.Real(0.001, 0.1, name='stddev'),
     skopt.space.Categorical(['first', 'all'], name='norm'),
     skopt.space.Real(0.00001, 0.01, name='lr'),
-    skopt.space.Integer(10, 10000000, name='decay')]  # major factor in step size
+    skopt.space.Integer(10, 10000000, name='decay')]
 hyperpriors = [
-    4,  # pair_blocks
+    2,  # pair_blocks
     'p_conv_wide_deep',  # pair block type
     2,  # pair_layers
-    1024,  # pair_units,
+    4096,  # pair_units,
     0.02,  # stddev
     'all',  # norm
     0.004,  # lr
     10000000]  # decay_steps
 
-# def show_memory_use():
-#     all_objects = muppy.get_objects()
-#     sum1 = summary.summarize(all_objects)
-#     summary.print_(sum1)
 
 def trace_function(fn, *args):
     tf.summary.trace_on(graph=True, profiler=True)
@@ -92,7 +88,7 @@ class NoisyDropConnectDense(L.Dense):
         self.stddev = kwargs.pop('stddev')
         super(NoisyDropConnectDense, self).__init__(*args, **kwargs)
 
-    # # @tf.function
+    @tf.function
     def add_noise(self):
         return (self.kernel + tf.random.truncated_normal(tf.shape(self.kernel), stddev=self.stddev),
                 self.bias + tf.random.truncated_normal(tf.shape(self.bias), stddev=self.stddev))
@@ -103,31 +99,68 @@ class NoisyDropConnectDense(L.Dense):
 
 
 def get_layer(units, hp):
-    # return NoisyDropConnectDense(units, activation="tanh", stddev=hp.stddev)
-    return L.Dense(units, activation="tanh")
+    return NoisyDropConnectDense(units, activation="tanh", stddev=hp.stddev)
 
 
-class ConvPair(L.Layer):
-    def __init__(self, hp, d_features, d_output):
-        super(ConvPair, self).__init__()
-        self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, d_features, d_output, pair=True)
+class KernelConvSet(L.Layer):
+    def __init__(self, hp, d_features, d_output, N):
+        super(KernelConvSet, self).__init__()
+        self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, d_features, d_output, N)
+        if N is 1:
+            self.call = self.call_for_one
+        elif N is 2:
+            self.call = self.call_for_two
+        elif N is 3:
+            self.call = self.call_for_three
 
-    def call(self, inputs):
-        return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: self.kernel([a1, a2]), inputs), axis=0), inputs)
+    def call_for_one(self, atoms):
+        return tf.map_fn(lambda a1: self.kernel(a1), atoms)
+
+    def call_for_two(self, atoms):
+        return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: self.kernel([a1, a2]), atoms), axis=0), atoms)
+
+    def call_for_three(self, atoms):
+        return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), atoms), axis=0), atoms)
 
 
-def get_kernel(block_type, layers, units, hp, d_features, d_output, pair=False):
+class ConvAttention(L.Layer):
+    def __init__(self, d_features):
+        super(ConvAttention, self).__init__()
+        atom = K.Input((d_features,))
+        atoms = K.Input((None, d_features,))
+        centroid = L.Average()([tf.split(atoms, 0)])
+        atoms = L.Concatenate()([centroid, atoms])
+        output = L.Attention()(atom, atoms)
+        self.attention = K.Model([atom, atoms], output)
+
+    def call(self, atoms):
+        return tf.map_fn(lambda atom: self.attention(atom, atoms), atoms)
+
+
+def get_kernel(block_type, layers, units, hp, d_features, d_output, N):
     atom1 = K.Input((d_features, ))
-    atom2 = K.Input((d_features, ))
-    inputs = L.Subtract()([atom1, atom2])
-    inputs = L.Concatenate()([inputs, atom1, atom2])
-    output = get_layer(units, hp)(inputs)
+    if N is 1:
+        inputs = [atom1]
+        concat = atom1
+    elif N is 2:
+        atom2 = K.Input((d_features, ))
+        inputs = [atom1, atom2]
+        d12 = L.Subtract()([atom1, atom2])
+        concat = L.Concatenate()([d12, atom1, atom2])
+    elif N is 3:
+        atom2 = K.Input((d_features, ))
+        atom3 = K.Input((d_features, ))
+        inputs = [atom1, atom2, atom3]
+        d12 = L.Subtract()([atom1, atom2])
+        d13 = L.Subtract()([atom1, atom3])
+        concat = L.Concatenate()([d12, d13, atom1, atom2, atom3])
+    output = get_layer(units, hp)(concat)
     for layer in range(layers - 1):
         output = get_layer(units, hp)(output)
     if 'wide' in block_type:
         output = L.Concatenate(-1)([inputs, output])
     output = get_layer(d_output, hp)(output)
-    return K.Model([atom1, atom2], output)
+    return K.Model(inputs, output)
 
 
 def get_block(block_type, hp, features, prior):
@@ -138,8 +171,10 @@ def get_block(block_type, hp, features, prior):
         block_output = L.Concatenate(-1)([features, prior])
         d_output = prior.shape[-1]
     d_features = block_output.shape[-1]
-    if 'conv' in block_type:
-        block_output = ConvPair(hp, d_features, d_output)(block_output)
+    block_output = ConvAttention(d_features)(block_output)  # convolutional attention
+    block_output = KernelConvSet(hp, d_features, d_output, 3)(block_output)  # triplet convolution
+    block_output = KernelConvSet(hp, d_features, d_output, 2)(block_output)  # pair convolution
+    block_output = KernelConvSet(hp, d_features, d_output, 1)(block_output)  # atomic convolution
     if hp.norm is 'all':
         block_output = L.BatchNormalization()(block_output)
     if not isinstance(prior, int):
@@ -275,27 +310,21 @@ def get_work_loss(n_source_atoms, n_target_atoms, target_positions, target_numbe
     return tf.multiply(tf.squeeze(gathered_masses, -1), (2. * distances))
 
 
+def get_pdb_loss(target_positions, positions, masses):
+    masses, _, _ = tf.split(tf.squeeze(masses, 0), 3, axis=-1)
+    return tf.multiply(tf.squeeze(masses, -1), 2. * tf.linalg.diag_part(get_distances(positions, target_positions)))
 
-# @tf.function
-# def get_distances(a, b):  # L1
-#     print("tracing get_distances")
-#     return tf.reduce_sum(tf.math.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)  # N, N, 1
-
-
-# @tf.function
-# def get_distances(a, b):  # L1
-#     print("tracing get_distances")
-#     return tf.math.sqrt(tf.reduce_sum(tf.math.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1))  # N, N, 1
 
 @tf.function
 def get_distances(a, b):  # L2
     print("tracing get_distances")
     return B.sqrt(B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1))
+
+
 # @tf.function
 # def get_distances(a, b):  # L1
 #     print("tracing get_distances")
 #     return B.sum(B.abs(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1))
-
 
 
 @skopt.utils.use_named_args(dimensions=dimensions)
@@ -322,10 +351,8 @@ def trial(**kwargs):
     writer = tf.summary.create_file_writer(log_dir)
 
     @tf.function
-    def run_episode(is_rxn, n_source_atoms, n_target_atoms, target_positions, positions, features, masses, target_numbers, numbers):
+    def run_episode(is_pdb, n_source_atoms, n_target_atoms, target_positions, positions, features, masses, target_numbers, numbers):
         print("tracing run_episode")
-        # if not is_rxn:
-        #     target_distances = get_distances(tf.squeeze(target_positions, 0), tf.squeeze(target_positions, 0))
         total_forces = tf.zeros_like(positions)
         velocities = tf.zeros_like(positions)
         forces = tf.zeros_like(positions)
@@ -339,10 +366,14 @@ def trial(**kwargs):
                 velocities = velocities + forces
                 noise = tf.random.truncated_normal(tf.shape(positions), stddev=(0.001 * STARTING_TEMPERATURE * tf.math.exp(-1 * float(step) / STEP_DIVISOR)))
                 positions = positions + velocities + noise
-                # if not is_rxn:
-                #     loss = get_meta_loss(target_distances, positions)
-                # elif is_rxn:
-                loss = get_work_loss(n_source_atoms, n_target_atoms, target_positions, target_numbers, positions, numbers, masses, velocities)
+                try:
+                    if is_pdb:
+                        loss = get_pdb_loss(target_positions, positions, masses)
+                    else:
+                        loss = get_work_loss(n_source_atoms, n_target_atoms, target_positions, target_numbers, positions, numbers, masses, velocities)
+                except Exception as e:
+                    print("loss function failed", e)
+                    return 100.
             gradients = tape.gradient([loss, tf.abs(total_forces), tf.abs(forces)], agent.trainable_weights)
             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
             ema.apply(agent.weights)
@@ -360,13 +391,13 @@ def trial(**kwargs):
         return change if not tf.math.is_nan(change) else 420.
 
     @tf.function
-    def train(dataset, is_rxn):
+    def train(dataset, is_protein):
         print("tracing train")
         total_change = 0.
         change = 0.
         for episode, (type_string, id_string, n_source_atoms, n_target_atoms, target_positions, positions, features, masses, target_numbers, numbers) in dataset.enumerate():
             with tf.device('/gpu:0'):
-                change = run_episode(is_rxn, n_source_atoms, n_target_atoms, target_positions, positions, features, masses, target_numbers, numbers)
+                change = run_episode(is_protein, n_source_atoms, n_target_atoms, target_positions, positions, features, masses, target_numbers, numbers)
             tf.print(type_string, 'episode', episode, 'with',
                      n_source_atoms, 'source and',
                      n_target_atoms, 'target atoms',
@@ -381,13 +412,12 @@ def trial(**kwargs):
     for epoch_number in range(N_EPOCHS):
         try:
             if epoch_number > 0:
-                # qm9 = qm9.shuffle(buffer_size=n_qm9_records)
+                qm9 = qm9.shuffle(buffer_size=n_qm9_records)
                 rxn = rxn.shuffle(buffer_size=n_rxn_records)
-                # proteins = proteins.shuffle(buffer_size=n_proteins)
+                proteins = proteins.shuffle(buffer_size=n_proteins)
             for dataset in [rxn]:
-                is_rxn = dataset == rxn
-                total_change = train(dataset, is_rxn)
-            # total_change = total_change.numpy().item(0)
+                is_protein = dataset == proteins
+                total_change = train(dataset, is_protein)
             print('repeat', epoch_number + 1, 'total change:', total_change, '%')
             changes.append(total_change)
         except Exception as e:
