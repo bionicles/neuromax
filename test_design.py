@@ -1,5 +1,4 @@
 import networkx as nx
-import tensorflow as tf
 import random
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
@@ -102,9 +101,46 @@ def differentiate_boxes(G):
             node[1]["layer"] = layer
             node[1]["label"] = label
             node[1]["color"] = "yellow" if activation is "linear" else "green"
-        print(node_id, ":", node_data)
+            node[1]["units"] = 64
+            node[1]['tf_layer'] = get_layer("dense", activation=node[1]['activation'], units=node[1]['units'])
+        if node_data["shape"] is "triangle":
+            node[1]['activation'] = "sigmoid"
+            node[1]['units'] = 3
+            node[1]['tf_layer'] = get_layer("dense", activation=node[1]['activation'], units=node[1]['units'])
+        if node_data["shape"] is "circle":
+            node[1]["input_shape"] = (5, )
+            node[1]['tf_layer'] = get_layer("input", shape=node[1]["input_shape"])
     return G
+def get_layer(layer_name, shape=None, activation=None, units=None):
+    if layer_name is "input":
+        return K.Input(shape)
+    if layer_name is "dense":
+        return L.Dense(units=units, activation=activation)
+G = get_graph()
+G = differentiate_boxes(G)
 
+def make_model(graph):
+    inputs, outputs = [], []
+    for layer_key in dict(graph.nodes(data=True)).keys():
+        input_layers = list(graph.predecessors(layer_key))
+        if 'input' in layer_key:
+            inputs.append(dict(G.nodes(data=True))[layer_key]['tf_layer'])
+        if lif __name__ == "__main__":
+    main()en(input_layers)>1:
+            print("connecting", input_layers, "to", layer_key)
+            concat = L.Concatenate()([dict(G.nodes(data=True))[L]['tf_layer'] for L in input_layers])
+            dict(G.nodes(data=True))[layer_key]['tf_layer'] = dict(G.nodes(data=True))[layer_key]['tf_layer'](concat)
+        if len(input_layers)==1:
+            print("connecting", input_layers, "to", layer_key)
+            dict(G.nodes(data=True))[layer_key]['tf_layer'] = dict(G.nodes(data=True))[layer_key]['tf_layer'](dict(G.nodes(data=True))[input_layers[0]]['tf_layer'])
+        if 'output' in layer_key:
+            outputs.append(dict(G.nodes(data=True))[layer_key]['tf_layer'])
+    model = K.Model(inputs, outputs)
+    model.summary()
+    K.utils.plot_model(model, "./nets/model.png", rankdir="LR")
+    return model
+print(dict(G.nodes(data=True))['input1'])
+make_model(G)
 
 def get_layer(layer_name, shape=None, activation=None, units=None):
     if layer_name is "input":
@@ -131,7 +167,8 @@ def make_model(G):
     inputs, outputs = [], []
     for layer_key in layers.keys():
         input_layers = list(G.predecessors(layer_key))
-        if 'input' in layer_key:
+    if __name__ == "__main__":
+    main()    if 'input' in layer_key:
             inputs.append(layers[layer_key])
         if 'output' in layer_key:
             outputs.append(layers[layer_key])
