@@ -1,9 +1,10 @@
+import tensorflow as tf
 import networkx as nx
 import random
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
-STEPS, MIN_LAYERS, MAX_LAYERS, MIN_NODES, MAX_NODES = 1, 2, 1, 3, 1, 2
+STEPS, MIN_LAYERS, MAX_LAYERS, MIN_NODES, MAX_NODES = 2, 1, 3, 1, 2
 IMAGE_SIZE = "1024x512"
 DTYPE = tf.float32
 
@@ -11,19 +12,27 @@ tasks = {
     "Molecules-v0": {
         "intelligence": "bodily-kinesthetic",
         "goal": "simulate atoms in quantum, chemical, and proteins",
-        "observation_space": [(None, None, 10), tf.float32],
-        "action_space": [(None, None, 3), tf.float32]
+        "observation_space": [
+            ("atoms", (None, None, 10), tf.float32)
+        ],
+        "action_space": [
+            ("forces", (None, None, 3), tf.float32)
+        ]
     },
 }
 
 
-def get_graph():
+def get_initial_graph(tasks):
     G = nx.MultiDiGraph()
+    G.add_node("source", label="", shape="cylinder", style="filled", color="gold")
     G.add_node("input", label="", shape="circle", style="filled", color="blue")
     G.add_node(1, label="", shape="square", style="filled", color="black")
     G.add_node("output", label="", shape="triangle", style="filled", color="red")
+    G.add_node("sink", label="", shape="cylinder", style="filled", color="gold")
+    G.add_edge("source", "input")
     G.add_edge("input", 1)
     G.add_edge(1, "output")
+    G.add_edge("output", "sink")
     return G
 
 
@@ -88,109 +97,74 @@ def insert_motif(G, name, motif):
     return Gn
 
 
-# we decide what boxes will do:
-def differentiate_boxes(G):
-    for node in G.nodes(data=True):
-        node_id, node_data = node
-        if node_data["shape"] is "square":
-            layer = "dense"
-            activation = random.choice(["linear", "tanh"])
-            label = f"{layer} {activation}"
-            print(f"setting {node_id} to {label}")
-            node[1]["activation"] = activation
-            node[1]["layer"] = layer
-            node[1]["label"] = label
-            node[1]["color"] = "yellow" if activation is "linear" else "green"
-            node[1]["units"] = 64
-            node[1]['tf_layer'] = get_layer("dense", activation=node[1]['activation'], units=node[1]['units'])
-        if node_data["shape"] is "triangle":
-            node[1]['activation'] = "sigmoid"
-            node[1]['units'] = 3
-            node[1]['tf_layer'] = get_layer("dense", activation=node[1]['activation'], units=node[1]['units'])
-        if node_data["shape"] is "circle":
-            node[1]["input_shape"] = (5, )
-            node[1]['tf_layer'] = get_layer("input", shape=node[1]["input_shape"])
-    return G
-def get_layer(layer_name, shape=None, activation=None, units=None):
-    if layer_name is "input":
-        return K.Input(shape)
-    if layer_name is "dense":
-        return L.Dense(units=units, activation=activation)
-G = get_graph()
-G = differentiate_boxes(G)
+# # we decide what boxes will do:
+# def differentiate_boxes(G):
+#     for node in G.nodes(data=True):
+#         node_id, node_data = node
+#         if node_data["shape"] is "square":
+#             layer = "dense"
+#             activation = random.choice(["linear", "tanh"])
+#             label = f"{layer} {activation}"
+#             print(f"setting {node_id} to {label}")
+#             node[1]["activation"] = activation
+#             node[1]["layer"] = layer
+#             node[1]["label"] = label
+#             node[1]["color"] = "yellow" if activation is "linear" else "green"
+#             node[1]["units"] = 64
+#             node[1]['tf_layer'] = get_layer("dense", activation=node[1]['activation'], units=node[1]['units'])
+#         if node_data["shape"] is "triangle":
+#             node[1]['activation'] = "sigmoid"
+#             node[1]['units'] = 3
+#             node[1]['tf_layer'] = get_layer("dense", activation=node[1]['activation'], units=node[1]['units'])
+#         if node_data["shape"] is "circle":
+#             node[1]["input_shape"] = (5, )
+#             node[1]['tf_layer'] = get_layer("input", shape=node[1]["input_shape"])
+#     return G
 
-def make_model(graph):
-    inputs, outputs = [], []
-    for layer_key in dict(graph.nodes(data=True)).keys():
-        input_layers = list(graph.predecessors(layer_key))
-        if 'input' in layer_key:
-            inputs.append(dict(G.nodes(data=True))[layer_key]['tf_layer'])
-        if lif __name__ == "__main__":
-    main()en(input_layers)>1:
-            print("connecting", input_layers, "to", layer_key)
-            concat = L.Concatenate()([dict(G.nodes(data=True))[L]['tf_layer'] for L in input_layers])
-            dict(G.nodes(data=True))[layer_key]['tf_layer'] = dict(G.nodes(data=True))[layer_key]['tf_layer'](concat)
-        if len(input_layers)==1:
-            print("connecting", input_layers, "to", layer_key)
-            dict(G.nodes(data=True))[layer_key]['tf_layer'] = dict(G.nodes(data=True))[layer_key]['tf_layer'](dict(G.nodes(data=True))[input_layers[0]]['tf_layer'])
-        if 'output' in layer_key:
-            outputs.append(dict(G.nodes(data=True))[layer_key]['tf_layer'])
-    model = K.Model(inputs, outputs)
+
+def make_model():
+    model_outputs = [get_output(id, G) for id in list(G.predecessors("sink"))]
+    model_inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
+    model = K.Model(model_inputs, model_outputs)
     model.summary()
     K.utils.plot_model(model, "./nets/model.png", rankdir="LR")
     return model
-print(dict(G.nodes(data=True))['input1'])
-make_model(G)
-
-def get_layer(layer_name, shape=None, activation=None, units=None):
-    if layer_name is "input":
-        return K.Input(shape)
-    if layer_name is "dense":
-        return L.Dense(units=units, activation=activation)
 
 
-def build_layers(G):
-    layers = {}
-    for node in G.nodes(data=True):
-        node_id, node_data = node
-        if "input" in node_id:
-            layers[node_id] = get_layer("input", shape=(5, ))
-        else:
-            layers[node_id] = get_layer("dense",
-                                        activation=node_data["activation"],
-                                        units=node_data["units"])
-    return layers
+def get_output(id):
+    global G
+    node = G.node[id]
+    if node["output_tensor"]:
+        return node["output_tensor"]
+    elif node["node_type"] is "input" and node["op"]:
+        return node["op"]
+    else:
+        parent_ids = list(G.predecessors(id))
+        inputs = [get_output(parent_id, G) for parent_id in parent_ids]
+        output_tensor = build_op(id, G)(inputs)
+        G.node[id]["output_tensor"] = output_tensor
+        return output_tensor
 
 
-def make_model(G):
-    layers = build_layers(G)
-    inputs, outputs = [], []
-    for layer_key in layers.keys():
-        input_layers = list(G.predecessors(layer_key))
-    if __name__ == "__main__":
-    main()    if 'input' in layer_key:
-            inputs.append(layers[layer_key])
-        if 'output' in layer_key:
-            outputs.append(layers[layer_key])
-        if len(input_layers) > 1:
-            print(input_layers)
-            concatenated_inputs = L.Concatenate()([layers[L] for L in input_layers])
-            layers[layer_key] = layers[layer_key](concatenated_inputs)
-        if len(input_layers) == 1:
-            layers[layer_key] = layers[layer_key](layers[input_layers[0]])
-    print(f"inputs: {inputs} layers: {layers} outputs: {outputs}")
-    model = K.Model(inputs, outputs)
-    model.summary()
-    K.utils.plot_model(model, "model.png")
-    return model
+def build_op(id):
+    global G
+    node = G.node[id]
+    node_type = node["node_type"]
+    if node_type is "dense":
+        op = L.Dense(node['units'], node['activation'])
+    if node_type is "input":
+        op = L.Input(node['input_shape'])
+    G.node[id]['op'] = op
+    return op
 
 
 def main():
-    G = get_graph(tasks)
+    global G
+    G = get_initial_graph(tasks)
     screenshot(G, "kamel_is_cool")
-    G2 = differentiate_boxes(G)
-    screenshot(G2, "architecture_search_is_fun")
-    make_model(G2)
+    differentiate()
+    # screenshot(G2, "architecture_search_is_fun")
+    # make_model(G2)
 
 
 if __name__ == "__main__":
