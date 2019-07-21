@@ -245,25 +245,25 @@ def get_regulon(parent=None, layers=None):
 
 
 def insert_motif(G, name, motif):
-    get a motif
+    # get a motif
     Gi, new_names = get_regulon(name)
-    add the motif to the graph
+    # add the motif to the graph
     Gn = networkx.compose(G, Gi)
-    point the prececessors of the node to replace at all nodes in first layer
+    # point the prececessors of the node to replace at all nodes in first layer
     predecessors = Gn.predecessors(name)
     successors = new_names[0]
     for predecessor in predecessors:
         for successor in successors:
             print("adding edge from", predecessor, "to", successor)
             Gn.add_edge(predecessor, successor)
-    point the last node in the motif at the successors of the node to replace
+    # point the last node in the motif at the successors of the node to replace
     predecessors = new_names[len(new_names)-1]
     successors = list(G.successors(name))
     for predecessor in predecessors:
         for successor in successors:
             print("adding edge from", predecessor, "to", successor)
             Gn.add_edge(predecessor, successor)
-    remove the node
+    # remove the node
     Gn.remove_node(name)
     return Gn
 
