@@ -17,3 +17,4 @@ runs/
 *.tfrecord
 *.xyz
 *.cif
+*.jpg
