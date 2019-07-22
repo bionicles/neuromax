@@ -4,9 +4,10 @@
 import tensorflow as tf
 # from make_dataset import load
 # from pymol import cmd, util
-
+from attrdict import AttrDict
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
+hp = AttrDict({})
 
 class NoisyDropConnectDense(L.Dense):
     def __init__(self, *args, **kwargs):
@@ -48,18 +49,15 @@ class KernelConvSet(L.Layer):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), atoms), axis=0), atoms)
 
 
-class ConvAttention(L.Layer):
+class SelfAttention(L.Layer):
     def __init__(self, d_features):
-        super(ConvAttention, self).__init__()
-        atom = K.Input((d_features,))
-        atoms = K.Input((None, d_features,))
-        centroid = L.Average()([tf.split(atoms, 0)])
-        atoms = L.Concatenate()([centroid, atoms])
-        output = L.Attention()(atom, atoms)
-        self.attention = K.Model([atom, atoms], output)
+        super(SelfAttention, self).__init__()
+        atoms = K.Input((None, d_features))
+        output = L.Attention()([atoms, atoms])
+        self.attention = K.Model(atoms, output)
 
-    def call(self, atoms):
-        return tf.map_fn(lambda atom: self.attention(atom, atoms), atoms)
+    def call(self, inputs):
+        return self.attention([inputs, inputs])
 
 
 def get_kernel(block_type, layers, units, hp, d_features, d_output, N):

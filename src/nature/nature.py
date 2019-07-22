@@ -3,7 +3,8 @@
 import tensorflow as tf
 import networkx as nx
 import random
-from conv_kernel import NoisyDropConnectDense
+from conv_kernel import NoisyDropConnectDense, SelfAttention, KernelConvSet
+import time
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
 MIN_LAYERS, MAX_LAYERS = 3, 3
@@ -128,7 +129,7 @@ def differentiate():
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense'])
+            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention']) # 'KernelConvSet'])
             if node_type is 'conv1D':
                 activation = random.choice(["relu", "sigmoid"])
                 label = f"{node_type} {activation}"
@@ -141,7 +142,7 @@ def differentiate():
                 node[1]["label"] = label
                 node[1]["color"] = "yellow" if activation is "relu" else "green"
 
-            if node_type is 'dense':
+            if node_type is 'dense' or "NoisyDropConnectDense":
                 activation = random.choice(["linear", "tanh"])
                 label = f"{node_type} {activation}"
                 print(f"setting {node_id} to {label}")
@@ -150,16 +151,15 @@ def differentiate():
                 node[1]["label"] = label
                 node[1]["color"] = "yellow" if activation is "linear" else "green"
                 node[1]["units"] = 64
-            if node_type is "NoisyDropConnectDense":
-                activation = random.choice(["linear", "tanh"])
-                label = f"{node_type} {activation}"
-                print(f"setting {node_id} to {label}")
-                node[1]["activation"] = activation
-                node[1]["node_type"] = node_type
-                node[1]["label"] = label
-                node[1]["color"] = "yellow" if activation is "linear" else "green"
-                node[1]["units"] = 64
-                node[1]["stddev"] = 0.01                
+                if node_type is "NoisyDropConnectDense":
+                    node[1]["stddev"] = 0.01
+
+            if node_type is 'SelfAttention':
+                node[1]["d_features"] = 10
+            
+           # if node_type is "KernelConvSet":
+           #     node[1]["d_features"] = 10
+           #     node[1]["d_output"] = 5
 
 def make_model():
     """Build the keras model described by a graph."""
@@ -216,7 +216,8 @@ def build_op(id):
         op = L.Input(node['input_shape'])
     if node_type is "NoisyDropConnectDense":
         op = NoisyDropConnectDense(units=node['units'], activation=node['activation'], stddev=node['stddev'])
-
+    if node_type is 'SelfAttention':
+        op = SelfAttention(node['d_features'])
     G.node[id]['op'] = op
     print("built op", op)
     return op
