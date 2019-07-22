@@ -140,7 +140,7 @@ def make_model():
     model_inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
     model = K.Model(model_inputs, model_outputs)
     model.summary()
-    K.utils.plot_model(model, "./nets/model.png", rankdir="LR")
+    K.utils.plot_model(model, "../../archive/nets/model.png", rankdir="LR")
     return model
 
 
@@ -151,16 +151,20 @@ def get_output(id):
     """
     global G
     node = G.node[id]
-    print(node)
+    node_type = node["node_type"]
+    print('get output for', node)
     if node["output"] is not None:
         return node["output"]
-    elif node["node_type"] is "input" and node["op"] is not None:
+    elif node_type is "input" and node["op"] is not None:
         return node["op"]
     else:
         parent_ids = list(G.predecessors(id))
-        if node['node_type'] is not "input":
+        if node_type is not "input":
             inputs = [get_output(parent_id) for parent_id in parent_ids]
-            print("got inputs", inputs)
+            inputs = L.Concatenate(1)(inputs) if len(inputs) > 1 else inputs[0]
+            if node_type is "output":
+                return inputs
+            print("got inputs", inputs, "for node", node)
             op = build_op(id)
             print("got op", op)
             output = op(inputs[0])
@@ -175,6 +179,7 @@ def build_op(id):
     """Make the keras operation to be executed at a given node."""
     global G
     node = G.node[id]
+    print('build op for', node)
     node_type = node["node_type"]
     if node_type is "dense":
         op = L.Dense(node['units'], node['activation'])
