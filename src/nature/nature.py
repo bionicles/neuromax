@@ -31,7 +31,7 @@ def get_initial_graph(tasks):
     G.add_node("source", label="", shape="cylinder", style="filled", color="gold")
     G.add_node("input", label="", shape="circle", style="filled", color="blue")
     G.node["input"]["node_type"] = "input"
-    G.node["input"]["shape"] = tasks["Molecules-v0"]["observation_space"][1]
+    G.node["input"]["input_shape"] = tasks["Molecules-v0"]["observation_space"][1]
     G.add_node(1, label="", shape="square", style="filled", color="black")
     G.add_node("output", label="", shape="triangle", style="filled", color="red")
     G.node["output"]["node_type"] = "output"
@@ -160,10 +160,14 @@ def get_output(id):
         parent_ids = list(G.predecessors(id))
         if node['node_type'] is not "input":
             inputs = [get_output(parent_id) for parent_id in parent_ids]
-            output = build_op(id, G)(inputs)
-            G.node[id]["output"] = output
+            print("got inputs", inputs)
+            op = build_op(id)
+            print("got op", op)
+            output = op(inputs)
         else:
-            build_op
+            output = build_op(id)
+        G.node[id]["output"] = output
+        print("got output", output)
         return output
 
 
@@ -177,6 +181,7 @@ def build_op(id):
     if node_type is "input":
         op = L.Input(node['input_shape'])
     G.node[id]['op'] = op
+    print("built op", op)
     return op
 
 
