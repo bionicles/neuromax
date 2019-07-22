@@ -6,10 +6,10 @@ import random
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
-MIN_LAYERS, MAX_LAYERS = 1, 3
-MIN_NODES, MAX_NODES = 1, 3
-P_INSERT = 0.64
-STEPS = 4
+MIN_LAYERS, MAX_LAYERS = 3, 3
+MIN_NODES, MAX_NODES = 1, 1
+P_INSERT = 1
+STEPS = 2
 
 IMAGE_PATH = "../../archive/nets"
 IMAGE_SIZE = "1024x512"
@@ -19,8 +19,8 @@ tasks = {
     "Molecules-v0": {
         "intelligence": "bodily-kinesthetic",
         "goal": "simulate atoms in quantum, chemical, and proteins",
-        "observation_space": ("atoms", (None, None, 10), tf.float32),
-        "action_space": ("forces", (None, None, 3), tf.float32)
+        "observation_space": ("atoms", (None, 10), tf.float32),
+        "action_space": ("forces", (None, 3), tf.float32)
     },
 }
 
@@ -163,7 +163,7 @@ def get_output(id):
             print("got inputs", inputs)
             op = build_op(id)
             print("got op", op)
-            output = op(inputs)
+            output = op(inputs[0])
         else:
             output = build_op(id)
         G.node[id]["output"] = output
