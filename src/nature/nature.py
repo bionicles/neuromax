@@ -1,3 +1,5 @@
+# nature.py - bion and kamel, july 2019
+# why?: experiment faster with recursive neural architecture search
 import tensorflow as tf
 import networkx as nx
 import random
@@ -7,7 +9,7 @@ B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 MIN_LAYERS, MAX_LAYERS = 1, 3
 MIN_NODES, MAX_NODES = 1, 3
 P_INSERT = 0.64
-STEPS = 2
+STEPS = 4
 
 IMAGE_SIZE = "1024x512"
 DTYPE = tf.float32
@@ -16,22 +18,22 @@ tasks = {
     "Molecules-v0": {
         "intelligence": "bodily-kinesthetic",
         "goal": "simulate atoms in quantum, chemical, and proteins",
-        "observation_space": [
-            ("atoms", (None, None, 10), tf.float32)
-        ],
-        "action_space": [
-            ("forces", (None, None, 3), tf.float32)
-        ]
+        "observation_space": ("atoms", (None, None, 10), tf.float32),
+        "action_space": ("forces", (None, None, 3), tf.float32)
     },
 }
 
 
 def get_initial_graph(tasks):
+    """Create a graph connecting task inputs to outputs with a black box."""
     G = nx.MultiDiGraph()
     G.add_node("source", label="", shape="cylinder", style="filled", color="gold")
     G.add_node("input", label="", shape="circle", style="filled", color="blue")
+    G.node["input"]["node_type"] = "input"
+    G.node["input"]["shape"] = tasks["Molecules-v0"]["observation_space"][1]
     G.add_node(1, label="", shape="square", style="filled", color="black")
     G.add_node("output", label="", shape="triangle", style="filled", color="red")
+    G.node["output"]["node_type"] = "output"
     G.add_node("sink", label="", shape="cylinder", style="filled", color="gold")
     G.add_edge("source", "input")
     G.add_edge("input", 1)
@@ -41,6 +43,7 @@ def get_initial_graph(tasks):
 
 
 def screenshot(G, step):
+    """Make a png image of a graph."""
     print("SCREENSHOT", step)
     A = nx.nx_agraph.to_agraph(G)
     A.graph_attr.update(rankdir="LR")
@@ -48,6 +51,7 @@ def screenshot(G, step):
 
 
 def get_regulon(parent=None, layers=None):
+    """Build a subgraph to replace a node."""
     num_layers = random.randint(MIN_LAYERS, MAX_LAYERS)
     M = nx.MultiDiGraph()
     ids = []
@@ -76,28 +80,29 @@ def get_regulon(parent=None, layers=None):
 
 
 def insert_motif(node_id, motif):
+    """Replace a node with a subgraph."""
     global G
-    # get a motif and add it to G
-    Gi, new_ids = get_regulon(node_id)
-    G = nx.compose(G, Gi)
+    M, new_ids = get_regulon(node_id)
+    G = nx.compose(G, M)
     # connect the node's predecessors to all nodes in first layer
     predecessors = G.predecessors(node_id)
     successors = new_ids[0]
     for predecessor in predecessors:
         for successor in successors:
-            print("adding edge from", predecessor, "to", successor)
+            print(f"{predecessor}--->{successor}")
             G.add_edge(predecessor, successor)
     # connect the last layer of the motif to the node's successors
     predecessors = new_ids[-1]
     successors = list(G.successors(node_id))
     for predecessor in predecessors:
         for successor in successors:
-            print("adding edge from", predecessor, "to", successor)
+            print(f"{predecessor}--->{successor}")
             G.add_edge(predecessor, successor)
     G.remove_node(node_id)
 
 
 def recurse():
+    """Build a graph with recursive motif insertion."""
     for step in range(STEPS):
         nodes = G.nodes(data=True)
         for node in nodes:
@@ -110,33 +115,27 @@ def recurse():
         screenshot(G, f"{step+1}")
 
 
-# # we decide what boxes will do:
 def differentiate():
+    """Assign ops and arguments to nodes."""
     for node in G.nodes(data=True):
         node_id, node_data = node
+        node[1]["output"] = None
+        node[1]["op"] = None
         if node_data["shape"] is "square":
-            layer = "dense"
+            node_type = "dense"
             activation = random.choice(["linear", "tanh"])
-            label = f"{layer} {activation}"
+            label = f"{node_type} {activation}"
             print(f"setting {node_id} to {label}")
             node[1]["activation"] = activation
-            node[1]["layer"] = layer
+            node[1]["node_type"] = node_type
             node[1]["label"] = label
             node[1]["color"] = "yellow" if activation is "linear" else "green"
             node[1]["units"] = 64
-            node[1]['tf_layer'] = get_layer("dense", activation=node[1]['activation'], units=node[1]['units'])
-        if node_data["shape"] is "triangle":
-            node[1]['activation'] = "sigmoid"
-            node[1]['units'] = 3
-            node[1]['tf_layer'] = get_layer("dense", activation=node[1]['activation'], units=node[1]['units'])
-        if node_data["shape"] is "circle":
-            node[1]["input_shape"] = (5, )
-            node[1]['tf_layer'] = get_layer("input", shape=node[1]["input_shape"])
-    return G
 
 
 def make_model():
-    model_outputs = [get_output(id, G) for id in list(G.predecessors("sink"))]
+    """Build the keras model described by a graph."""
+    model_outputs = [get_output(id) for id in list(G.predecessors("sink"))]
     model_inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
     model = K.Model(model_inputs, model_outputs)
     model.summary()
@@ -145,21 +144,30 @@ def make_model():
 
 
 def get_output(id):
+    """
+    Get the output of a node in a computation graph.
+    Pull inputs from predecessors.
+    """
     global G
     node = G.node[id]
-    if node["output_tensor"]:
-        return node["output_tensor"]
-    elif node["node_type"] is "input" and node["op"]:
+    print(node)
+    if node["output"] is not None:
+        return node["output"]
+    elif node["node_type"] is "input" and node["op"] is not None:
         return node["op"]
     else:
         parent_ids = list(G.predecessors(id))
-        inputs = [get_output(parent_id, G) for parent_id in parent_ids]
-        output_tensor = build_op(id, G)(inputs)
-        G.node[id]["output_tensor"] = output_tensor
-        return output_tensor
+        if node['node_type'] is not "input":
+            inputs = [get_output(parent_id) for parent_id in parent_ids]
+            output = build_op(id, G)(inputs)
+            G.node[id]["output"] = output
+        else:
+            build_op
+        return output
 
 
 def build_op(id):
+    """Make the keras operation to be executed at a given node."""
     global G
     node = G.node[id]
     node_type = node["node_type"]
@@ -172,13 +180,14 @@ def build_op(id):
 
 
 def main():
+    """Test all functions in this file."""
     global G
     G = get_initial_graph(tasks)
-    screenshot(G, "kamel_is_cool")
+    screenshot(G, '0')
     recurse()
     differentiate()
     screenshot(G, STEPS + 1)
-    # make_model(G2)
+    make_model()
 
 
 if __name__ == "__main__":
