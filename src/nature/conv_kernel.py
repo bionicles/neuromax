@@ -80,7 +80,7 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, N):
         d13 = L.Subtract()([atom1, atom3])
         concat = L.Concatenate()([d12, d13, atom1, atom2, atom3])
     output = get_layer(units, hp)(concat)
-    for layer in range(layers - 1):
+    for i in range(layers - 1):
         output = get_layer(units, hp)(output)
     if 'wide' in block_type:
         output = L.Concatenate(-1)([inputs, output])
