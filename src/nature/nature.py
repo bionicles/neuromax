@@ -11,6 +11,11 @@ MIN_NODES, MAX_NODES = 1, 1
 P_INSERT = 1
 STEPS = 2
 
+dense_appear = 0.3
+conv2d_appear = 0.7
+MIN_FILTER, MAX_FILTER = 4, 12
+KERNEL_SIZE = 3
+
 IMAGE_PATH = "../../archive/nets"
 IMAGE_SIZE = "1024x512"
 DTYPE = tf.float32
@@ -123,15 +128,28 @@ def differentiate():
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = "dense"
-            activation = random.choice(["linear", "tanh"])
-            label = f"{node_type} {activation}"
-            print(f"setting {node_id} to {label}")
-            node[1]["activation"] = activation
-            node[1]["node_type"] = node_type
-            node[1]["label"] = label
-            node[1]["color"] = "yellow" if activation is "linear" else "green"
-            node[1]["units"] = 64
+            node_type = random.choice(['conv1D', 'dense'])
+            if node_type is 'conv1D':
+                activation = random.choice(["relu", "sigmoid"])
+                label = f"{node_type} {activation}"
+                filters, kernel_size = random.randint(MIN_FILTER, MAX_FILTER), KERNEL_SIZE
+                print(f"setting {node_id} to {label}")
+                node[1]["activation"] = activation
+                node[1]["node_type"] = node_type
+                node[1]["filters"] = filters
+                node[1]["kernel_size"] = kernel_size
+                node[1]["label"] = label
+                node[1]["color"] = "yellow" if activation is "relu" else "green"
+
+            if node_type is 'dense':
+                activation = random.choice(["linear", "tanh"])
+                label = f"{node_type} {activation}"
+                print(f"setting {node_id} to {label}")
+                node[1]["activation"] = activation
+                node[1]["node_type"] = node_type
+                node[1]["label"] = label
+                node[1]["color"] = "yellow" if activation is "linear" else "green"
+                node[1]["units"] = 64
 
 
 def make_model():
@@ -161,13 +179,13 @@ def get_output(id):
         parent_ids = list(G.predecessors(id))
         if node_type is not "input":
             inputs = [get_output(parent_id) for parent_id in parent_ids]
-            inputs = L.Concatenate(1)(inputs) if len(inputs) > 1 else inputs[0]
+            inputs = L.Concatenate()(inputs) if len(inputs) > 1 else inputs[0]
             if node_type is "output":
                 return inputs
             print("got inputs", inputs, "for node", node)
             op = build_op(id)
             print("got op", op)
-            output = op(inputs[0])
+            output = op(inputs)
         else:
             output = build_op(id)
         G.node[id]["output"] = output
@@ -183,6 +201,8 @@ def build_op(id):
     node_type = node["node_type"]
     if node_type is "dense":
         op = L.Dense(node['units'], node['activation'])
+    if node_type is "conv1D":
+        op = L.Conv1D(node['filters'], node['kernel_size'], activation=node['activation'])
     if node_type is "input":
         op = L.Input(node['input_shape'])
     G.node[id]['op'] = op
