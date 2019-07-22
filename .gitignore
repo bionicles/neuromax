@@ -2,12 +2,7 @@ __pycache__/
 .DS_STORE
 *.pyc
 .ipynb_checkpoints/
-tfrecord/
-xyz/
-rxn/
-mol/
-pdb/
-runs/
+archive/runs/
 *.pdb
 *.png
 *.mpg
@@ -18,3 +13,5 @@ runs/
 *.xyz
 *.cif
 *.jpg
+*.rxn
+*.mol
