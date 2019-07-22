@@ -11,7 +11,7 @@ MIN_NODES, MAX_NODES = 1, 3
 P_INSERT = 0.64
 STEPS = 4
 
-IMAGE_PATH =
+IMAGE_PATH = "../../archive/nets"
 IMAGE_SIZE = "1024x512"
 DTYPE = tf.float32
 
@@ -48,7 +48,7 @@ def screenshot(G, step):
     print("SCREENSHOT", step)
     A = nx.nx_agraph.to_agraph(G)
     A.graph_attr.update(rankdir="LR")
-    A.draw(path="./nets/{}.png".format(step), prog="dot")
+    A.draw(path=f"{IMAGE_PATH}/{step}.png", prog="dot")
 
 
 def get_regulon(parent=None, layers=None):
@@ -62,9 +62,9 @@ def get_regulon(parent=None, layers=None):
         ids_of_nodes_in_this_layer = []
         for node_number in range(n_nodes):
             if parent:
-                node_id = "{}.{}.{}".format(parent, layer_number, node_number)
+                node_id = f"{parent}.{layer_number}.{node_number}"
             else:
-                node_id = "{}.{}".format(layer_number, node_number)
+                node_id = f"{layer_number}.{node_number}"
             print(f"add node {node_id}")
             M.add_node(node_id, label="", style="filled", shape="square", color="black")
             ids_of_nodes_in_this_layer.append(node_id)
