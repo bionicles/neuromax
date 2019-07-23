@@ -4,10 +4,8 @@
 import tensorflow as tf
 # from make_dataset import load
 # from pymol import cmd, util
-from attrdict import AttrDict
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
-hp = AttrDict({})
 
 class NoisyDropConnectDense(L.Dense):
     def __init__(self, *args, **kwargs):
@@ -94,7 +92,7 @@ def get_block(block_type, hp, features, prior):
         block_output = L.Concatenate(-1)([features, prior])
         d_output = prior.shape[-1]
     d_features = block_output.shape[-1]
-    block_output = ConvAttention(d_features)(block_output)  # convolutional attention
+    block_output = SelfAttention(d_features)(block_output)  # convolutional attention
     block_output = KernelConvSet(hp, d_features, d_output, 3)(block_output)  # triplet convolution
     block_output = KernelConvSet(hp, d_features, d_output, 2)(block_output)  # pair convolution
     block_output = KernelConvSet(hp, d_features, d_output, 1)(block_output)  # atomic convolution
