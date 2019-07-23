@@ -155,6 +155,8 @@ def make_model():
     """Build the keras model described by a graph."""
     model_outputs = [get_output(id) for id in list(G.predecessors("sink"))]
     model_inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
+    print(model_outputs[0])
+    model_outputs = L.SeparableConv1D(3, 1)(model_outputs[0])
     model = K.Model(model_inputs, model_outputs)
     model.summary()
     K.utils.plot_model(model, "archive/nets/model.png", rankdir="LR")

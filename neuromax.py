@@ -49,7 +49,7 @@ D_FEATURES = 7
 D_OUT = 3
 # hyperparameters
 dimensions = [
-    skopt.space.Integer(1, 4, name='recursions'),
+    skopt.space.Integer(2, 3, name='recursions'),
     skopt.space.Real(0.04, 1, name='p_insert'),
     skopt.space.Integer(1, 2, name='min_layers'),
     skopt.space.Integer(2, 4, name='max_layers'),
@@ -115,11 +115,8 @@ def trial(**kwargs):
         return changes
 
     train = tf.function(run_episodes)
-    try:
-        with tf.device('/gpu:0'):
-            changes = train(no_gif_env)
-    except Exception as e:
-        print("error in train step", e)
+    with tf.device('/gpu:0'):
+        changes = train(no_gif_env)
 
     median = tf.reduce_mean(changes)
     stddev = tf.reduce_var(changes)
