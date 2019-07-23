@@ -16,3 +16,4 @@ archive/runs/
 *.rxn
 *.mol
 runs/
+*.vscode
