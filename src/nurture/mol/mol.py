@@ -17,6 +17,7 @@ TEMP_PATH = "../../archive/temp"
 stddev = 273 * 0.001
 DTYPE = tf.float32
 
+
 class MolEnv(gym.Env):
     """Handle molecular folding and docking tasks."""
 
@@ -34,10 +35,6 @@ class MolEnv(gym.Env):
             self.reset = self.reset_tfrecord
             self.step = self.step_tfrecord
 
-    def get_loss(self):
-        return tf.keras.losses.MAE(self.target, get_distances(self.current,
-                                                              self.current))
-
     # @tf.function
     def reset_tfrecord(self):
         self.protein_number = self.protein_number + 1
@@ -46,9 +43,19 @@ class MolEnv(gym.Env):
         self.common_prepare(id_string, n_atoms, target, positions, features, masses)
         return self.current
 
+    def reset_gif(self):
+        self.protein_number = self.protein_number + 1
+        id = random.choice(self.pedagogy)
+        id_string, n_atoms, target, positions, features, masses = self.parse_item(load("cif", id, screenshot=True))
+        self.common_prepare(id_string, n_atoms, target, positions, features, masses)
+        self.prepare_pymol()
+        return self.current
+
     # @tf.function
     def common_prepare(self, id_string, n_atoms, target, positions, features, masses):
+        print("prepare target", target)
         self.target = get_distances(target, target)
+        print("target distances", self.target)
         self.velocities = tf.zeros_like(positions)
         self.id_string = id_string
         self.n_atoms = n_atoms
@@ -62,16 +69,17 @@ class MolEnv(gym.Env):
 
     # @tf.function
     def step_tfrecord(self, forces):
+        print("FORCES!", forces)
         loss, done, change = self.common_step(forces)
         return self.current, loss, done, change
 
-    def reset_gif(self):
-        self.protein_number = self.protein_number + 1
-        id = random.choice(self.pedagogy)
-        id_string, n_atoms, target, positions, features, masses = self.parse_item(load("cif", id, screenshot=True))
-        self.common_prepare(id_string, n_atoms, target, positions, features, masses)
-        self.prepare_pymol()
-        return self.current
+    def step_gif(self, forces):
+        loss, done, change = self.common_step(forces)
+        self.move_atoms()
+        take_screenshot()
+        if done:
+            self.make_gif()
+        return self.current, loss, done, change
 
     # @tf.function
     def common_step(self, forces):
@@ -83,20 +91,24 @@ class MolEnv(gym.Env):
         loss = self.get_loss()
         loss = tf.reduce_sum(loss)
         new_stop = loss * 1.2
+        done = False
+        print("loss", loss)
+        print("self.stop", self.stop)
+        print(loss > self.stop)
         if new_stop < self.stop:
             self.stop = new_stop
         elif loss > self.stop or loss != loss:
             done = True
         change = ((loss - self.initial_loss) / self.initial_loss) * 100.
+        print("done", done)
+        print("change", change)
         return loss, done, change
 
-    def step_gif(self, forces):
-        loss, done, change = self.common_step(forces)
-        self.move_atoms()
-        take_screenshot()
-        if done:
-            self.make_gif()
-        return self.current, loss, done, change
+    def get_loss(self):
+        # print("self.target", self.target)
+        current = get_distances(self.current, self.current)
+        # print("current", current)
+        return tf.keras.losses.MAE(self.target, current)
 
     @tf.function
     def parse_item(self, example):
@@ -172,8 +184,8 @@ def prepare_pymol():
 
 @tf.function
 def get_distances(a, b):  # L2
-    print("tracing get_distances")
-    return B.sqrt(B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1))
+    a, b = tf.squeeze(a, 0), tf.squeeze(b, 0)
+    return B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)
 
     # @tf.function
     # def get_distances(a, b):  # L1

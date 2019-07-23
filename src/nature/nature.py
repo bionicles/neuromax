@@ -121,7 +121,7 @@ def differentiate(hp):
         if node_data["shape"] is "square":
             node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', 'LSTM'])  # 'KernelConvSet'])
             if node_type is 'conv1D':
-                activation = random.choice(["relu", "sigmoid"])
+                activation = "tanh"
                 label = f"{node_type} {activation}"
                 filters, kernel_size = random.randint(hp.min_filters, hp.max_filters), 1
                 print(f"setting {node_id} to {label}")
@@ -133,7 +133,7 @@ def differentiate(hp):
                 node[1]["color"] = "yellow" if activation is "relu" else "green"
 
             if node_type is 'dense' or "NoisyDropConnectDense" or "LSTM":
-                activation = random.choice(["linear", "tanh", "sigmoid"])
+                activation = "tanh"
                 label = f"{node_type} {activation}"
                 print(f"setting {node_id} to {label}")
                 node[1]["activation"] = activation
@@ -155,8 +155,7 @@ def make_model():
     """Build the keras model described by a graph."""
     model_outputs = [get_output(id) for id in list(G.predecessors("sink"))]
     model_inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
-    print(model_outputs[0])
-    model_outputs = L.SeparableConv1D(3, 1)(model_outputs[0])
+    model_outputs = L.SeparableConv1D(3, 1, activation="tanh")(model_outputs[0])
     model = K.Model(model_inputs, model_outputs)
     model.summary()
     K.utils.plot_model(model, "archive/nets/model.png", rankdir="LR")
@@ -188,6 +187,11 @@ def get_output(id):
             output = op(inputs)
         else:
             output = build_op(id)
+        output = L.BatchNormalization()(output)
+        try:
+            output = L.Add()([inputs, output])
+        except Exception as e:
+            print("failed to make residual connection at node", id, e)
         G.node[id]["output"] = output
         print("got output", output)
         return output

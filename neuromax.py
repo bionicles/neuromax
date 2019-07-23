@@ -52,16 +52,16 @@ dimensions = [
     skopt.space.Integer(2, 3, name='recursions'),
     skopt.space.Real(0.04, 1, name='p_insert'),
     skopt.space.Integer(1, 2, name='min_layers'),
-    skopt.space.Integer(2, 4, name='max_layers'),
+    skopt.space.Integer(2, 3, name='max_layers'),
     skopt.space.Integer(1, 2, name='min_nodes'),
-    skopt.space.Integer(2, 4, name='max_nodes'),
+    skopt.space.Integer(2, 3, name='max_nodes'),
 
-    skopt.space.Integer(1, 15, name='min_filters'),
-    skopt.space.Integer(16, 32, name='max_filters'),
+    skopt.space.Integer(1, 4, name='min_filters'),
+    skopt.space.Integer(8, 16, name='max_filters'),
     skopt.space.Categorical(['deep', 'wide_deep'], name='kernel_type'),
     skopt.space.Integer(1, 4, name='k_layers'),
-    skopt.space.Integer(64, 127, name='min_units'),
-    skopt.space.Integer(128, 512, name='max_units'),
+    skopt.space.Integer(32, 127, name='min_units'),
+    skopt.space.Integer(128, 256, name='max_units'),
     skopt.space.Real(0.001, 0.1, name='stddev'),
 
     skopt.space.Real(0.00001, 0.01, name='lr'),
@@ -102,6 +102,7 @@ def trial(**kwargs):
                 with tf.GradientTape() as tape:
                     forces = agent(current)
                     current, loss, done, change = env.step(forces)
+                tf.print(loss)
                 gradients = tape.gradient(loss, agent.trainable_weights)
                 optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
                 ema.apply(agent.weights)
