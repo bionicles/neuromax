@@ -3,7 +3,7 @@
 import tensorflow as tf
 import networkx as nx
 import random
-from datetime.datetime import now
+from datetime import datetime
 from .conv_kernel import NoisyDropConnectDense, SelfAttention, KernelConvSet
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
@@ -226,4 +226,4 @@ def get_agent(trial_number, hp, d_in=10, d_out=3):
     screenshot(G, hp.recursions + 1)
     model = make_model()
     [print(item) for item in hp.items]
-    return model, str(now()).replace(" ", "_")
+    return model, str(datetime.now()).replace(" ", "_")
