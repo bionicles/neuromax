@@ -7,9 +7,7 @@ import numpy as np
 import webbrowser
 import shutil
 import skopt
-import math
 import time
-import gym
 import os
 from src.nature.nature import get_agent
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -165,7 +163,7 @@ def trial(**kwargs):
     @tf.function
     def train(dataset):
         print("tracing train")
-        changes = 0.
+        changes = []
         change = 0.
         for episode, (id_string, n_atoms, target, positions, features, masses) in dataset.enumerate():
             with tf.device('/gpu:0'):
@@ -174,12 +172,8 @@ def trial(**kwargs):
                      'with', n_atoms, 'atoms',
                      change, "% change (lower is better)")
             tf.summary.scalar('change', change)
-            if episode < 1:
-                changes = tf.expand_dims(change, 0)
-            elif episode == 1:
-                changes = tf.stack(changes, tf.expand_dims(change))
-            else:
-                changes = tf.concat([changes, tf.expand_dims(change, 0)], 0)
+            changes = tf.concat([changes, [change]], -1)
+            tf.print("changes", changes)
             if episode >= EPISODES_PER_TASK:
                 break
         return changes

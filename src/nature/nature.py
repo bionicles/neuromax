@@ -119,7 +119,7 @@ def differentiate(hp):
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', 'LSTM'])  # 'KernelConvSet'])
+            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention'])  # 'KernelConvSet'])
             if node_type is 'conv1D':
                 activation = "tanh"
                 label = f"{node_type} {activation}"
