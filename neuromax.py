@@ -51,10 +51,10 @@ D_OUT = 3
 dimensions = [
     skopt.space.Integer(1, 4, name='recursions'),
     skopt.space.Real(0.04, 1, name='p_insert'),
-    skopt.space.Integer(1, 3, name='min_layers'),
-    skopt.space.Integer(3, 6, name='max_layers'),
-    skopt.space.Integer(1, 3, name='min_nodes'),
-    skopt.space.Integer(3, 6, name='max_nodes'),
+    skopt.space.Integer(1, 2, name='min_layers'),
+    skopt.space.Integer(2, 6, name='max_layers'),
+    skopt.space.Integer(1, 2, name='min_nodes'),
+    skopt.space.Integer(2, 5, name='max_nodes'),
 
     skopt.space.Integer(1, 4, name='min_filters'),
     skopt.space.Integer(4, 8, name='max_filters'),
@@ -95,7 +95,7 @@ def trial(**kwargs):
         changes = None
         episode = 0
         change = 0.
-        while episode < EPISODES_PER_TASK and env.protein_number < range(env.proteins_in_dataset):
+        while episode < EPISODES_PER_TASK and env.protein_number < env.proteins_in_dataset:
             current = env.reset()
             loss = 0.
             for step in tf.range(MAX_STEPS):

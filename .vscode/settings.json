@@ -1,6 +1,0 @@
-{
-    "python.pythonPath": "/home/kamel/anaconda3/envs/tensorflow-gpu/bin/python",
-    "python.linting.pylintEnabled": false,
-    "python.linting.pylamaEnabled": true,
-    "python.linting.enabled": true
-}
