@@ -41,9 +41,9 @@ class MolEnv(gym.Env):
     @tf.function
     def reset_tfrecord(self):
         self.protein_number = self.protein_number + 1
-        for id_string, n_atoms, target, positions, features, masses in self.dataset.take(1):
-            self.common_prepare(id_string, n_atoms, target, positions, features, masses)
-            return self.current
+        id_string, n_atoms, target, positions, features, masses = self.dataset.take(1)
+        self.common_prepare(id_string, n_atoms, target, positions, features, masses)
+        return self.current
 
     @tf.function
     def common_prepare(self, id_string, n_atoms, target, positions, features, masses):
