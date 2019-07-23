@@ -128,7 +128,7 @@ def differentiate():
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', 'LSTM'])  # 'KernelConvSet'])
+            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', 'LSTM', 'BatchNormalization'])  # 'KernelConvSet'])
             if node_type is 'conv1D':
                 activation = random.choice(["relu", "sigmoid"])
                 label = f"{node_type} {activation}"
@@ -152,12 +152,14 @@ def differentiate():
                 node[1]["units"] = 64
                 if node_type is "NoisyDropConnectDense":
                     node[1]["stddev"] = 0.01
-
             if node_type is 'SelfAttention':
-                node[1]["d_features"] = 10        
-           # if node_type is "KernelConvSet":
-           #     node[1]["d_features"] = 10
-           #     node[1]["d_output"] = 5
+                node[1]["d_features"] = 10
+            if node_type is 'BatchNormalization':
+                node[1]["node_type"] = node_type
+# if node_type is "KernelConvSet":
+#     node[1]["d_features"] = 10
+#     node[1]["d_output"] = 5
+
 
 def make_model():
     """Build the keras model described by a graph."""
@@ -218,6 +220,8 @@ def build_op(id):
         op = SelfAttention(node['d_features'])
     if node_type is 'LSTM':
         op = L.LSTM(node["units"], node['activation'], return_sequences=True)
+    if node_type is 'BatchNormalization':
+        op = L.BatchNormalization()
     G.node[id]['op'] = op
     print("built op", op)
     return op
