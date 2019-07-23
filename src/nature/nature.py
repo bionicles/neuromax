@@ -3,10 +3,11 @@
 import tensorflow as tf
 import networkx as nx
 import random
+from datetime.datetime import now
 from .conv_kernel import NoisyDropConnectDense, SelfAttention, KernelConvSet
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
-IMAGE_PATH = "../../archive/nets"
+IMAGE_PATH = "archive/nets"
 IMAGE_SIZE = "1024x512"
 DTYPE = tf.float32
 
@@ -46,13 +47,13 @@ def screenshot(G, step):
     A.draw(path=f"{IMAGE_PATH}/{step}.png", prog="dot")
 
 
-def get_regulon(parent=None, layers=None):
+def get_regulon(hp, parent=None, layers=None):
     """Build a subgraph to replace a node."""
-    num_layers = random.randint(MIN_LAYERS, MAX_LAYERS)
+    num_layers = random.randint(hp.min_layers, hp.max_layers)
     M = nx.MultiDiGraph()
     ids = []
     for layer_number in range(num_layers):
-        n_nodes = random.randint(MIN_NODES, MAX_NODES)
+        n_nodes = random.randint(hp.min_nodes, hp.max_nodes)
         print(f"add layer {layer_number} with {n_nodes} nodes")
         ids_of_nodes_in_this_layer = []
         for node_number in range(n_nodes):
@@ -75,10 +76,10 @@ def get_regulon(parent=None, layers=None):
     return M, ids
 
 
-def insert_motif(node_id, motif):
+def insert_motif(node_id, hp):
     """Replace a node with a subgraph."""
     global G
-    M, new_ids = get_regulon(node_id)
+    M, new_ids = get_regulon(hp, parent=node_id)
     G = nx.compose(G, M)
     # connect the node's predecessors to all nodes in first layer
     predecessors = G.predecessors(node_id)
@@ -97,32 +98,32 @@ def insert_motif(node_id, motif):
     G.remove_node(node_id)
 
 
-def recurse():
+def recurse(hp):
     """Build a graph with recursive motif insertion."""
-    for step in range(STEPS):
+    for step in range(hp.recursions):
         nodes = G.nodes(data=True)
         for node in nodes:
             try:
                 if node[1]["shape"] is "square":
-                    if random.random() < P_INSERT:
-                        insert_motif(node[0], "regulon")
+                    if random.random() < hp.p_insert:
+                        insert_motif(node[0], hp)
             except Exception as e:
                 print('exception in recurse', e)
         screenshot(G, f"{step+1}")
 
 
-def differentiate():
+def differentiate(hp):
     """Assign ops and arguments to nodes."""
     for node in G.nodes(data=True):
         node_id, node_data = node
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', 'LSTM', 'BatchNormalization'])  # 'KernelConvSet'])
+            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', 'LSTM'])  # 'KernelConvSet'])
             if node_type is 'conv1D':
                 activation = random.choice(["relu", "sigmoid"])
                 label = f"{node_type} {activation}"
-                filters, kernel_size = random.randint(MIN_FILTER, MAX_FILTER), KERNEL_SIZE
+                filters, kernel_size = random.randint(hp.min_filters, hp.max_filters), 1
                 print(f"setting {node_id} to {label}")
                 node[1]["activation"] = activation
                 node[1]["node_type"] = node_type
@@ -144,8 +145,7 @@ def differentiate():
                     node[1]["stddev"] = 0.01
             if node_type is 'SelfAttention':
                 node[1]["d_features"] = 10
-            if node_type is 'BatchNormalization':
-                node[1]["node_type"] = node_type
+
 # if node_type is "KernelConvSet":
 #     node[1]["d_features"] = 10
 #     node[1]["d_output"] = 5
@@ -157,7 +157,7 @@ def make_model():
     model_inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
     model = K.Model(model_inputs, model_outputs)
     model.summary()
-    K.utils.plot_model(model, "../../archive/nets/model.png", rankdir="LR")
+    K.utils.plot_model(model, "archive/nets/model.png", rankdir="LR")
     return model
 
 
@@ -221,11 +221,9 @@ def get_agent(trial_number, hp, d_in=10, d_out=3):
     global G
     G = get_initial_graph(tasks)
     screenshot(G, '0')
-    recurse()
-    differentiate()
+    recurse(hp)
+    differentiate(hp)
     screenshot(G, hp.recursions + 1)
-    return make_model()
-
-
-if __name__ == "__main__":
-    get_agent()
+    model = make_model()
+    [print(item) for item in hp.items]
+    return model, str(now()).replace(" ", "_")

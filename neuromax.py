@@ -47,28 +47,23 @@ N_MOVIES = 1
 # agent
 D_FEATURES = 7
 D_OUT = 3
-MIN_LAYERS, MAX_LAYERS = 3, 3
-MIN_NODES, MAX_NODES = 1, 3
-P_INSERT = 0.8
-STEPS = 2
-
-dense_appear = 0.3
-conv2d_appear = 0.7
-MIN_FILTER, MAX_FILTER = 4, 12
-KERNEL_SIZE = 3
+# hyperparameters
 dimensions = [
-    skopt.space.Integer(1, 4, name='min_layers'),
-    skopt.space.Integer(4, 8, name='max_layers'),
+    skopt.space.Integer(1, 4, name='recursions'),
+    skopt.space.Real(0.04, 1, name='p_insert'),
+    skopt.space.Integer(1, 3, name='min_layers'),
+    skopt.space.Integer(3, 6, name='max_layers'),
+    skopt.space.Integer(1, 3, name='min_nodes'),
+    skopt.space.Integer(3, 6, name='max_nodes'),
+
     skopt.space.Integer(1, 4, name='min_filters'),
     skopt.space.Integer(4, 8, name='max_filters'),
-    skopt.space.Integer(1, 4, name='min_nodes'),
-    skopt.space.Integer(4, 8, name='max_nodes'),
-    skopt.space.Integer(1, 4, name='recursions'),
     skopt.space.Categorical(['deep', 'wide_deep'], name='kernel_type'),
     skopt.space.Integer(2, 4, name='k_layers'),
     skopt.space.Integer(64, 127, name='min_units'),
     skopt.space.Integer(128, 512, name='max_units'),
     skopt.space.Real(0.001, 0.1, name='stddev'),
+
     skopt.space.Real(0.00001, 0.01, name='lr'),
     skopt.space.Integer(10, 10000000, name='decay')]
 
