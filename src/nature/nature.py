@@ -216,14 +216,14 @@ def build_op(id):
     return op
 
 
-def get_agent():
-    """Test all functions in this file."""
+def get_agent(trial_number, hp, d_in=10, d_out=3):
+    """Build a model given hyperparameters and input/output shapes."""
     global G
     G = get_initial_graph(tasks)
     screenshot(G, '0')
     recurse()
     differentiate()
-    screenshot(G, STEPS + 1)
+    screenshot(G, hp.recursions + 1)
     return make_model()
 
 
