@@ -38,14 +38,14 @@ class MolEnv(gym.Env):
         return tf.keras.losses.MAE(self.target, get_distances(self.current,
                                                               self.current))
 
-    @tf.function
+    # @tf.function
     def reset_tfrecord(self):
         self.protein_number = self.protein_number + 1
         id_string, n_atoms, target, positions, features, masses = self.dataset.take(1)
         self.common_prepare(id_string, n_atoms, target, positions, features, masses)
         return self.current
 
-    @tf.function
+    # @tf.function
     def common_prepare(self, id_string, n_atoms, target, positions, features, masses):
         self.target = get_distances(target, target)
         self.velocities = tf.zeros_like(positions)
@@ -59,7 +59,7 @@ class MolEnv(gym.Env):
         self.initial_loss = tf.reduce_sum(self.initial_loss)
         self.stop = self.initial_loss * 1.2
 
-    @tf.function
+    # @tf.function
     def step_tfrecord(self, forces):
         loss, done, change = self.common_step(forces)
         return self.current, loss, done, change
@@ -72,7 +72,7 @@ class MolEnv(gym.Env):
         self.prepare_pymol()
         return self.current
 
-    @tf.function
+    # @tf.function
     def common_step(self, forces):
         forces = forces / self.masses
         self.velocities = self.velocities + forces

@@ -114,9 +114,8 @@ def trial(**kwargs):
             episode = episode + 1
         return changes
 
-    train = tf.function(run_episodes)
-    with tf.device('/gpu:0'):
-        changes = train(no_gif_env)
+    # with tf.device('/gpu:0'):
+    changes = run_episodes(no_gif_env)
 
     median = tf.reduce_mean(changes)
     stddev = tf.reduce_var(changes)

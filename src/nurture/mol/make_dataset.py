@@ -7,6 +7,7 @@ import shutil
 import csv
 import os
 
+DATASETS_ROOT = os.path.join('.', 'src', 'nurture', 'mol', 'datasets')
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
 TEMP_PATH = "../../archive/temp"
 SHARDS_PER_DATASET = 100000
@@ -63,7 +64,7 @@ def prepare_pymol():
 
 
 def load_proteins(file_name):
-    csv_path = os.path.join('.', 'src', 'nurture', 'mol', 'datasets', 'csv', file_name)
+    csv_path = os.path.join(DATASETS_ROOT, 'csv', file_name)
     with open(csv_path) as csvfile:
         reader = csv.reader(csvfile)
         rows = [row for row in reader]
@@ -154,7 +155,7 @@ def load(type, id, screenshot=False):
     # we clear pymol, make filename and path
     cmd.delete('all')
     file_name = f'{id}.{type}' if type is 'cif' else id
-    dataset_path = os.path.join('.', 'datasets', type)
+    dataset_path = os.path.join(DATASETS_ROOT, type)
     path = os.path.join(dataset_path, file_name)
     # we load the target
     print(f'load {id} {path}')
@@ -210,7 +211,7 @@ def make_example(id, target, positions, features, masses):
     return example.SerializeToString()
 
 
-def write_shards():
+def write_shards(tfrecord_path):
     problems = []
     proteins = load_proteins(CSV_FILE_NAME)
     for dataset, type in [(proteins, "cif")]:
@@ -221,7 +222,7 @@ def write_shards():
                     writer.close()
                 except Exception as e:
                     print('writer.close() exception', e)
-                shard_path = os.path.join('.', 'datasets', 'tfrecord', type)
+                shard_path = os.path.join(tfrecord_path, type)
                 if not os.path.exists(shard_path):
                     os.makedirs(shard_path)
                 shard_path = os.path.join(shard_path, str(shard_number) + '.tfrecord')
@@ -247,7 +248,7 @@ def write_shards():
 
 
 def main():
-    tfrecord_path = os.path.join('.', 'datasets', 'tfrecord')
+    tfrecord_path = os.path.join(DATASETS_ROOT, 'tfrecord')
     try:
         shutil.rmtree(tfrecord_path)
     except Exception as e:
@@ -257,7 +258,7 @@ def main():
     except Exception as e:
         print('os.path.makedirs(tfrecord_path) exception', e)
 
-    write_shards()
+    write_shards(tfrecord_path)
 
 
 if __name__ == '__main__':
