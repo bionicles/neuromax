@@ -53,8 +53,6 @@ class ConvAttention(L.Layer):
         super(ConvAttention, self).__init__()
         atom = K.Input((d_features,))
         atoms = K.Input((None, d_features,))
-        centroid = L.Average()([tf.split(atoms, 0)])
-        atoms = L.Concatenate()([centroid, atoms])
         output = L.Attention()(atom, atoms)
         self.attention = K.Model([atom, atoms], output)
 

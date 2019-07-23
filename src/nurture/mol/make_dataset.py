@@ -1,13 +1,14 @@
 from progiter import ProgIter
 import tensorflow as tf
-from pymol import cmd
+from pymol import cmd, util
 import numpy as np
 import random
 import shutil
-import time
 import csv
 import os
+
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
+TEMP_PATH = "../../archive/temp"
 SHARDS_PER_DATASET = 100000
 ITEMS_PER_SHARD = 16
 DTYPE = tf.float32
@@ -39,20 +40,39 @@ elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 'rg': 111, 'cn': 112}
 
 
-def load_folder(type):
-    return os.listdir(os.path.join('.', 'datasets', type))
+# def load_folder(type):
+#     return os.listdir(os.path.join('.', 'datasets', type))
 
 
-def load_proteins():
-    with open(os.path.join('.', 'datasets', 'csv', CSV_FILE_NAME)) as csvfile:
+def take_screenshot(step):
+    print("")
+    screenshot_path = f"{TEMP_PATH}/{step}.png"
+    cmd.ray()
+    # cmd.zoom("all")
+    cmd.center("all")
+    cmd.png(screenshot_path)
+
+
+def prepare_pymol():
+    cmd.clip("near", 100000)
+    cmd.clip("slab", 100000)
+    cmd.clip("far", -100000)
+    cmd.show("surface")
+    cmd.unpick()
+    util.cbc()
+
+
+def load_proteins(file_name):
+    csv_path = os.path.join('.', 'src', 'nurture', 'mol', 'datasets', 'csv', file_name)
+    with open(csv_path) as csvfile:
         reader = csv.reader(csvfile)
         rows = [row for row in reader]
         return [item.strip() for item in rows[0]]
 
 
-def undock(chains, type):
-    print('undocking chains', chains, 'type', type)
-    for chainOrName in chains:
+def undock(chainsOrNames, type):
+    print('undocking', chainsOrNames, 'type', type)
+    for chainOrName in chainsOrNames:
         if type == 'cif':
             selection_string = f'chain {chainOrName}'
         else:
@@ -124,68 +144,14 @@ def get_atomic_features(atom):
                      atom.get_free_valence(0)], dtype=np.float32)
 
 
-def clean_xyz(path):
-    print(f"clean xyz at {path}")
-    try:
-        os.remove("./datasets/tmp.xyz")
-    except Exception as e:
-        print('couldnt delete tmp.xyz')
-    with open(path, "r") as start_file:
-        with open("./datasets/tmp.xyz", "a") as out_file:
-            for line in start_file.readlines()[1:]:
-                splits = line.split("\t")
-                if "gdb" in splits[0]:
-                    quantum_target = tf.convert_to_tensor([float(element) for element in splits[1:-1]])
-                elif "gdb" not in splits[0] and splits[0].isalpha():
-                    out_file.write('\t'.join(splits[0:4]) + '\n')
-                else:
-                    break
-            return quantum_target
-
-
-def get_reactants_products(path):
-    print(f"getting reactants and products for {path}")
-    line_is_n_reactants_products = False
-    line_is_molfile = False
-    mol_data = open(path)
-    reactants = []
-    products = []
-    molfiles = []
-    for line in mol_data:
-        if line_is_n_reactants_products:
-            reactants_products = line.strip().split(" ")
-            n_reactants = int(reactants_products[0])
-            n_products = int(reactants_products[-1])
-            line_is_n_reactants_products = False
-        elif line_is_molfile and ":" in line:
-            molfile = line.replace(':', '_')
-            molfile = molfile.replace('\n', '')
-            molfiles.append(f'{molfile}.mol')
-            line_is_molfile = False
-        if "RHEA:release" in line:
-            line_is_n_reactants_products = True
-        if "$MOL" in line:
-            line_is_molfile = True
-    for molfile in molfiles:
-        if n_reactants > 0:
-            reactants.append(molfile)
-            n_reactants -= 1
-        elif n_products > 0:
-            products.append(molfile)
-            n_products -= 1
-    return reactants, products
-
-
 def clean_pymol():
     cmd.remove("all and not (alt '')")  # remove alternate conformations
     cmd.alter("all", 'alt=""')
     cmd.remove('solvent')
 
 
-def load(type, id):
+def load(type, id, screenshot=False):
     # we clear pymol, make filename and path
-    quantum_target = []
-    target_features = []
     cmd.delete('all')
     file_name = f'{id}.{type}' if type is 'cif' else id
     dataset_path = os.path.join('.', 'datasets', type)
@@ -197,35 +163,16 @@ def load(type, id):
             cmd.fetch(id, path=dataset_path)
         elif os.path.exists(path):
             cmd.load(path)
-    elif type is "xyz":
-        quantum_target = clean_xyz(path)
-        cmd.load(os.path.join(".", "datasets", "tmp.xyz"))
-    elif type is "rxn":
-        reactants, products = get_reactants_products(path)
-        print(f"{str(reactants)} ---> {str(products)}")
-        for product in products:
-            product_path = os.path.join('.', 'datasets', 'mol', product)
-            cmd.load(product_path)
     # make target
     clean_pymol()
     model = cmd.get_model('all', 1)
-    target_positions = get_positions(model)
-    if type is not "xyz":
-        quantum_target = tf.zeros((15), dtype=tf.float32)
-    if type is "rxn":
-        target_features = get_features(model)
-        target_masses = get_masses(model)
-        target_numbers = get_numbers(model)
-        target_features = tf.concat([target_features, target_masses, target_numbers], -1)
-        cmd.delete('all')
-        for reactant in reactants:
-            reactant_path = os.path.join('.', 'datasets', 'mol', reactant)
-            cmd.load(reactant_path)
-        clean_pymol()
-        model = cmd.get_model('all', 1)
+    target = get_positions(model)
     # make the model inputs
     if type == 'cif':
         print('type is cif')
+        if screenshot:
+            prepare_pymol()
+            take_screenshot("0", )
         chains = cmd.get_chains('all')
         if random.random() < P_UNDOCK:
             print('undocking')
@@ -233,46 +180,30 @@ def load(type, id):
         if random.random() < P_UNFOLD:
             print('unfolding')
             unfold(chains)
-    if type == 'rxn' or type == 'xyz':
-        print('type is rxn or xyz, undocking')
-        names = cmd.get_names('all')
-        undock(names, type)
     model = cmd.get_model('all', 1)
     positions = get_positions(model)
     if positions.shape[0] > MAX_ATOMS:
         print(f"{positions.shape[0]} IS TOO MANY ATOMS")
         return False
-    print(positions, target_positions)
     features = get_features(model)
     masses = get_masses(model)
     numbers = get_numbers(model)
     features = tf.concat([features, masses, numbers], -1)
-    if type is not "rxn":
-        target_features = features
-        target_numbers = numbers
-    return make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers)
+    target = tf.concat([target, features], -1)
+    return make_example(id, target, positions, features, masses)
 
 
-def make_example(type, id, target_positions, positions, features, masses, quantum_target, target_features, target_numbers, numbers):
-    [print(x.shape) for x in [target_positions, positions, features, masses, quantum_target, target_features]]
+def make_example(id, target, positions, features, masses):
     example = tf.train.SequenceExample()
     # non-sequential features
-    example.context.feature["type"].bytes_list.value.append(bytes(type, 'utf-8'))
     example.context.feature["id"].bytes_list.value.append(bytes(id, 'utf-8'))
-    example.context.feature["quantum_target"].bytes_list.value.append(tf.io.serialize_tensor(quantum_target).numpy())
     # sequential features
-    fl_target_positions = example.feature_lists.feature_list["target_positions"]
-    fl_target_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_positions).numpy())
-    fl_target_features = example.feature_lists.feature_list["target_features"]
-    fl_target_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_features).numpy())
-    fl_target_numbers = example.feature_lists.feature_list["target_numbers"]
-    fl_target_numbers.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target_numbers).numpy())
+    fl_target = example.feature_lists.feature_list["target"]
+    fl_target.feature.add().bytes_list.value.append(tf.io.serialize_tensor(target).numpy())
     fl_positions = example.feature_lists.feature_list["positions"]
     fl_positions.feature.add().bytes_list.value.append(tf.io.serialize_tensor(positions).numpy())
     fl_features = example.feature_lists.feature_list["features"]
     fl_features.feature.add().bytes_list.value.append(tf.io.serialize_tensor(features).numpy())
-    fl_numbers = example.feature_lists.feature_list["numbers"]
-    fl_numbers.feature.add().bytes_list.value.append(tf.io.serialize_tensor(numbers).numpy())
     fl_masses = example.feature_lists.feature_list["masses"]
     fl_masses.feature.add().bytes_list.value.append(tf.io.serialize_tensor(masses).numpy())
     # serialized
@@ -281,10 +212,8 @@ def make_example(type, id, target_positions, positions, features, masses, quantu
 
 def write_shards():
     problems = []
-    qm9 = load_folder("xyz")
-    rxns = load_folder("rxn")
-    proteins = load_proteins()
-    for dataset, type in [(qm9, "xyz"), (rxns, "rxn"), (proteins, "cif")]:
+    proteins = load_proteins(CSV_FILE_NAME)
+    for dataset, type in [(proteins, "cif")]:
         shard_number, item_number = 0, 0
         for dataset_item in ProgIter(dataset, verbose=1):
             if item_number % ITEMS_PER_SHARD is 0:

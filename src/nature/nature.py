@@ -7,8 +7,8 @@ import random
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
 MIN_LAYERS, MAX_LAYERS = 3, 3
-MIN_NODES, MAX_NODES = 1, 1
-P_INSERT = 1
+MIN_NODES, MAX_NODES = 1, 3
+P_INSERT = 0.8
 STEPS = 2
 
 IMAGE_PATH = "../../archive/nets"
@@ -162,12 +162,12 @@ def get_output(id):
         if node_type is not "input":
             inputs = [get_output(parent_id) for parent_id in parent_ids]
             inputs = L.Concatenate(1)(inputs) if len(inputs) > 1 else inputs[0]
+            print("got inputs", inputs, "for node", node)
             if node_type is "output":
                 return inputs
-            print("got inputs", inputs, "for node", node)
             op = build_op(id)
             print("got op", op)
-            output = op(inputs[0])
+            output = op(inputs)
         else:
             output = build_op(id)
         G.node[id]["output"] = output
