@@ -19,8 +19,6 @@ import tensorflow as tf
 plt.set_cmap("viridis")
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 # globals
-qm9 = None
-rxn = None
 proteins = None
 trial_number = 0
 atom_index = 0
@@ -35,15 +33,11 @@ N_RANDOM_STARTS = 10
 N_CALLS = 1000
 # episodes
 STOP_LOSS_MULTIPLE = 1.2
-STARTING_TEMPERATURE = 273.15
-FEATURE_DISTANCE_WEIGHT = 1.
-STEP_DIVISOR = 10.
+TEMPERATURE = 273.15
 TENSORBOARD = False
 MAX_STEPS = 420
 # gif parameters
-GIF_STYLE = "spheres"
 IMAGE_SIZE = 256
-N_MOVIES = 1
 # agent
 D_FEATURES = 7
 D_OUT = 3
@@ -76,6 +70,48 @@ def trace_function(fn, *args):
     return y
 
 
+@tf.function
+def parse_item(example):
+    context_features = {'id': tf.io.FixedLenFeature([], dtype=tf.string)}
+    sequence_features = {'target': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
+    context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
+    target = tf.reshape(tf.io.parse_tensor(sequence['target'][0], tf.float32), [-1, 10])
+    positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
+    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 7])
+    masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
+    masses = tf.concat([masses, masses, masses], 1)
+    n_atoms = tf.shape(positions)[0]
+    id_string = context['id']
+    return id_string, n_atoms, target, positions, features, masses
+
+
+def read_shards(datatype):
+    print("read_shards", datatype)
+    dataset_path = os.path.join('.', 'src', 'nurture', 'mol', 'datasets', 'tfrecord', datatype)
+    n_records = len(os.listdir(dataset_path))
+    filenames = [os.path.join(dataset_path, str(i) + '.tfrecord') for i in range(n_records)]
+    dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
+    dataset = dataset.map(map_func=parse_item, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.batch(1)
+    return n_records, dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+
+@tf.function
+def get_distances(a, b):  # L2
+    a, b = tf.squeeze(a, 0), tf.squeeze(b, 0)
+    return B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)
+
+
+def get_loss(target_distances, current):
+    # print("self.target", self.target)
+    current = get_distances(current, current)
+    # print("current", current)
+    return tf.keras.losses.MAE(target_distances, current)
+
+
 @skopt.utils.use_named_args(dimensions=dimensions)
 def trial(**kwargs):
     global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp
@@ -90,33 +126,65 @@ def trial(**kwargs):
     optimizer = tf.keras.optimizers.Adam(lr, amsgrad=True)
     writer = tf.summary.create_file_writer(log_dir)
 
-    def run_episodes(env):
+    @tf.function
+    def run_episode(target, positions, features, masses):
+        print("tracing run_episode")
+        current = tf.concat([positions, features], -1)
+        target_distances = get_distances(target, target)
+        total_forces = tf.zeros_like(positions)
+        velocities = tf.zeros_like(positions)
+        forces = tf.zeros_like(positions)
+        initial_loss = tf.reduce_sum(get_loss(target_distances, current))
+        loss = 0.
+        stop = 1.2 * initial_loss
+        for step in tf.range(MAX_STEPS):
+            with tf.GradientTape() as tape:
+                forces = agent(current) / masses
+                total_forces = total_forces + forces
+                velocities = velocities + forces
+                noise = tf.random.truncated_normal(tf.shape(positions), stddev=(0.001 * TEMPERATURE))
+                positions = positions + velocities + noise
+                current = tf.concat([positions, features], -1)
+                loss = get_loss(target_distances, positions)
+            gradients = tape.gradient([loss, tf.abs(total_forces), tf.abs(forces)], agent.trainable_weights)
+            optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+            ema.apply(agent.weights)
+            loss = tf.reduce_sum(loss)
+            tf.print(step, loss, stop)
+            new_stop = loss * 1.2
+            if step < 1:
+                initial_loss = loss
+                stop = new_stop
+            if new_stop < stop:
+                stop = new_stop
+            elif step > 0 and (loss > stop or loss != loss):
+                break
+        change = ((loss - initial_loss) / initial_loss) * 100.
+        return change if not tf.math.is_nan(change) else 420.
+
+    @tf.function
+    def train(dataset):
         print("tracing train")
-        changes = None
-        episode = 0
+        changes = 0.
         change = 0.
-        while episode < EPISODES_PER_TASK and env.protein_number < env.proteins_in_dataset:
-            current = env.reset()
-            loss = 0.
-            for step in tf.range(MAX_STEPS):
-                with tf.GradientTape() as tape:
-                    forces = agent(current)
-                    current, loss, done, change = env.step(forces)
-                tf.print(loss)
-                gradients = tape.gradient(loss, agent.trainable_weights)
-                optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
-                ema.apply(agent.weights)
-            tf.print('episode', episode, 'with', change, "% change (lower is better)")
+        for episode, (id_string, n_atoms, target, positions, features, masses) in dataset.enumerate():
+            with tf.device('/gpu:0'):
+                change = run_episode(target, positions, features, masses)
+            tf.print('episode', episode + 1, 'protein', id_string,
+                     'with', n_atoms, 'atoms',
+                     change, "% change (lower is better)")
             tf.summary.scalar('change', change)
-            if changes is not None:
-                changes = tf.concat([changes, change], 0)
+            if episode < 1:
+                changes = tf.expand_dims(change, 0)
+            elif episode == 1:
+                changes = tf.stack(changes, tf.expand_dims(change))
             else:
-                changes = change
-            episode = episode + 1
+                changes = tf.concat([changes, tf.expand_dims(change, 0)], 0)
+            if episode >= EPISODES_PER_TASK:
+                break
         return changes
 
-    # with tf.device('/gpu:0'):
-    changes = run_episodes(no_gif_env)
+    changes = train(proteins)
 
     median = tf.reduce_mean(changes)
     stddev = tf.reduce_var(changes)
@@ -131,7 +199,7 @@ def trial(**kwargs):
         agent.summary()
         averages = [ema.average(weight).numpy() for weight in agent.weights]
         agent.set_weights(averages)
-        run_episodes()
+        # TODO: MAKE GIFS HERE
         tf.saved_model.save(agent, os.path.join(log_dir, trial_name + ".h5"))
         best_trial = trial_name
         best = objective
@@ -161,7 +229,7 @@ def trial(**kwargs):
 
 
 def experiment():
-    global log_dir, no_gif_env, gif_env
+    global log_dir, proteins
     log_dir = os.path.join('.', 'runs', str(time.time()))
 
     # if TENSORBOARD:
@@ -180,8 +248,7 @@ def experiment():
     # except Exception as e:
         # print(e)
 
-    no_gif_env = gym.make("MolEnvNoGifs-v0")
-    gif_env = gym.make("MolEnvGifs-v0")
+    n_protein_records, proteins = read_shards("cif")
 
     results = skopt.gp_minimize(trial, dimensions, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[])
     print(results)

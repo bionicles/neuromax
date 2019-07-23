@@ -69,7 +69,6 @@ class MolEnv(gym.Env):
 
     # @tf.function
     def step_tfrecord(self, forces):
-        print("FORCES!", forces)
         loss, done, change = self.common_step(forces)
         return self.current, loss, done, change
 
