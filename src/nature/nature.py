@@ -225,5 +225,5 @@ def get_agent(trial_number, hp, d_in=10, d_out=3):
     differentiate(hp)
     screenshot(G, hp.recursions + 1)
     model = make_model()
-    [print(item) for item in hp.items]
+    [print(item) for item in hp.items()]
     return model, str(datetime.now()).replace(" ", "_")
