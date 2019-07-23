@@ -15,7 +15,7 @@ B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
 TEMP_PATH = "../../archive/temp"
 stddev = 273 * 0.001
-
+DTYPE = tf.float32
 
 class MolEnv(gym.Env):
     """Handle molecular folding and docking tasks."""
@@ -41,7 +41,8 @@ class MolEnv(gym.Env):
     # @tf.function
     def reset_tfrecord(self):
         self.protein_number = self.protein_number + 1
-        id_string, n_atoms, target, positions, features, masses = self.dataset.take(1)
+        id_string, n_atoms, target, positions, features, masses = self.dataset.take(1).__iter__().__next__()
+        print(id_string, n_atoms, target, positions, features, masses)
         self.common_prepare(id_string, n_atoms, target, positions, features, masses)
         return self.current
 
@@ -78,7 +79,7 @@ class MolEnv(gym.Env):
         self.velocities = self.velocities + forces
         noise = tf.random.truncated_normal(tf.shape(self.positions), stddev=stddev)
         self.positions = self.positions + self.velocities + noise
-        self.current = tf.concat(self.positions, self.features)
+        self.current = tf.concat([self.positions, self.features], -1)
         loss = self.get_loss()
         loss = tf.reduce_sum(loss)
         new_stop = loss * 1.2
