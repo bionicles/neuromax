@@ -3,18 +3,8 @@
 import tensorflow as tf
 import networkx as nx
 import random
-from conv_kernel import NoisyDropConnectDense, SelfAttention, KernelConvSet
+from .conv_kernel import NoisyDropConnectDense, SelfAttention, KernelConvSet
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
-
-MIN_LAYERS, MAX_LAYERS = 3, 3
-MIN_NODES, MAX_NODES = 1, 3
-P_INSERT = 0.8
-STEPS = 2
-
-dense_appear = 0.3
-conv2d_appear = 0.7
-MIN_FILTER, MAX_FILTER = 4, 12
-KERNEL_SIZE = 3
 
 IMAGE_PATH = "../../archive/nets"
 IMAGE_SIZE = "1024x512"

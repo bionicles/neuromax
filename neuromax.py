@@ -11,7 +11,7 @@ import math
 import time
 import gym
 import os
-from src.nature.conv_kernel import get_agent
+from src.nature.nature import get_agent
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # os.environ['TF_XLA_FLAGS'] = '--tf_xla_cpu_global_jit=true'
 import tensorflow as tf
@@ -47,24 +47,30 @@ N_MOVIES = 1
 # agent
 D_FEATURES = 7
 D_OUT = 3
+MIN_LAYERS, MAX_LAYERS = 3, 3
+MIN_NODES, MAX_NODES = 1, 3
+P_INSERT = 0.8
+STEPS = 2
+
+dense_appear = 0.3
+conv2d_appear = 0.7
+MIN_FILTER, MAX_FILTER = 4, 12
+KERNEL_SIZE = 3
 dimensions = [
-    skopt.space.Integer(1, 4, name='p_blocks'),
-    skopt.space.Categorical(['p_conv_deep', 'p_conv_wide_deep'], name='p'),
-    skopt.space.Integer(2, 3, name='p_layers'),
-    skopt.space.Integer(65, 1024, name='p_units'),
+    skopt.space.Integer(1, 4, name='min_layers'),
+    skopt.space.Integer(4, 8, name='max_layers'),
+    skopt.space.Integer(1, 4, name='min_filters'),
+    skopt.space.Integer(4, 8, name='max_filters'),
+    skopt.space.Integer(1, 4, name='min_nodes'),
+    skopt.space.Integer(4, 8, name='max_nodes'),
+    skopt.space.Integer(1, 4, name='recursions'),
+    skopt.space.Categorical(['deep', 'wide_deep'], name='kernel_type'),
+    skopt.space.Integer(2, 4, name='k_layers'),
+    skopt.space.Integer(64, 127, name='min_units'),
+    skopt.space.Integer(128, 512, name='max_units'),
     skopt.space.Real(0.001, 0.1, name='stddev'),
-    skopt.space.Categorical(['first', 'all'], name='norm'),
     skopt.space.Real(0.00001, 0.01, name='lr'),
     skopt.space.Integer(10, 10000000, name='decay')]
-hyperpriors = [
-    2,  # pair_blocks
-    'p_conv_wide_deep',  # pair block type
-    2,  # pair_layers
-    4096,  # pair_units,
-    0.02,  # stddev
-    'all',  # norm
-    0.004,  # lr
-    10000000]  # decay_steps
 
 
 def trace_function(fn, *args):
@@ -185,8 +191,7 @@ def experiment():
     no_gif_env = gym.make("MolEnvNoGifs-v0")
     gif_env = gym.make("MolEnvGifs-v0")
 
-    x0 = hyperpriors
-    results = skopt.gp_minimize(trial, dimensions, x0=x0, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[])
+    results = skopt.gp_minimize(trial, dimensions, verbose=True, acq_func=ACQUISITION_FUNCTION, callback=[])
     print(results)
 
 
