@@ -3,13 +3,18 @@
 import tensorflow as tf
 import networkx as nx
 import random
-
+from conv_kernel import NoisyDropConnectDense, SelfAttention, KernelConvSet
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
 MIN_LAYERS, MAX_LAYERS = 3, 3
 MIN_NODES, MAX_NODES = 1, 3
 P_INSERT = 0.8
 STEPS = 2
+
+dense_appear = 0.3
+conv2d_appear = 0.7
+MIN_FILTER, MAX_FILTER = 4, 12
+KERNEL_SIZE = 3
 
 IMAGE_PATH = "../../archive/nets"
 IMAGE_SIZE = "1024x512"
@@ -123,15 +128,37 @@ def differentiate():
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = "dense"
-            activation = random.choice(["linear", "tanh"])
-            label = f"{node_type} {activation}"
-            print(f"setting {node_id} to {label}")
-            node[1]["activation"] = activation
-            node[1]["node_type"] = node_type
-            node[1]["label"] = label
-            node[1]["color"] = "yellow" if activation is "linear" else "green"
-            node[1]["units"] = 64
+            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', 'LSTM', 'BatchNormalization'])  # 'KernelConvSet'])
+            if node_type is 'conv1D':
+                activation = random.choice(["relu", "sigmoid"])
+                label = f"{node_type} {activation}"
+                filters, kernel_size = random.randint(MIN_FILTER, MAX_FILTER), KERNEL_SIZE
+                print(f"setting {node_id} to {label}")
+                node[1]["activation"] = activation
+                node[1]["node_type"] = node_type
+                node[1]["filters"] = filters
+                node[1]["kernel_size"] = kernel_size
+                node[1]["label"] = label
+                node[1]["color"] = "yellow" if activation is "relu" else "green"
+
+            if node_type is 'dense' or "NoisyDropConnectDense" or "LSTM":
+                activation = random.choice(["linear", "tanh", "sigmoid"])
+                label = f"{node_type} {activation}"
+                print(f"setting {node_id} to {label}")
+                node[1]["activation"] = activation
+                node[1]["node_type"] = node_type
+                node[1]["label"] = label
+                node[1]["color"] = "yellow" if activation is "linear" else "green"
+                node[1]["units"] = 64
+                if node_type is "NoisyDropConnectDense":
+                    node[1]["stddev"] = 0.01
+            if node_type is 'SelfAttention':
+                node[1]["d_features"] = 10
+            if node_type is 'BatchNormalization':
+                node[1]["node_type"] = node_type
+# if node_type is "KernelConvSet":
+#     node[1]["d_features"] = 10
+#     node[1]["d_output"] = 5
 
 
 def make_model():
@@ -161,8 +188,7 @@ def get_output(id):
         parent_ids = list(G.predecessors(id))
         if node_type is not "input":
             inputs = [get_output(parent_id) for parent_id in parent_ids]
-            inputs = L.Concatenate(1)(inputs) if len(inputs) > 1 else inputs[0]
-            print("got inputs", inputs, "for node", node)
+            inputs = L.Concatenate()(inputs) if len(inputs) > 1 else inputs[0]
             if node_type is "output":
                 return inputs
             op = build_op(id)
@@ -183,14 +209,24 @@ def build_op(id):
     node_type = node["node_type"]
     if node_type is "dense":
         op = L.Dense(node['units'], node['activation'])
+    if node_type is "conv1D":
+        op = L.Conv1D(node['filters'], node['kernel_size'], activation=node['activation'])
     if node_type is "input":
         op = L.Input(node['input_shape'])
+    if node_type is "NoisyDropConnectDense":
+        op = NoisyDropConnectDense(units=node['units'], activation=node['activation'], stddev=node['stddev'])
+    if node_type is 'SelfAttention':
+        op = SelfAttention(node['d_features'])
+    if node_type is 'LSTM':
+        op = L.LSTM(node["units"], node['activation'], return_sequences=True)
+    if node_type is 'BatchNormalization':
+        op = L.BatchNormalization()
     G.node[id]['op'] = op
     print("built op", op)
     return op
 
 
-def main():
+def get_agent():
     """Test all functions in this file."""
     global G
     G = get_initial_graph(tasks)
@@ -198,8 +234,8 @@ def main():
     recurse()
     differentiate()
     screenshot(G, STEPS + 1)
-    make_model()
+    return make_model()
 
 
 if __name__ == "__main__":
-    main()
+    get_agent()

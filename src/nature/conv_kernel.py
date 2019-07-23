@@ -4,7 +4,6 @@
 import tensorflow as tf
 # from make_dataset import load
 # from pymol import cmd, util
-
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
 
@@ -48,16 +47,15 @@ class KernelConvSet(L.Layer):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), atoms), axis=0), atoms)
 
 
-class ConvAttention(L.Layer):
+class SelfAttention(L.Layer):
     def __init__(self, d_features):
-        super(ConvAttention, self).__init__()
-        atom = K.Input((d_features,))
-        atoms = K.Input((None, d_features,))
-        output = L.Attention()(atom, atoms)
-        self.attention = K.Model([atom, atoms], output)
+        super(SelfAttention, self).__init__()
+        atoms = K.Input((None, d_features))
+        output = L.Attention()([atoms, atoms])
+        self.attention = K.Model(atoms, output)
 
-    def call(self, atoms):
-        return tf.map_fn(lambda atom: self.attention(atom, atoms), atoms)
+    def call(self, inputs):
+        return self.attention([inputs, inputs])
 
 
 def get_kernel(block_type, layers, units, hp, d_features, d_output, N):
@@ -78,7 +76,7 @@ def get_kernel(block_type, layers, units, hp, d_features, d_output, N):
         d13 = L.Subtract()([atom1, atom3])
         concat = L.Concatenate()([d12, d13, atom1, atom2, atom3])
     output = get_layer(units, hp)(concat)
-    for layer in range(layers - 1):
+    for i in range(layers - 1):
         output = get_layer(units, hp)(output)
     if 'wide' in block_type:
         output = L.Concatenate(-1)([inputs, output])
@@ -94,7 +92,7 @@ def get_block(block_type, hp, features, prior):
         block_output = L.Concatenate(-1)([features, prior])
         d_output = prior.shape[-1]
     d_features = block_output.shape[-1]
-    block_output = ConvAttention(d_features)(block_output)  # convolutional attention
+    block_output = SelfAttention(d_features)(block_output)  # convolutional attention
     block_output = KernelConvSet(hp, d_features, d_output, 3)(block_output)  # triplet convolution
     block_output = KernelConvSet(hp, d_features, d_output, 2)(block_output)  # pair convolution
     block_output = KernelConvSet(hp, d_features, d_output, 1)(block_output)  # atomic convolution
