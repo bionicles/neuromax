@@ -206,7 +206,7 @@ def build_op(id, inputs=None):
         hp = node['hp']
         d_in = inputs.shape[-1]
         d_out = random.randint(hp.min_units, hp.max_units)
-        N = random.randint(1, 3)
+        N = random.randint(1, 2) # SET SIZE -- TODO: DEBUG 3
         op = KConvSet(hp, d_in, d_out, N)
     if node_type is 'SelfAttention':
         op = SelfAttention()

@@ -45,9 +45,7 @@ class KConvSet(L.Layer):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: self.kernel([a1, a2]), atoms), axis=0), atoms)
 
     def call_for_three(self, atoms):
-        return tf.map_fn(lambda a1:
-            tf.reduce_sum(tf.map_fn(lambda a2:
-                tf.reduce_sum(tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), axis=0), atoms), axis=0), atoms)
+        return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.reduce_sum(tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), axis=0), atoms), axis=0), atoms)
 
 
 class SelfAttention(L.Layer):
