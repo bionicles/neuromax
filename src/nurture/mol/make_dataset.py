@@ -28,8 +28,9 @@ except Exception as e:
     print('os.path.makedirs(tfrecord_path) exception', e)
 NUM_FILES = len(os.listdir(os.path.join(tfrecord_path, 'cif')))
 PREVIOUS_PROTEINS = ITEMS_PER_SHARD * NUM_FILES
-# crystals -> https://github.com/materialsvirtuallab/megnet!! TODO!
 
+# MOAR DATA:
+# crystals -> https://github.com/materialsvirtuallab/megnet
 # quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
 # chem -> datasets/rxn: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-rxn.tar.gz
 # chem -> datasets/mol: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-mol.tar.gz
@@ -263,4 +264,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
