@@ -127,7 +127,6 @@ def differentiate(hp):
         if node_data["shape"] is "square":
             node_type = np.random.choice(['conv1d', 'dense', 'attn', 'gru', 'k_conv'], 1, p=hp.layer_distribution)
             node_type = str(node_type.item(0))
-            print("node type", node_type, type(node_type))
             activation = "tanh"
             label = f"{node_type} {activation}"
             node[1]["activation"] = activation
@@ -197,7 +196,6 @@ def build_op(id, inputs=None):
     node = G.node[id]
     log('build op for', node)
     node_type = node["node_type"]
-    print("making a", node_type)
     if node_type == "conv1d":
         print("if statement triggered", node_type)
         op = L.SeparableConv1D(node['filters'], node['kernel_size'], activation=node['activation'])
@@ -217,7 +215,7 @@ def build_op(id, inputs=None):
     if node_type == 'attn':
         op = SelfAttention()
     if node_type == 'gru':
-        op = L.GRU(node["units"], node['activation'], return_sequences=True)
+        op = L.Bidirectional(L.GRU(node["units"], node['activation'], return_sequences=True), merge_mode='concat')
     log("built op", op)
     G.node[id]['op'] = op
     return op
