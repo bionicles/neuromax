@@ -11,7 +11,7 @@ B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 IMAGE_PATH = "archive/nets"
 IMAGE_SIZE = "1024x512"
 DTYPE = tf.float32
-DEBUG = True
+DEBUG = False
 
 
 def log(*args):
@@ -197,16 +197,12 @@ def build_op(id, inputs=None):
     log('build op for', node)
     node_type = node["node_type"]
     if node_type == "conv1d":
-        print("if statement triggered", node_type)
         op = L.SeparableConv1D(node['filters'], node['kernel_size'], activation=node['activation'])
     if node_type == "input":
-        print("if statement triggered", node_type)
         op = L.Input(node['input_shape'])
     if node_type == "dense":
-        print("if statement triggered", node_type)
         op = NoisyDropConnectDense(units=node['units'], activation=node['activation'], stddev=node['stddev'])
     if node_type == "k_conv":
-        print("if statement triggered", node_type)
         hp = node['hp']
         d_in = inputs.shape[-1]
         d_out = random.randint(hp.min_units, hp.max_units)

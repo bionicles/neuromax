@@ -110,9 +110,7 @@ def get_distances(a, b):  # L2
 
 
 def get_loss(target_distances, current):
-    # print("self.target", self.target)
     current = get_distances(current, current)
-    # print("current", current)
     return tf.keras.losses.MAE(target_distances, current)
 
 
