@@ -1,9 +1,10 @@
 # nature.py - bion and kamel, july 2019
 # why?: experiment faster with recursive neural architecture search
+from datetime import datetime
 import tensorflow as tf
 import networkx as nx
+import numpy as np
 import random
-from datetime import datetime
 from .conv_kernel import NoisyDropConnectDense, SelfAttention, KConvSet
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
@@ -124,21 +125,23 @@ def differentiate(hp):
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = random.choice(['sepconv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', "GRU", "KConvSet"])
+            node_type = np.random.choice(['conv1d', 'dense', 'attn', 'gru', 'k_conv'], 1, p=hp.layer_distribution)
+            node_type = str(node_type.item(0))
+            print("node type", node_type, type(node_type))
             activation = "tanh"
             label = f"{node_type} {activation}"
             node[1]["activation"] = activation
             node[1]["node_type"] = node_type
             node[1]["label"] = label
             log(f"setting {node_id} to {label}")
-            if node_type is 'sepconv1D':
+            if node_type == 'conv1d':
                 node[1]["filters"] = random.randint(hp.min_filters, hp.max_filters)
                 node[1]["kernel_size"] = 1
-            if node_type is 'dense' or "NoisyDropConnectDense" or "GRU":
+            if node_type in ['dense', "gru"]:
                 node[1]["units"] = random.randint(hp.min_units, hp.max_units)
-            if node_type is "NoisyDropConnectDense":
+            if node_type == "dense":
                 node[1]["stddev"] = hp.stddev
-            if node_type is "KConvSet":
+            if node_type == "k_conv":
                 node[1]['hp'] = hp
 
 
@@ -194,28 +197,29 @@ def build_op(id, inputs=None):
     node = G.node[id]
     log('build op for', node)
     node_type = node["node_type"]
-    if node_type is "dense":
-        op = L.Dense(node['units'], node['activation'])
-    if node_type is "sepconv1D":
+    print("making a", node_type)
+    if node_type == "conv1d":
+        print("if statement triggered", node_type)
         op = L.SeparableConv1D(node['filters'], node['kernel_size'], activation=node['activation'])
-    if node_type is "input":
+    if node_type == "input":
+        print("if statement triggered", node_type)
         op = L.Input(node['input_shape'])
-    if node_type is "NoisyDropConnectDense":
+    if node_type == "dense":
+        print("if statement triggered", node_type)
         op = NoisyDropConnectDense(units=node['units'], activation=node['activation'], stddev=node['stddev'])
-    if node_type is "KConvSet":
+    if node_type == "k_conv":
+        print("if statement triggered", node_type)
         hp = node['hp']
         d_in = inputs.shape[-1]
         d_out = random.randint(hp.min_units, hp.max_units)
-        N = random.randint(1, 2) # SET SIZE -- TODO: DEBUG 3
+        N = random.randint(1, 3)
         op = KConvSet(hp, d_in, d_out, N)
-    if node_type is 'SelfAttention':
+    if node_type == 'attn':
         op = SelfAttention()
-    if node_type is 'GRU':
+    if node_type == 'gru':
         op = L.GRU(node["units"], node['activation'], return_sequences=True)
-    if node_type is 'BatchNormalization':
-        op = L.BatchNormalization()
-    G.node[id]['op'] = op
     log("built op", op)
+    G.node[id]['op'] = op
     return op
 
 

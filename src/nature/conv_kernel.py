@@ -63,7 +63,7 @@ def get_kernel(kernel_type, layers, min_units, max_units, stddev, d_in, d_out, N
     print("GET KERNEL", kernel_type, layers, min_units, max_units, stddev, d_in, d_out, N)
     atom1 = K.Input((d_in, ))
     if N is 1:
-        inputs = atom1
+        inputs = [atom1]
         concat = atom1
     elif N is 2:
         atom2 = K.Input((d_in, ))

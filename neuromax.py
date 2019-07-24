@@ -47,6 +47,12 @@ dimensions = [
     skopt.space.Integer(1, 2, name='min_nodes'),
     skopt.space.Integer(1, 2, name='max_nodes'),
 
+    skopt.space.Real(0, 1, name="p_dense"),
+    skopt.space.Real(0, 1, name="p_conv"),
+    skopt.space.Real(0, 1, name="p_gru"),
+    skopt.space.Real(0, 1, name="p_attn"),
+    skopt.space.Real(0, 1, name="p_k_conv"),
+
     skopt.space.Integer(1, 4, name='min_filters'),
     skopt.space.Integer(8, 16, name='max_filters'),
     skopt.space.Categorical(['deep', 'wide_deep'], name='k_type'),
@@ -115,6 +121,9 @@ def trial(**kwargs):
     global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
+    layer_distribution = [hp.p_dense, hp.p_conv, hp.p_attn, hp.p_gru, hp.p_k_conv]
+    total = sum(layer_distribution)
+    hp.layer_distribution = [x / total for x in layer_distribution]
     lr = tf.cast(hp.lr, tf.float32)
 
     agent, trial_name = get_agent(trial_number, hp, d_in=D_FEATURES, d_out=D_OUT)
