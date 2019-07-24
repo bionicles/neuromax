@@ -6,17 +6,28 @@ import random
 import shutil
 import csv
 import os
-
 DATASETS_ROOT = os.path.join('.', 'src', 'nurture', 'mol', 'datasets')
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
 TEMP_PATH = "archive/temp"
 SHARDS_PER_DATASET = 100000
 ITEMS_PER_SHARD = 16
+DELETE_RECORDS = False
 DTYPE = tf.float32
 MIN_UNDOCK_DISTANCE, MAX_UNDOCK_DISTANCE = -64, 64
 P_UNDOCK = 1
 P_UNFOLD = 0.5
 MAX_ATOMS = 6000
+
+tfrecord_path = os.path.join(DATASETS_ROOT, 'tfrecord')
+if DELETE_RECORDS:
+    shutil.rmtree(os.path.join(tfrecord_path))
+try:
+    os.mkdir(tfrecord_path)
+    os.mkdir(os.path.join(tfrecord_path, 'cif'))
+except Exception as e:
+    print('os.path.makedirs(tfrecord_path) exception', e)
+NUM_FILES = len(os.listdir(os.path.join(tfrecord_path, 'cif')))
+PREVIOUS_PROTEINS = ITEMS_PER_SHARD * NUM_FILES
 # crystals -> https://github.com/materialsvirtuallab/megnet!! TODO!
 
 # quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
@@ -66,7 +77,7 @@ def load_proteins(file_name):
     with open(csv_path) as csvfile:
         reader = csv.reader(csvfile)
         rows = [row for row in reader]
-        return [item.strip() for item in rows[0]]
+        return [item.strip() for item in rows[0][PREVIOUS_PROTEINS:]]
 
 
 def undock(chainsOrNames, type):
@@ -210,12 +221,13 @@ def make_example(id, target, positions, features, masses):
 
 
 def write_shards(tfrecord_path):
+    global PREVIOUS_PROTEINS
     problems = []
     proteins = load_proteins(CSV_FILE_NAME)
     for dataset, type in [(proteins, "cif")]:
-        shard_number, item_number = 0, 0
+        shard_number = NUM_FILES-1 if NUM_FILES > 0 else 0
         for dataset_item in ProgIter(dataset, verbose=1):
-            if item_number % ITEMS_PER_SHARD is 0:
+            if PREVIOUS_PROTEINS % ITEMS_PER_SHARD is 0:
                 try:
                     writer.close()
                 except Exception as e:
@@ -233,7 +245,7 @@ def write_shards(tfrecord_path):
                 if data:
                     writer.write(data)
                     print('wrote', dataset_item, 'to', shard_path)
-                    item_number += 1
+                    PREVIOUS_PROTEINS += 1
                 else:
                     print('skipped writing', dataset_item, 'to', shard_path)
             except Exception as e:
@@ -246,18 +258,9 @@ def write_shards(tfrecord_path):
 
 
 def main():
-    tfrecord_path = os.path.join(DATASETS_ROOT, 'tfrecord')
-    try:
-        shutil.rmtree(tfrecord_path)
-    except Exception as e:
-        print('shutil.rmtree(tfrecord_path) exception', e)
-    try:
-        os.mkdir(tfrecord_path)
-    except Exception as e:
-        print('os.path.makedirs(tfrecord_path) exception', e)
-
     write_shards(tfrecord_path)
 
 
 if __name__ == '__main__':
     main()
+
