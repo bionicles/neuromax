@@ -124,7 +124,7 @@ def differentiate(hp):
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = random.choice(['sepconv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', "GRU", "KConvSet"])
+            node_type = random.choice(['sepconv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', "GRU", "KConvSet", "Bidirectional"])
             activation = "tanh"
             label = f"{node_type} {activation}"
             node[1]["activation"] = activation
@@ -134,7 +134,7 @@ def differentiate(hp):
             if node_type is 'sepconv1D':
                 node[1]["filters"] = random.randint(hp.min_filters, hp.max_filters)
                 node[1]["kernel_size"] = 1
-            if node_type is 'dense' or "NoisyDropConnectDense" or "GRU":
+            if node_type is 'dense' or "NoisyDropConnectDense" or "GRU" or "Bidirectional":
                 node[1]["units"] = random.randint(hp.min_units, hp.max_units)
             if node_type is "NoisyDropConnectDense":
                 node[1]["stddev"] = hp.stddev
@@ -214,6 +214,8 @@ def build_op(id, inputs=None):
         op = L.GRU(node["units"], node['activation'], return_sequences=True)
     if node_type is 'BatchNormalization':
         op = L.BatchNormalization()
+    if node_type is 'Bidirectional':
+        op = L.Bidirectional(L.GRU(node["units"], node['activation'], return_sequences=True), merge_mode='concat')
     G.node[id]['op'] = op
     log("built op", op)
     return op
