@@ -3,8 +3,7 @@
 
 import tensorflow as tf
 import random
-# from make_dataset import load
-# from pymol import cmd, util
+
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
 
@@ -89,34 +88,34 @@ def get_kernel(kernel_type, layers, min_units, max_units, stddev, d_in, d_out, N
     return K.Model(inputs, output)
 
 
-def get_block(block_type, hp, features, prior):
-    if isinstance(prior, int):
-        block_output = features
-        d_output = prior
-    else:
-        block_output = L.Concatenate(-1)([features, prior])
-        d_output = prior.shape[-1]
-    d_features = block_output.shape[-1]
-    block_output = SelfAttention(d_features)(block_output)  # convolutional attention
-    block_output = KernelConvSet(hp, d_features, d_output, 3)(block_output)  # triplet convolution
-    block_output = KernelConvSet(hp, d_features, d_output, 2)(block_output)  # pair convolution
-    block_output = KernelConvSet(hp, d_features, d_output, 1)(block_output)  # atomic convolution
-    if hp.norm is 'all':
-        block_output = L.BatchNormalization()(block_output)
-    if not isinstance(prior, int):
-        block_output = L.Add()([prior, block_output])
-    return block_output
-
-
-def get_agent(trial_number, hp, d_in, d_out):
-    print('\ntrial', trial_number, '\n')
-    [print(f'   {k}={v}') for k, v in hp.items()]
-    positions = K.Input((None, 3))
-    features = K.Input((None, 7))
-    stacked = L.Concatenate()([positions, features])
-    normalized = L.BatchNormalization()(stacked) if hp.norm is not 'none' else stacked
-    output = get_block(hp.p, hp, normalized, d_out)
-    for i in range(hp.p_blocks - 1):
-        output = get_block(hp.p, hp, normalized, output)
-    trial_name = f'{trial_number}-' + '-'.join(f'{k}.{round(v, 4) if isinstance(v, float) else v}' for k, v in hp.items())
-    return K.Model([positions, features], output, name=trial_name), trial_name
+# def get_block(block_type, hp, features, prior):
+#     if isinstance(prior, int):
+#         block_output = features
+#         d_output = prior
+#     else:
+#         block_output = L.Concatenate(-1)([features, prior])
+#         d_output = prior.shape[-1]
+#     d_features = block_output.shape[-1]
+#     block_output = SelfAttention(d_features)(block_output)  # convolutional attention
+#     block_output = KernelConvSet(hp, d_features, d_output, 3)(block_output)  # triplet convolution
+#     block_output = KernelConvSet(hp, d_features, d_output, 2)(block_output)  # pair convolution
+#     block_output = KernelConvSet(hp, d_features, d_output, 1)(block_output)  # atomic convolution
+#     if hp.norm is 'all':
+#         block_output = L.BatchNormalization()(block_output)
+#     if not isinstance(prior, int):
+#         block_output = L.Add()([prior, block_output])
+#     return block_output
+#
+#
+# def get_agent(trial_number, hp, d_in, d_out):
+#     print('\ntrial', trial_number, '\n')
+#     [print(f'   {k}={v}') for k, v in hp.items()]
+#     positions = K.Input((None, 3))
+#     features = K.Input((None, 7))
+#     stacked = L.Concatenate()([positions, features])
+#     normalized = L.BatchNormalization()(stacked) if hp.norm is not 'none' else stacked
+#     output = get_block(hp.p, hp, normalized, d_out)
+#     for i in range(hp.p_blocks - 1):
+#         output = get_block(hp.p, hp, normalized, output)
+#     trial_name = f'{trial_number}-' + '-'.join(f'{k}.{round(v, 4) if isinstance(v, float) else v}' for k, v in hp.items())
+#     return K.Model([positions, features], output, name=trial_name), trial_name

@@ -73,7 +73,6 @@ class MolEnv(gym.Env):
         loss = tf.reduce_sum(loss)
         new_stop = loss * 1.2
         done = False
-        tf.print(loss, self.stop)
         if new_stop < self.stop:
             self.stop = new_stop
         elif loss > self.stop or loss != loss:
@@ -100,7 +99,6 @@ class MolEnv(gym.Env):
         np.array([self.move_atom(xyz) for xyz in tf.squeeze(self.velocities, 0).numpy()])
 
     def make_gif(self):
-        print("begin annotating screenshots")
         original_image_path = os.path.join(TEMP_PATH, "0.png")
         now = str(datetime.now()).replace(" ", "_")
         id_string = str(self.id_string.numpy().decode())
@@ -109,7 +107,6 @@ class MolEnv(gym.Env):
                 continue
             path = os.path.join(TEMP_PATH, f)
             images_list = [original_image_path, path]
-            print(images_list)
             imgs = [Image.open(i) for i in images_list]
             min_img_shape = sorted([(np.sum(i.size), i.size) for i in imgs])[0][1]
             img = np.hstack((np.asarray(i.resize(min_img_shape, Image.ANTIALIAS)) for i in imgs ))
@@ -123,8 +120,6 @@ class MolEnv(gym.Env):
             draw.text(((x-x2) / 2, 10), model_id_string, (255, 255, 255))
             draw.text(((x-x3) / 2, y - 42), pdb_id_string, (255, 255, 255))
             img.save(os.path.join(TEMP_PATH, f))
-        print("done annotating screenshots")
-        print("begin generating gif")
         dirfiles = []
         images = []
         for filename in os.listdir(TEMP_PATH):
@@ -133,18 +128,15 @@ class MolEnv(gym.Env):
         dirfiles.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
         for dirfile in dirfiles[1:]:
             filepath = os.path.join(TEMP_PATH, dirfile)
-            print("processing ", filepath)
             images.append(imageio.imread(filepath))
-        gif_name = f'{self.protein_number}-{id_string}-{now}.gif'
+        gif_name = f'{now}-{self.protein_number}-{id_string}.gif'
         gif_path = os.path.join("archive", "gifs", gif_name)
         imageio.mimsave(gif_path, images)
         print("done generating gif at ", gif_path)
         shutil.rmtree(TEMP_PATH)
 
 def take_screenshot(step):
-    print("")
     screenshot_path = f"{TEMP_PATH}/{step}.png"
-    print(f"SCREENSHOT!, {screenshot_path}")
     cmd.zoom("all")
     cmd.png(screenshot_path, width=256, height=256)
 

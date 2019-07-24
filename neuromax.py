@@ -27,7 +27,7 @@ best_args = []
 best = 12345678900
 # search
 ACQUISITION_FUNCTION = 'EIps'  # 'gp-hedge' if you don't care about speed
-EPISODES_PER_TASK = 2
+EPISODES_PER_TASK = 100
 N_RANDOM_STARTS = 10
 N_CALLS = 1000
 # episodes
@@ -36,7 +36,7 @@ TEMPERATURE = 273.15
 TENSORBOARD = False
 MAX_STEPS = 420
 # gif parameters
-N_MOVIES = 0
+N_MOVIES = 2
 # agent
 D_FEATURES = 7
 D_OUT = 3
@@ -53,12 +53,14 @@ dimensions = [
     skopt.space.Real(0, 1, name="p_conv"),
     skopt.space.Real(0, 1, name="p_gru"),
     skopt.space.Real(0, 1, name="p_luong"),
-    skopt.space.Real(0, 1, name="p_k_conv"),
+    skopt.space.Real(0, 1, name="p_k_conv1"),
+    skopt.space.Real(0, 1, name="p_k_conv2"),
+    skopt.space.Real(0, 1, name="p_k_conv3"),
 
     skopt.space.Integer(1, 2, name='min_filters'),
     skopt.space.Integer(3, 8, name='max_filters'),
     skopt.space.Categorical(['deep', 'wide_deep'], name='k_type'),
-    skopt.space.Categorical(['conv1d', 'k_conv', 'dense'], name='last_layer'),
+    skopt.space.Categorical(['conv1d', 'dense', "k_conv1", "k_conv2", "k_conv3"], name='last_layer'),
     skopt.space.Integer(1, 2, name='k_layers'),
     skopt.space.Integer(1, 8, name='min_units'),
     skopt.space.Integer(9, 32, name='max_units'),
@@ -122,7 +124,7 @@ def trial(**kwargs):
     global run_step, best, best_trial, best_args, trial_number, writer, ema, agent, optimizer, hp
     start_time = time.perf_counter()
     hp = AttrDict(kwargs)
-    layer_distribution = [hp.p_dense, hp.p_conv, hp.p_luong, hp.p_gru, hp.p_k_conv]
+    layer_distribution = [hp.p_dense, hp.p_conv, hp.p_luong, hp.p_gru, hp.p_k_conv1, hp.p_k_conv2, hp.p_k_conv3]
     total = sum(layer_distribution)
     hp.layer_distribution = [x / total for x in layer_distribution]
     lr = tf.cast(hp.lr, tf.float32)

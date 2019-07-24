@@ -125,7 +125,7 @@ def differentiate(hp):
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = np.random.choice(['conv1d', 'dense', 'luong', 'gru', 'k_conv'], 1, p=hp.layer_distribution)
+            node_type = np.random.choice(['conv1d', 'dense', 'luong', 'gru', 'k_conv1', 'k_conv2', 'k_conv3'], 1, p=hp.layer_distribution)
             node_type = str(node_type.item(0))
             activation = "tanh"
             label = f"{node_type}"
@@ -141,7 +141,7 @@ def differentiate(hp):
                 node[1]["units"] = random.randint(hp.min_units, hp.max_units)
             if node_type == "dense":
                 node[1]["stddev"] = hp.stddev
-            if node_type == "k_conv":
+            if "k_conv" in node_type:
                 node[1]['hp'] = hp
 
 
@@ -151,9 +151,9 @@ def make_model(hp):
     model_inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
     if hp.last_layer == "conv1d":
         model_outputs = L.SeparableConv1D(3, 1, activation="tanh")(model_outputs)
-    elif hp.last_layer == "k_conv":
+    elif "k_conv" in hp.last_layer:
         d_in = model_outputs.shape[-1]
-        N = random.randint(1, 3)
+        N = int(hp.last_layer[-1])
         print("getting last_layer k_conv", d_in, N)
         model_outputs = KConvSet(hp, d_in, 3, N)(model_outputs)
     else:
@@ -211,11 +211,11 @@ def build_op(id, inputs=None):
         op = L.Input(node['input_shape'])
     if node_type == "dense":
         op = NoisyDropConnectDense(units=node['units'], activation=node['activation'], stddev=node['stddev'])
-    if node_type == "k_conv":
+    if "k_conv" in node_type:
         hp = node['hp']
         d_in = inputs.shape[-1]
         d_out = random.randint(hp.min_units, hp.max_units)
-        N = random.randint(1, 3)
+        N = int(node_type[-1])
         op = KConvSet(hp, d_in, d_out, N)
     if node_type in ["luong", "bahdanau"]:
         op = SelfAttention(node_type)
