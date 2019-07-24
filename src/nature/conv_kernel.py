@@ -2,6 +2,7 @@
 # why?: build a resnet with kernel and attention set convolutions
 
 import tensorflow as tf
+import random
 # from make_dataset import load
 # from pymol import cmd, util
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
@@ -22,14 +23,14 @@ class NoisyDropConnectDense(L.Dense):
         return self.activation(tf.nn.bias_add(B.dot(x, tf.nn.dropout(kernel, 0.5)), bias))
 
 
-def get_layer(units, hp):
-    return NoisyDropConnectDense(units, activation="tanh", stddev=hp.stddev)
+def get_layer(units, stddev):
+    return NoisyDropConnectDense(units, activation="tanh", stddev=stddev)
 
 
-class KernelConvSet(L.Layer):
-    def __init__(self, hp, d_features, d_output, N):
-        super(KernelConvSet, self).__init__()
-        self.kernel = get_kernel(hp.p, hp.p_layers, hp.p_units, hp, d_features, d_output, N)
+class KConvSet(L.Layer):
+    def __init__(self, hp, d_in, d_out, N):
+        super(KConvSet, self).__init__()
+        self.kernel = get_kernel(hp.k_type, hp.k_layers, hp.min_units, hp.max_units, hp.stddev, d_in, d_out, N)
         if N is 1:
             self.call = self.call_for_one
         elif N is 2:
@@ -44,13 +45,15 @@ class KernelConvSet(L.Layer):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: self.kernel([a1, a2]), atoms), axis=0), atoms)
 
     def call_for_three(self, atoms):
-        return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), atoms), axis=0), atoms)
+        return tf.map_fn(lambda a1:
+            tf.reduce_sum(tf.map_fn(lambda a2:
+                tf.reduce_sum(tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), axis=0), atoms), axis=0), atoms)
 
 
 class SelfAttention(L.Layer):
-    def __init__(self, d_features):
+    def __init__(self):
         super(SelfAttention, self).__init__()
-        atoms = K.Input((None, d_features))
+        atoms = K.Input((None, None))
         output = L.Attention()([atoms, atoms])
         self.attention = K.Model(atoms, output)
 
@@ -58,29 +61,33 @@ class SelfAttention(L.Layer):
         return self.attention([inputs, inputs])
 
 
-def get_kernel(block_type, layers, units, hp, d_features, d_output, N):
-    atom1 = K.Input((d_features, ))
+def get_kernel(kernel_type, layers, min_units, max_units, stddev, d_in, d_out, N):
+    print("GET KERNEL", kernel_type, layers, min_units, max_units, stddev, d_in, d_out, N)
+    atom1 = K.Input((d_in, ))
     if N is 1:
-        inputs = [atom1]
+        inputs = atom1
         concat = atom1
     elif N is 2:
-        atom2 = K.Input((d_features, ))
+        atom2 = K.Input((d_in, ))
         inputs = [atom1, atom2]
         d12 = L.Subtract()([atom1, atom2])
-        concat = L.Concatenate()([d12, atom1, atom2])
+        concat = L.Concatenate(-1)([d12, atom1, atom2])
     elif N is 3:
-        atom2 = K.Input((d_features, ))
-        atom3 = K.Input((d_features, ))
+        atom2 = K.Input((d_in, ))
+        atom3 = K.Input((d_in, ))
         inputs = [atom1, atom2, atom3]
         d12 = L.Subtract()([atom1, atom2])
         d13 = L.Subtract()([atom1, atom3])
-        concat = L.Concatenate()([d12, d13, atom1, atom2, atom3])
-    output = get_layer(units, hp)(concat)
+        concat = L.Concatenate(-1)([d12, d13, atom1, atom2, atom3])
+    output = get_layer(random.randint(min_units, max_units), stddev)(concat)
     for i in range(layers - 1):
-        output = get_layer(units, hp)(output)
-    if 'wide' in block_type:
-        output = L.Concatenate(-1)([inputs, output])
-    output = get_layer(d_output, hp)(output)
+        output = get_layer(random.randint(min_units, max_units), stddev)(output)
+    if 'wide' in kernel_type:
+        stuff_to_concat = inputs + [output]
+        output = L.Concatenate(-1)(stuff_to_concat)
+    output = get_layer(d_out, stddev)(output)
+    print("INPUTS", inputs)
+    print("OUTPUTS", output)
     return K.Model(inputs, output)
 
 

@@ -4,12 +4,18 @@ import tensorflow as tf
 import networkx as nx
 import random
 from datetime import datetime
-from .conv_kernel import NoisyDropConnectDense, SelfAttention, KernelConvSet
+from .conv_kernel import NoisyDropConnectDense, SelfAttention, KConvSet
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
 IMAGE_PATH = "archive/nets"
 IMAGE_SIZE = "1024x512"
 DTYPE = tf.float32
+DEBUG = True
+
+
+def log(*args):
+    if DEBUG:
+        print(*args)
 
 tasks = {
     "Molecules-v0": {
@@ -19,7 +25,6 @@ tasks = {
         "action_space": ("forces", (None, 3), tf.float32)
     },
 }
-
 
 def get_initial_graph(tasks):
     """Create a graph connecting task inputs to outputs with a black box."""
@@ -41,7 +46,7 @@ def get_initial_graph(tasks):
 
 def screenshot(G, step):
     """Make a png image of a graph."""
-    print("SCREENSHOT", step)
+    log("SCREENSHOT", step)
     A = nx.nx_agraph.to_agraph(G)
     A.graph_attr.update(rankdir="LR")
     A.draw(path=f"{IMAGE_PATH}/{step}.png", prog="dot")
@@ -54,14 +59,14 @@ def get_regulon(hp, parent=None, layers=None):
     ids = []
     for layer_number in range(num_layers):
         n_nodes = random.randint(hp.min_nodes, hp.max_nodes)
-        print(f"add layer {layer_number} with {n_nodes} nodes")
+        log(f"add layer {layer_number} with {n_nodes} nodes")
         ids_of_nodes_in_this_layer = []
         for node_number in range(n_nodes):
             if parent:
                 node_id = f"{parent}.{layer_number}.{node_number}"
             else:
                 node_id = f"{layer_number}.{node_number}"
-            print(f"add node {node_id}")
+            log(f"add node {node_id}")
             M.add_node(node_id, label="", style="filled", shape="square", color="black")
             ids_of_nodes_in_this_layer.append(node_id)
         ids.append(ids_of_nodes_in_this_layer)
@@ -71,7 +76,7 @@ def get_regulon(hp, parent=None, layers=None):
                 continue
             for predecessor_node_id in predecessor_node_ids:
                 for successor_node_id in successor_node_ids:
-                    print(f"{predecessor_node_id}--->{successor_node_id}")
+                    log(f"{predecessor_node_id}--->{successor_node_id}")
                     M.add_edge(predecessor_node_id, successor_node_id)
     return M, ids
 
@@ -86,14 +91,14 @@ def insert_motif(node_id, hp):
     successors = new_ids[0]
     for predecessor in predecessors:
         for successor in successors:
-            print(f"{predecessor}--->{successor}")
+            log(f"{predecessor}--->{successor}")
             G.add_edge(predecessor, successor)
     # connect the last layer of the motif to the node's successors
     predecessors = new_ids[-1]
     successors = list(G.successors(node_id))
     for predecessor in predecessors:
         for successor in successors:
-            print(f"{predecessor}--->{successor}")
+            log(f"{predecessor}--->{successor}")
             G.add_edge(predecessor, successor)
     G.remove_node(node_id)
 
@@ -108,7 +113,7 @@ def recurse(hp):
                     if random.random() < hp.p_insert:
                         insert_motif(node[0], hp)
             except Exception as e:
-                print('exception in recurse', e)
+                log('exception in recurse', e)
         screenshot(G, f"{step+1}")
 
 
@@ -119,36 +124,22 @@ def differentiate(hp):
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = random.choice(['conv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention'])  # 'KernelConvSet'])
-            if node_type is 'conv1D':
-                activation = "tanh"
-                label = f"{node_type} {activation}"
-                filters, kernel_size = random.randint(hp.min_filters, hp.max_filters), 1
-                print(f"setting {node_id} to {label}")
-                node[1]["activation"] = activation
-                node[1]["node_type"] = node_type
-                node[1]["filters"] = filters
-                node[1]["kernel_size"] = kernel_size
-                node[1]["label"] = label
-                node[1]["color"] = "yellow" if activation is "relu" else "green"
-
-            if node_type is 'dense' or "NoisyDropConnectDense" or "LSTM":
-                activation = "tanh"
-                label = f"{node_type} {activation}"
-                print(f"setting {node_id} to {label}")
-                node[1]["activation"] = activation
-                node[1]["node_type"] = node_type
-                node[1]["label"] = label
-                node[1]["color"] = "yellow" if activation is "linear" else "green"
-                node[1]["units"] = 64
-                if node_type is "NoisyDropConnectDense":
-                    node[1]["stddev"] = 0.01
-            if node_type is 'SelfAttention':
-                node[1]["d_features"] = 10
-
-# if node_type is "KernelConvSet":
-#     node[1]["d_features"] = 10
-#     node[1]["d_output"] = 5
+            node_type = random.choice(['sepconv1D', 'dense', 'NoisyDropConnectDense', 'SelfAttention', "GRU", "KConvSet"])
+            activation = "tanh"
+            label = f"{node_type} {activation}"
+            node[1]["activation"] = activation
+            node[1]["node_type"] = node_type
+            node[1]["label"] = label
+            log(f"setting {node_id} to {label}")
+            if node_type is 'sepconv1D':
+                node[1]["filters"] = random.randint(hp.min_filters, hp.max_filters)
+                node[1]["kernel_size"] = 1
+            if node_type is 'dense' or "NoisyDropConnectDense" or "GRU":
+                node[1]["units"] = random.randint(hp.min_units, hp.max_units)
+            if node_type is "NoisyDropConnectDense":
+                node[1]["stddev"] = hp.stddev
+            if node_type is "KConvSet":
+                node[1]['hp'] = hp
 
 
 def make_model():
@@ -170,7 +161,7 @@ def get_output(id):
     global G
     node = G.node[id]
     node_type = node["node_type"]
-    print('get output for', node)
+    log('get output for', node)
     if node["output"] is not None:
         return node["output"]
     elif node_type is "input" and node["op"] is not None:
@@ -182,43 +173,49 @@ def get_output(id):
             inputs = L.Concatenate()(inputs) if len(inputs) > 1 else inputs[0]
             if node_type is "output":
                 return inputs
-            op = build_op(id)
-            print("got op", op)
+            op = build_op(id, inputs)
+            log("got op", op)
             output = op(inputs)
         else:
             output = build_op(id)
-        output = L.BatchNormalization()(output)
         try:
             output = L.Add()([inputs, output])
         except Exception as e:
-            print("failed to make residual connection at node", id, e)
+            log("failed to make residual connection at node", id, e)
+        output = L.BatchNormalization()(output)
         G.node[id]["output"] = output
-        print("got output", output)
+        log("got output", output)
         return output
 
 
-def build_op(id):
+def build_op(id, inputs=None):
     """Make the keras operation to be executed at a given node."""
     global G
     node = G.node[id]
-    print('build op for', node)
+    log('build op for', node)
     node_type = node["node_type"]
     if node_type is "dense":
         op = L.Dense(node['units'], node['activation'])
-    if node_type is "conv1D":
-        op = L.Conv1D(node['filters'], node['kernel_size'], activation=node['activation'])
+    if node_type is "sepconv1D":
+        op = L.SeparableConv1D(node['filters'], node['kernel_size'], activation=node['activation'])
     if node_type is "input":
         op = L.Input(node['input_shape'])
     if node_type is "NoisyDropConnectDense":
         op = NoisyDropConnectDense(units=node['units'], activation=node['activation'], stddev=node['stddev'])
+    if node_type is "KConvSet":
+        hp = node['hp']
+        d_in = inputs.shape[-1]
+        d_out = random.randint(hp.min_units, hp.max_units)
+        N = random.randint(1, 3)
+        op = KConvSet(hp, d_in, d_out, N)
     if node_type is 'SelfAttention':
-        op = SelfAttention(node['d_features'])
-    if node_type is 'LSTM':
-        op = L.LSTM(node["units"], node['activation'], return_sequences=True)
+        op = SelfAttention()
+    if node_type is 'GRU':
+        op = L.GRU(node["units"], node['activation'], return_sequences=True)
     if node_type is 'BatchNormalization':
         op = L.BatchNormalization()
     G.node[id]['op'] = op
-    print("built op", op)
+    log("built op", op)
     return op
 
 
@@ -231,5 +228,5 @@ def get_agent(trial_number, hp, d_in=10, d_out=3):
     differentiate(hp)
     screenshot(G, hp.recursions + 1)
     model = make_model()
-    [print(item) for item in hp.items()]
+    [log(item) for item in hp.items()]
     return model, str(datetime.now()).replace(" ", "_")
