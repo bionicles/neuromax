@@ -29,7 +29,6 @@ def get_layer(units, stddev):
 
 class KConvSet(L.Layer):
     def __init__(self, hp, d_in, d_out, N):
-        super(KConvSet, self).__init__()
         self.kernel = get_kernel(hp.k_type, hp.k_layers, hp.min_units, hp.max_units, hp.stddev, d_in, d_out, N)
         if N is 1:
             self.call = self.call_for_one
@@ -37,6 +36,7 @@ class KConvSet(L.Layer):
             self.call = self.call_for_two
         elif N is 3:
             self.call = self.call_for_three
+        super(KConvSet, self).__init__()
 
     def call_for_one(self, atoms):
         return tf.map_fn(lambda a1: self.kernel(a1), atoms)
@@ -49,10 +49,13 @@ class KConvSet(L.Layer):
 
 
 class SelfAttention(L.Layer):
-    def __init__(self):
+    def __init__(self, node_type):
         super(SelfAttention, self).__init__()
         atoms = K.Input((None, None))
-        output = L.Attention()([atoms, atoms])
+        if node_type == "luong":
+            output = L.Attention()([atoms, atoms])
+        else:
+            output = L.AdditiveAttention()([atoms, atoms])
         self.attention = K.Model(atoms, output)
 
     def call(self, inputs):
@@ -60,7 +63,6 @@ class SelfAttention(L.Layer):
 
 
 def get_kernel(kernel_type, layers, min_units, max_units, stddev, d_in, d_out, N):
-    print("GET KERNEL", kernel_type, layers, min_units, max_units, stddev, d_in, d_out, N)
     atom1 = K.Input((d_in, ))
     if N is 1:
         inputs = [atom1]
@@ -84,8 +86,6 @@ def get_kernel(kernel_type, layers, min_units, max_units, stddev, d_in, d_out, N
         stuff_to_concat = inputs + [output]
         output = L.Concatenate(-1)(stuff_to_concat)
     output = get_layer(d_out, stddev)(output)
-    print("INPUTS", inputs)
-    print("OUTPUTS", output)
     return K.Model(inputs, output)
 
 

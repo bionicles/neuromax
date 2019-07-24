@@ -11,7 +11,7 @@ B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 IMAGE_PATH = "archive/nets"
 IMAGE_SIZE = "1024x512"
 DTYPE = tf.float32
-DEBUG = False
+DEBUG = True
 
 
 def log(*args):
@@ -125,10 +125,11 @@ def differentiate(hp):
         node[1]["output"] = None
         node[1]["op"] = None
         if node_data["shape"] is "square":
-            node_type = np.random.choice(['conv1d', 'dense', 'attn', 'gru', 'k_conv'], 1, p=hp.layer_distribution)
+            node_type = np.random.choice(['conv1d', 'dense', 'luong', 'gru', 'k_conv'], 1, p=hp.layer_distribution)
             node_type = str(node_type.item(0))
             activation = "tanh"
-            label = f"{node_type} {activation}"
+            label = f"{node_type}"
+            node[1]['color'] = "white"
             node[1]["activation"] = activation
             node[1]["node_type"] = node_type
             node[1]["label"] = label
@@ -144,11 +145,19 @@ def differentiate(hp):
                 node[1]['hp'] = hp
 
 
-def make_model():
+def make_model(hp):
     """Build the keras model described by a graph."""
-    model_outputs = [get_output(id) for id in list(G.predecessors("sink"))]
+    model_outputs = [get_output(id) for id in list(G.predecessors("sink"))][0]
     model_inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
-    model_outputs = L.SeparableConv1D(3, 1, activation="tanh")(model_outputs[0])
+    if hp.last_layer == "conv1d":
+        model_outputs = L.SeparableConv1D(3, 1, activation="tanh")(model_outputs)
+    elif hp.last_layer == "k_conv":
+        d_in = model_outputs.shape[-1]
+        N = random.randint(1, 3)
+        print("getting last_layer k_conv", d_in, N)
+        model_outputs = KConvSet(hp, d_in, 3, N)(model_outputs)
+    else:
+        model_outputs = NoisyDropConnectDense(3, "tanh", stddev=hp.stddev)(model_outputs)
     model = K.Model(model_inputs, model_outputs)
     model.summary()
     K.utils.plot_model(model, "archive/nets/model.png", rankdir="LR")
@@ -208,8 +217,8 @@ def build_op(id, inputs=None):
         d_out = random.randint(hp.min_units, hp.max_units)
         N = random.randint(1, 3)
         op = KConvSet(hp, d_in, d_out, N)
-    if node_type == 'attn':
-        op = SelfAttention()
+    if node_type in ["luong", "bahdanau"]:
+        op = SelfAttention(node_type)
     if node_type == 'gru':
         op = L.Bidirectional(L.GRU(node["units"], node['activation'], return_sequences=True), merge_mode='concat')
     log("built op", op)
@@ -220,11 +229,12 @@ def build_op(id, inputs=None):
 def get_agent(trial_number, hp, d_in=10, d_out=3):
     """Build a model given hyperparameters and input/output shapes."""
     global G
+    [log(item) for item in hp.items()]
     G = get_initial_graph(tasks)
     screenshot(G, '0')
     recurse(hp)
     differentiate(hp)
     screenshot(G, hp.recursions + 1)
-    model = make_model()
+    model = make_model(hp)
     [log(item) for item in hp.items()]
     return model, str(datetime.now()).replace(" ", "_")

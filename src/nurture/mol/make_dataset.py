@@ -9,7 +9,7 @@ import os
 
 DATASETS_ROOT = os.path.join('.', 'src', 'nurture', 'mol', 'datasets')
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
-TEMP_PATH = "../../archive/temp"
+TEMP_PATH = "archive/temp"
 SHARDS_PER_DATASET = 100000
 ITEMS_PER_SHARD = 16
 DTYPE = tf.float32
@@ -46,19 +46,17 @@ elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 
 
 def take_screenshot(step):
-    print("")
     screenshot_path = f"{TEMP_PATH}/{step}.png"
-    cmd.ray()
-    # cmd.zoom("all")
-    cmd.center("all")
-    cmd.png(screenshot_path)
+    print(f"SCREENSHOT!, {screenshot_path}")
+    cmd.zoom("all")
+    cmd.png(screenshot_path, width=256, height=256)
 
 
 def prepare_pymol():
     cmd.clip("near", 100000)
     cmd.clip("slab", 100000)
     cmd.clip("far", -100000)
-    cmd.show("surface")
+    cmd.show("spheres")
     cmd.unpick()
     util.cbc()
 
@@ -169,18 +167,18 @@ def load(type, id, screenshot=False):
     model = cmd.get_model('all', 1)
     target = get_positions(model)
     # make the model inputs
-    if type == 'cif':
-        print('type is cif')
-        if screenshot:
-            prepare_pymol()
-            take_screenshot("0", )
-        chains = cmd.get_chains('all')
-        if random.random() < P_UNDOCK:
-            print('undocking')
-            undock(chains, type)
-        if random.random() < P_UNFOLD:
-            print('unfolding')
-            unfold(chains)
+    if screenshot:
+        prepare_pymol()
+        take_screenshot("0")
+    chains = cmd.get_chains('all')
+    if len(chains) == 0:
+        return False
+    if random.random() < P_UNDOCK:
+        print('undocking')
+        undock(chains, type)
+    if random.random() < P_UNFOLD:
+        print('unfolding')
+        unfold(chains)
     model = cmd.get_model('all', 1)
     positions = get_positions(model)
     if positions.shape[0] > MAX_ATOMS:
