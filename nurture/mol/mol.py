@@ -11,13 +11,113 @@ import os
 
 from src.nurture.mol.make_dataset import load, load_proteins
 from src.nurture.spaces import Ragged
-from neuromax import parse_item
 
-B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
+K = tf.keras
+B, L = K.backend, K.layers
+
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
 TEMP_PATH = "archive/temp"
 stddev = 273 * 0.001
 DTYPE = tf.float32
+
+
+@tf.function
+def parse_item(example):
+    context_features = {'id': tf.io.FixedLenFeature([], dtype=tf.string)}
+    sequence_features = {'target': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
+    context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
+    target = tf.reshape(tf.io.parse_tensor(sequence['target'][0], tf.float32), [-1, 10])
+    positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
+    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 7])
+    masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
+    masses = tf.concat([masses, masses, masses], 1)
+    n_atoms = tf.shape(positions)[0]
+    id_string = context['id']
+    return id_string, n_atoms, target, positions, features, masses
+
+
+def read_shards(datatype):
+    print("read_shards", datatype)
+    dataset_path = os.path.join('.', 'src', 'nurture', 'mol', 'datasets', 'tfrecord', datatype)
+    n_records = len(os.listdir(dataset_path))
+    filenames = [os.path.join(dataset_path, str(i) + '.tfrecord') for i in range(n_records)]
+    dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
+    dataset = dataset.map(map_func=parse_item, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.batch(1)
+    dataset = dataset.shuffle(n_records)
+    return n_records, dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+
+@tf.function
+def get_distances(a, b):  # L2
+    a, b = tf.squeeze(a, 0), tf.squeeze(b, 0)
+    return B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)
+
+
+def get_loss(target_distances, current):
+    current = get_distances(current, current)
+    return tf.keras.losses.MAE(target_distances, current)
+
+
+def get_trainer(agent, optimizer):
+    @tf.function
+    def run_mol_episode(element):
+        print("tracing run_episode")
+        current = tf.concat([positions, features], -1)
+        target_distances = get_distances(target, target)
+        total_forces = tf.zeros_like(positions)
+        velocities = tf.zeros_like(positions)
+        forces = tf.zeros_like(positions)
+        initial_loss = 0.
+        loss = 0.
+        stop = 0.
+        for step in tf.range(MAX_STEPS):
+            with tf.GradientTape() as tape:
+                forces = agent(current) / masses
+                total_forces = total_forces + forces
+                velocities = velocities + forces
+                noise = tf.random.truncated_normal(
+                    tf.shape(positions), stddev=(0.001 * TEMPERATURE))
+                positions = positions + velocities + noise
+                current = tf.concat([positions, features], -1)
+                loss = get_loss(target_distances, positions)
+            gradients = tape.gradient(
+                [loss, tf.abs(total_forces), tf.abs(forces)],
+                agent.trainable_weights)
+            optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+            ema.apply(agent.weights)
+            loss = tf.reduce_sum(loss)
+            new_stop = loss * 1.2
+            if step < 1:
+                initial_loss = loss
+                stop = new_stop
+            if new_stop < stop:
+                stop = new_stop
+            elif step > 0 and (loss > stop or loss != loss):
+                break
+        change = ((loss - initial_loss) / initial_loss) * 100.
+        return change if not tf.math.is_nan(change) else 420.
+
+    @tf.function
+    def mol_trainer(dataset):
+        print("tracing train")
+        changes = []
+        change = 0.
+        for episode_number, element in dataset.enumerate():
+            with tf.device('/gpu:0'):
+                change = run_episode(element)
+            tf.print(f'episode {episode_number + 1}
+                     {change} % change in loss')
+            tf.summary.scalar('change', change)
+            changes = tf.concat([changes, [change]], -1)
+            if episode >= EPISODES_PER_TASK - 1:
+                break
+        return changes
+
+    return mol_trainer
 
 
 class MolEnv(gym.Env):

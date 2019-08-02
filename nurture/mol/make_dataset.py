@@ -112,6 +112,7 @@ def unfold_index(name, index):
         f'({name}`{index})',                              # this CA
         f'last (({name}`{index}) extend 1 and name C)',   # this C
         f'last (({name}`{index}) extend 2 and name N)']   # next N
+    print(selection_string_array)
     try:
         cmd.set_dihedral(selection_string_array[0],
                          selection_string_array[1],
