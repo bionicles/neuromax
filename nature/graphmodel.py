@@ -1,4 +1,4 @@
-# nature.py - bion and kamel, july 2019
+# graphmodel.py - bion and kamel, july 2019
 # why?: experiment faster with recursive neural architecture search
 
 # more options for layers:
@@ -20,7 +20,7 @@ import random
 import gym
 import os
 
-from .conv_kernel import Transformer, KConvSet, get_kernel
+from .bricks import Transformer, KConvSet, get_kernel
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 InstanceNormalization = tfa.layers.InstanceNormalization
 
@@ -629,6 +629,7 @@ def prepare_tasks(tasks):
     del tasks
     return prepared
 
+
 def get_agent(trial_number, hp, tasks):
     """Build a model given hyperparameters and input/output shapes."""
     global G
@@ -647,7 +648,7 @@ def get_agent(trial_number, hp, tasks):
 
     [log(item) for item in hp.items()]
     prepared = prepare_tasks(tasks)
-    G = get_initial_graph(tasks)
+    G = get_initial_graph(prepared)
 
     screenshot(G, '0')
     recurse(hp)

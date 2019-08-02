@@ -5,6 +5,8 @@ import gym
 
 
 class String(gym.Space):
+    """ A space of strings """
+
     def __init__(
                 self,
                 length=None,
@@ -32,7 +34,10 @@ class String(gym.Space):
     def __repr__(self):
         return "String()"
 
+
 class Ragged(gym.Space):
+    """ space with variable (None) dimensions for shape """
+
     def __init__(self, shape, variance=1., mean=0., high=None, low=None, dtype=np.float32):
         self.shape = shape
         self.dtype = dtype
@@ -75,6 +80,8 @@ class Ragged(gym.Space):
 
 
 class List(gym.Space):
+    """ hold list of subspaces """
+
     def __init__(self, subspace, length=None):
         self.subspace = subspace
         self.length = length
@@ -99,7 +106,7 @@ class List(gym.Space):
             return False
 
     def __repr__(self):
-        if self.length == None:
+        if self.length is None:
             return "List({})".format(self.subspace.__repr__())
         else:
             return "List({}, length={})".format(self.subspace.__repr__(), self.length)

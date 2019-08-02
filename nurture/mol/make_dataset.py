@@ -29,12 +29,6 @@ except Exception as e:
 NUM_FILES = len(os.listdir(os.path.join(tfrecord_path, 'cif')))
 PREVIOUS_PROTEINS = ITEMS_PER_SHARD * NUM_FILES
 
-# MOAR DATA:
-# crystals -> https://github.com/materialsvirtuallab/megnet
-# quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
-# chem -> datasets/rxn: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-rxn.tar.gz
-# chem -> datasets/mol: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-mol.tar.gz
-# cif datasets use datasets/csv lists of RCSB cif ids
 
 elements = {'h': 1, 'he': 2, 'li': 3, 'be': 4, 'b': 5, 'c': 6, 'n': 7, 'o': 8,
 'f': 9, 'ne': 10, 'na': 11, 'mg': 12, 'al': 13, 'si': 14, 'p': 15, 's': 16,

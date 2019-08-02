@@ -9,7 +9,7 @@ import skopt
 import time
 import os
 
-from nature.nature import get_agent
+from nature.agent import Agent
 from nurture.nurture import train
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # os.environ['TF_XLA_FLAGS'] = '--tf_xla_cpu_global_jit=true'
@@ -134,7 +134,8 @@ def trial(**kwargs):
     start_time = time.perf_counter()
     # we get the agent
     hp = AttrDict(kwargs)
-    agent, trial_name = get_agent(trial_number, hp, tasks)
+    trial_time = str(datetime.now()).replace(" ", "_")
+    agent = Agent(hp, tasks, name=trial_time)
     # we get the optimizer and ema
     lr = tf.cast(hp.lr, tf.float32)
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)

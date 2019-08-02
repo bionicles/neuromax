@@ -4,17 +4,20 @@ import tensorflow as tf
 from progiter import ProgIter
 from imageio import imread
 import pandas as pd
-import time
 SHARDS_PER_DATASET = 100000
 ITEMS_PER_SHARD = 16
 DELETE_RECORDS = True
-images_path = "./datasets/CLEVR_v1.0/images"
-data_path = "./datasets/CLEVR_v1.0/questions/CLEVR_train_questions.json"
-tfrecord_path = "datasets/tfrecords"
-NUM_FILES = len(os.listdir(os.path.join(tfrecord_path, "clevr")))
+task_path = os.path.dirname(os.path.realpath('__file__'))
+images_path = os.path.join(task_path, "CLEVR_v1.0", "images")
+data_path = os.path.join(task_path, "CLEVR_v1.0", "questions", "CLEVR_train_questions.json")
+tfrecord_path = os.path.join(task_path, "tfrecords")
+NUM_FILES = len(os.listdir(tfrecord_path))
 PREVIOUS_IMAGE = ITEMS_PER_SHARD * NUM_FILES
 
-answers = ['0','1','2','3','4','5','6','7','8','9','10','blue','brown','cube','cyan','cylinder','gray','green','large','metal','no','purple','red','rubber','small','sphere','yellow','yes']
+answers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'blue',
+           'brown', 'cube', 'cyan', 'cylinder', 'gray', 'green', 'large',
+           'metal', 'no', 'purple', 'red', 'rubber', 'small', 'sphere',
+           'yellow', 'yes']
 
 
 def load_data(image_data):
@@ -61,10 +64,9 @@ def write_shards(tfrecord_path):
             writer.close()
         except Exception as e:
             print('writer.close() exception', e)
-        shard_path = os.path.join(tfrecord_path, 'clevr')
-        if not os.path.exists(shard_path):
-            os.makedirs(shard_path)
-        shard_path = os.path.join(shard_path, str(shard_number) + '.tfrecord')
+        if not os.path.exists(tfrecord_path):
+            os.makedirs(tfrecord_path)
+        shard_path = os.path.join(tfrecord_path, str(shard_number) + '.tfrecord')
         writer = tf.io.TFRecordWriter(shard_path, 'ZLIB')
         shard_number += 1
         if shard_number > SHARDS_PER_DATASET:
