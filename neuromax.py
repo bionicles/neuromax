@@ -48,8 +48,8 @@ tasks = [
         {
             "type": "dataset",
             "name": "mol",
-            "inputs": [AttrDict({"shape": (None, 10), "dtype": tf.float32})],
-            "outputs": [AttrDict({"shape": (None, 3), "dtype": tf.float32})]
+            "inputs": [AttrDict({"shape": ("n_atoms", 10), "dtype": tf.float32})],
+            "outputs": [AttrDict({"shape": ("n_atoms", 3), "dtype": tf.float32})]
         },
         # {
         #     "type": "dataset",
