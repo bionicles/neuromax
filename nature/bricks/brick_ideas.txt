@@ -1,0 +1,23 @@
+brick injector
+deformable conv
+capsules
+reservoirs
+differentiable neural dictionary
+add, subtract, multiply, divide
+PRELU/RRELU
+mixed convolutions
+tfp layers
+tfp distributions
+tfp bijectors ?
+replay buffer (duh)
+tied-weight autoencoder?
+pooling (ugh)
+noise?
+optimization problems https://arxiv.org/pdf/1703.00443.pdf
+neural ode
+infinite set convolutions (recursion or np.indices)
+subpixel conv
+look at multiply layers ... like attention
+maxout
+RNNs could go back in
+could make the graphmodel a rnn cell to handle recurrent state ...

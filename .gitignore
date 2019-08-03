@@ -8,7 +8,6 @@ archive/runs/
 *.mpg
 *.gif
 *.rsmi
-*.txt
 *.tfrecord
 *.xyz
 *.cif

@@ -1,0 +1,73 @@
+MOAR DATA:
+
+TLDR: try Gardener's multiple intelligences x Pearl's ladder of causation
+
+grounded language learning:
+http://www.denizyuret.com/2018/12/grounded-language-learning-datasets.html
+
+molecular:
+crystals -> https://github.com/materialsvirtuallab/megnet
+quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389
+chem -> datasets/rxn: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-rxn.tar.gz
+chem -> datasets/mol: ftp://ftp.expasy.org/databases/rhea/ctfiles/rhea-mol.tar.gz
+cif datasets use datasets/csv lists of RCSB cif ids
+
+stuff from bion's metamage project:
+tasks = {
+    "GreedBotEnv-v0": {
+        "intelligence": "financial/fundamental/technical",
+        "goal": "design pair trades and predict outcomes"
+    },
+    # "TSPEnv-v0": {
+    #     "intelligence": "fluid intelligence",
+    #     "goal": "optimize a path"
+    # },
+    "DrawEnv-v0": {
+        "intelligence": "visual/artistic",
+        "goal": "generate patent drawings"
+    },
+    # "MusicEnv-v0": {
+    #     "intelligence": "musical",
+    #     "goal": "predict emotions and spectrograms of songs"
+    # },
+    # "NBackEnv-v0": {
+    #     "intelligence": "working memory",
+    #     "goal": "remember the recent past"
+    # },
+    "BipedalWalker-v2": {
+        "intelligence": "bodily-kinesthetic",
+        "goal": "learn to walk"
+    },
+    # "SatEnv-v0": {
+    #     "intelligence": "mathematical-logical",
+    #     "goal": "1. predict satisfiability 2. solve or prove"
+    # },
+    # "MontezumaRevenge-v0": {
+    #     "intelligence": "curiousity-exploration",
+    #     "goal": "avoid traps and find items"
+    # },
+    # "DockEnv-v0": {
+    #     "intelligence": "naturalistic",
+    #     "goal": "dock proteins"
+    # },
+    "FoldEnv-v0": {
+        "intelligence": "naturalistic",
+        "goal": "fold proteins"
+    },
+    "PairsEnv-v0": {
+        "intelligence": "scientific",
+        "goal": "identify causes and effects",
+    },
+    "VocabEnv-v0": {
+        "intelligence": "crystalline intelligence",
+        "goal": "define words correctly"
+    },
+    "SquadEnv-v0": {
+        "intelligence": "language/reading/writing",
+        "goal": "answer questions using wiki text"
+    },
+    "StoriesEnv-v0": {
+        "intelligence": "social/interpersonal",
+        "goal": "write stories, emotions, & motivations for characters"
+    },
+}
