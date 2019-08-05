@@ -18,7 +18,7 @@ answers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'blue',
 
 
 spacy.prefer_gpu()
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_vectors_web_lg")
 
 
 def get_onehot(answer):

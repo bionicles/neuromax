@@ -1,38 +1,5 @@
 import numpy as np
-import string
-import random
 import gym
-
-
-class String(gym.Space):
-    """ A space of strings """
-
-    def __init__(
-                self,
-                length=None,
-                min_length=1,
-                max_length=180,
-                min=32,
-                max=127
-            ):
-        self.length = length
-        self.min_length = min_length
-        self.max_length = max_length
-        self.letters = string.ascii_letters + " .,!-"
-
-    def sample(self):
-        length = random.randint(self.min_length, self.max_length)
-        string = ""
-        for i in range(length):
-            letter = random.choice(self.letters)
-            string += letter
-        return string
-
-    def contains(self, x):
-        return type(x) is "str" and len(x) > self.min and len(x) < self.max
-
-    def __repr__(self):
-        return "String()"
 
 
 class Ragged(gym.Space):
@@ -77,36 +44,3 @@ class Ragged(gym.Space):
 
     def __repr__(self):
         return "Array(shape={})".format(str(self.shape))
-
-
-class List(gym.Space):
-    """ hold list of subspaces """
-
-    def __init__(self, subspace, length=None):
-        self.subspace = subspace
-        self.length = length
-        self.list = []
-
-    def sample(self):
-        if self.length is None:
-            length = random.randint(0,3)
-        else:
-            length = self.length
-        sample = []
-        for i in range(length+1):
-            subsample = self.subspace.sample()
-            sample.append(subsample)
-        self.list = sample
-        return sample
-
-    def contains(self, x):
-        if x in self.list:
-            return True
-        else:
-            return False
-
-    def __repr__(self):
-        if self.length is None:
-            return "List({})".format(self.subspace.__repr__())
-        else:
-            return "List({}, length={})".format(self.subspace.__repr__(), self.length)

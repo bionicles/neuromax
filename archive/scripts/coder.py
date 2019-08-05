@@ -6,7 +6,7 @@ import gym
 
 class Coder:
     """stacked tied convolutional coder in numpy"""
-    
+
     def __init__(self, tasks):
         self.envs = [gym.make(task) for task in tasks]
         self.observations = [env.reset() for env in self.envs]

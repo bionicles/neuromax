@@ -1,57 +1,22 @@
-# graphmodel.py - bion and kamel, july 2019
-# why?: experiment faster with recursive neural architecture search
-
-# more options for layers:
-# Echo State Network: https://github.com/cameronosmith/Echo-State-Network/blob/master/EchoStateNetwork.py
-# Graph: https://github.com/CyberZHG/keras-gcn/blob/master/keras_gcn/layers.py / https://github.com/tkipf/keras-gcn/blob/master/kegra/layers/graph.py
-# Polymorphic: https://github.com/dip-scd/PolymorphicDense/blob/master/src/polymorphic_dense.py
-# MOE: https://github.com/eminorhan/mixture-of-experts/blob/master/DenseMoE.py
-# NALU: https://arxiv.org/pdf/1808.00508.pdf
-# MDN: https://github.com/cpmpercussion/keras-mdn-layer/blob/master/mdn/__init__.py
-import tensorflow_addons as tfa
-from attrdict import AttrDict
-from datetime import datetime
-from natsort import natsorted
-import tensorflow as tf
+# graph.py - bion
+# why?: improve observability with networkx graphs for phenotypes
 import networkx as nx
 import numpy as np
-import imageio
 import random
-import gym
 import os
 
-from .bricks import Transformer, KConvSet, get_kernel
-B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
-InstanceNormalization = tfa.layers.InstanceNormalization
-
-IMAGE_PATH = "./archive/nets"
-IMAGE_X, IMAGE_Y = 1024, 1024
-IMAGE_SIZE = f"{IMAGE_X}x{IMAGE_Y}"
-BRAND_Y = 64
-TRIALS_PER_MOVIE = 4
-MODELS_PER_TRIAL = 1
-MAKE_MOVIE = True
-DURATION = 1.  # / 60.
-ALWAYS_DECIMATE_IF_MORE_THAN = 64  # boxes
-CLEAN_UP = True
-DEBUG = True
+from .bricks.activations import clean_activation
+from helpers.safe_sample import safe_sample
+from helpers.debug import log
 
 
-def log(*args):
-    if DEBUG:
-        print(*args)
-
-
-def safe_sample(a, b):
-    try:
-        if a < b:
-            return random.randint(a, b)
-        elif b < a:
-            return random.randint(b, a)
-        else:
-            return a
-    except Exception as e:
-        return a
+def screenshot(G, folderpath, filename):
+    """Make a png image of a graph."""
+    imagepath = os.path.join(folderpath, "{filename}.png")
+    log(f"SCREENSHOT {imagepath} with {G.order()} nodes, {G.size()} edges")
+    A = nx.nx_agraph.to_agraph(G)
+    A.graph_attr.update()
+    A.draw(path=imagepath, prog="dot")
 
 
 def is_blacklisted(id):
@@ -73,14 +38,14 @@ def count_boxes():
     return len([node for node in list(G.nodes(data=True)) if node[1]["shape"] == "square"])
 
 
-def get_initial_graph(prepared, initial_boxes):
+def get_initial_graph(n_in, code_spec, n_out):
     """Create a graph connecting task inputs to outputs with a black box."""
     G = nx.MultiDiGraph()
 
     G.add_node("source", label="SOURCE", shape="cylinder", color="gold")
     G.add_node("sink", label="SINK", shape="cylinder", color="gold")
 
-    for task in prepared:
+    for task in tasks:
         task_source_key = f"{task.name}-source"
         G.add_node(task_source_key, label=task_source_key, shape="cylinder", color="gold")
         G.add_edge("source", task_source_key)
@@ -366,15 +331,17 @@ def mutate(hp):
     #     log("forced decimation!")
     #     decimate(0.2)
     else:
-        mutation = np.random.choice([recurse, decimate, connect, split_edges, insert_motif,
-                          add_edge, delete_edge, delete_node, split_edge, do_nothing],
-                         1, p=hp.mutation_distribution).item(0)
+        mutation = np.random.choice([
+            recurse, decimate, connect, split_edges, insert_motif, add_edge,
+            delete_edge, delete_node, split_edge, do_nothing], 1,
+            p=hp.mutation_distribution).item(0)
         if mutation in [recurse, insert_motif]:
             mutation(hp)
         else:
             mutation()
     if CLEAN_UP:
         clean_up()
+
 
 def differentiate(hp):
     """Assign ops and arguments to nodes."""
@@ -441,28 +408,6 @@ def differentiate(hp):
                 log("ERROR HANDLING FEEDBACK SHAPE:", e)
 
 
-def gaussian(x):
-    return K.exp(-K.pow(x, 2))
-
-
-def swish(x):
-    return (K.sigmoid(x) * x)
-
-
-def clean_activation(activation):
-    log("clean_activation", activation)
-    if activation == 'gaussian':
-        return gaussian
-    elif activation == 'swish':
-        return swish
-    elif activation == 'sin':
-        return tf.math.sin
-    elif activation == 'cos':
-        return tf.math.cos
-    else:
-        return activation
-
-
 def design_layers(hp, output_shape=None, act=None):
     n_layers = safe_sample(hp.min_k_layers, hp.max_k_layers)
     layers = []
@@ -484,176 +429,9 @@ def design_layers(hp, output_shape=None, act=None):
     return layers
 
 
-def make_model(hp):
-    """Build the keras model described by a graph."""
-    outputs = [get_output(id) for id in list(G.predecessors("sink"))]
-    inputs = [G.node[id]['op'] for id in list(G.successors('source'))]
-    outputs[0] = outputs[0] * hp.output_gain
-    return K.Model(inputs, outputs), inputs, outputs
-
-
-def get_output(id):
-    """
-    Get the output of a node in a computation graph.
-    Pull inputs from predecessors.
-    """
-    global G
-    node = G.node[id]
-    keys = node.keys()
-    node_type = node["node_type"]
-    log('get output for', node)
-    if node["output"] is not None:
-        return node["output"]
-    else:
-        parent_ids = list(G.predecessors(id))
-        if node_type is not "input":
-            inputs = [get_output(parent_id) for parent_id in parent_ids]
-            inputs = L.Concatenate()(inputs) if len(inputs) > 1 else inputs[0]
-            if node_type is "recurrent":
-                output = inputs
-            else:
-                op = build_op(id, inputs)
-                log("got op", op)
-                output = op(inputs)
-                if "output_shape" not in keys and "gives_feedback" not in keys:
-                    try:
-                        output = L.Add()([inputs, output])
-                    except Exception as e:
-                        log("error adding inputs to output", e)
-                    try:
-                        output = L.Concatenate()([inputs, output])
-                    except Exception as e:
-                        log("error concatenating inputs to output", e)
-        else:
-            output = build_op(id)
-        if "output_shape" not in keys:
-            output = InstanceNormalization()(output)
-        G.node[id]["output"] = output
-        log("got output", output)
-        return output
-
-
-def build_op(id, inputs=None):
-    """Make the keras operation to be executed at a given node."""
-    global G
-    node = G.node[id]
-    log('build op for', node)
-    node_type = node["node_type"]
-    keys = node.keys()
-    if "force_residual" in keys and "gives_feedback" not in keys:
-        if node["force_residual"]:
-            node["d_out"] = inputs.shape[-1]
-    if node_type == "input":
-        op = L.Input(node['input_shape'])
-    if node_type == "sepconv1d":
-        op = L.SeparableConv1D(node['filters'], node['kernel_size'], activation=node['activation'])
-    if node_type in ["deep", "wide_deep"]:
-        op = get_kernel(node_type, node["layers"], node["stddev"], inputs.shape[-1], node["d_out"], node["activation"], 0)
-    if "k_conv" in node_type:
-        op = KConvSet(node["kernel"], node["layers"], node["stddev"], inputs.shape[-1], node["d_out"], int(node_type[-1]))
-    if node_type == "transformer":
-        op = Transformer(node["d_model"], node["n_heads"])
-    G.node[id]['op'] = op
-    return op
-
-
-def screenshot(G, i, j, k):
-    """Make a png image of a graph."""
-    log("SCREENSHOT", i, j, k, f"{G.order()} nodes, {G.size()} edges")
-    A = nx.nx_agraph.to_agraph(G)
-    A.graph_attr.update()
-    A.draw(path=f"{IMAGE_PATH}/graph-{i}-{j}-{k}.png", prog="dot")
-
-
-def show_model(model, i, j, k):
-    if DEBUG:
-        model.summary()
-    K.utils.plot_model(model, f"archive/nets/{i}-{j}-{k}.png")
-
-
-def make_gif(path):
-    dirfiles = []
-    for filename in os.listdir(path):
-        log("parsed", filename)
-        name, ext = os.path.splitext(filename)
-        if name == 'model' or ext != ".png":
-            continue
-        log("convert", filename, "to jpg")
-        cmd_string = f"convert '{IMAGE_PATH}/{name}.png' -gravity Center -thumbnail '{IMAGE_SIZE}' -extent {IMAGE_SIZE} -font Courier -gravity Center -undercolor '#00000080' -size {IMAGE_X}x{BRAND_Y} -fill white caption:'Bit Pharma' +swap -append -gravity Center '{IMAGE_PATH}/{name}.jpg'"
-        os.system(cmd_string)
-        dirfiles.append(f"{IMAGE_PATH}/{name}.jpg")
-    dirfiles = natsorted(dirfiles)
-    [log(dirfile) for dirfile in dirfiles]
-    now = str(datetime.now()).replace(" ", "_")
-    if MAKE_MOVIE:
-        movie_path = f"archive/movies/net-{now}.mp4"
-        writer = imageio.get_writer(movie_path, fps=(1/DURATION))
-        [writer.append_data(imageio.imread(dirfile)) for dirfile in dirfiles]
-        writer.close()
-        log(f"SAVED MOVIE TO {movie_path}")
-    else:
-        images = [imageio.imread(dirfile) for dirfile in dirfiles]
-        gif_path = f"archive/gifs/net-{now}.gif"
-        imageio.mimsave(gif_path, images, duration=DURATION)
-        log(f"SAVED GIF TO {gif_path}")
-
-
-def space2dict(space):
-    type_name = type(space).__name__
-    space_dict = AttrDict({
-        "object": space,
-        "type_name": type_name,
-    })
-    if type_name == "Box":
-        space_dict.shape = space.shape
-        space_dict.dtype = tf.float32
-        space_dict.low = space.low
-        space_dict.high = space.high
-    if type_name == "Discrete":
-        space_dict.dtype = tf.int32
-        space_dict.shape = (1)
-        space_dict.high = space.n - 1
-        space_dict.low = 0
-    return space_dict
-
-
-def prepare_tasks(tasks):
-    tasks = [AttrDict(task) for task in tasks]
-    prepared = []
-    for task in tasks:
-        if task.type is "env":
-            env = gym.make(task.name)
-            task.inputs = [space2dict(env.observation_space)]
-            task.outputs = [space2dict(env.action_space)]
-        prepared.append(task)
-    del tasks
-    return prepared
-
-
-def get_agent(trial_number, hp, tasks):
-    """Build a model given hyperparameters and input/output shapes."""
-    global G
-
-    layer_distribution = [hp.p_sepconv, hp.p_transformer, hp.p_k_conv1, hp.p_k_conv2, hp.p_k_conv3, hp.p_deep, hp.p_wide_deep]
-    total = sum(layer_distribution)
-    hp.layer_distribution = [x / total for x in layer_distribution]
-
-    activation_distribution = [hp.p_tanh, hp.p_linear, hp.p_relu, hp.p_selu, hp.p_elu, hp.p_sigmoid, hp.p_hard_sigmoid, hp.p_exponential, hp.p_softmax, hp.p_softplus, hp.p_softsign, hp.p_gaussian, hp.p_sin, hp.p_cos, hp.p_swish]
-    total = sum(activation_distribution)
-    hp.activation_distribution = [x / total for x in activation_distribution]
-
-    mutation_distribution = [hp.p_recurse, hp.p_decimate, hp.p_connect, hp.p_split_edges, hp.p_insert_motif, hp.p_add_edge, hp.p_delete_edge, hp.p_delete_node, hp.p_split_edge, hp.p_do_nothing]
-    total = sum(mutation_distribution)
-    hp.mutation_distribution = [x / total for x in mutation_distribution]
-
-    [log(item) for item in hp.items()]
-    prepared = prepare_tasks(tasks)
-    G = get_initial_graph(prepared)
-
-    screenshot(G, '0')
-    recurse(hp)
+def get_graph(hp, tasks, screenshotting=True):
+    G = get_initial_graph(tasks)
+    if screenshotting:
+        screenshot(G, '0')
+    [mutate(hp, mutation_number) for mutation_number in range(n_mutations)]
     differentiate(hp)
-    screenshot(G, hp.recursions + 1)
-    model = make_model(hp)
-    [log(item) for item in hp.items()]
-    return model, str(datetime.now()).replace(" ", "_")

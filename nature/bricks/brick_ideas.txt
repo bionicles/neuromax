@@ -1,8 +1,8 @@
 brick injector
 deformable conv
 capsules
-reservoirs
-differentiable neural dictionary
+reservoirs # Echo State Network: https://github.com/cameronosmith/Echo-State-Network/blob/master/EchoStateNetwork.py
+differentiable neural dictionary https://github.com/mjacar/pytorch-nec/blob/master/dnd.py
 add, subtract, multiply, divide
 PRELU/RRELU
 mixed convolutions
@@ -21,3 +21,8 @@ look at multiply layers ... like attention
 maxout
 RNNs could go back in
 could make the graphmodel a rnn cell to handle recurrent state ...
+# Graph Conv: https://github.com/CyberZHG/keras-gcn/blob/master/keras_gcn/layers.py / https://github.com/tkipf/keras-gcn/blob/master/kegra/layers/graph.py
+# Polymorphic: https://github.com/dip-scd/PolymorphicDense/blob/master/src/polymorphic_dense.py
+# MOE: https://github.com/eminorhan/mixture-of-experts/blob/master/DenseMoE.py
+# NALU: https://arxiv.org/pdf/1808.00508.pdf
+# MDN: https://github.com/cpmpercussion/keras-mdn-layer/blob/master/mdn/__init__.py
