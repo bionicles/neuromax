@@ -62,44 +62,89 @@ def get_loss(target_distances, current):
     return tf.keras.losses.MAE(target_distances, current)
 
 
-def get_trainer(agent, optimizer):
-    @tf.function
-    def run_mol_episode(element):
-        print("tracing run_episode")
-        current = tf.concat([positions, features], -1)
-        target_distances = get_distances(target, target)
-        total_forces = tf.zeros_like(positions)
-        velocities = tf.zeros_like(positions)
-        forces = tf.zeros_like(positions)
-        initial_loss = 0.
-        loss = 0.
-        stop = 0.
-        for step in tf.range(MAX_STEPS):
-            with tf.GradientTape() as tape:
-                forces = agent(current) / masses
-                total_forces = total_forces + forces
-                velocities = velocities + forces
-                noise = tf.random.truncated_normal(
-                    tf.shape(positions), stddev=(0.001 * TEMPERATURE))
-                positions = positions + velocities + noise
-                current = tf.concat([positions, features], -1)
-                loss = get_loss(target_distances, positions)
-            gradients = tape.gradient(
-                [loss, tf.abs(total_forces), tf.abs(forces)],
-                agent.trainable_weights)
-            optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
-            ema.apply(agent.weights)
-            loss = tf.reduce_sum(loss)
-            new_stop = loss * 1.2
-            if step < 1:
-                initial_loss = loss
-                stop = new_stop
-            if new_stop < stop:
-                stop = new_stop
-            elif step > 0 and (loss > stop or loss != loss):
-                break
-        change = ((loss - initial_loss) / initial_loss) * 100.
-        return change if not tf.math.is_nan(change) else 420.
+def run_mol_task(agent, task_key, task_dict):
+    prior_state_predictions = None
+    dataset = task_dict.dataset.shuffle(10000)
+    model = agent.models[task_key]
+    total_free_energy = 0.
+    for id_string, n_atoms, target, positions, features, masses in dataset.take(task_dict.examples_per_episode):
+        inputs = [tf.concat([positions, features], -1)]
+        with tf.GradientTape() as tape:
+            normies, codes, reconstructions, state_predictions, loss_prediction, actions = \
+                model(inputs)
+            # compute free energy: loss + surprise + complexity - freedom
+            # loss term
+            one_hot_action = actions[0]
+            loss = get_loss(target_distances, current)
+            # surprise on state predictions
+            if prior_state_predictions:
+                state_surprise = tf.math.sum([
+                    -1 * belief.log_prob(truth)
+                    for belief, truth in zip(prior_state_predictions, codes)])
+            else:
+                state_surprise = 0.
+            prior_state_predictions = state_predictions
+            # surprise on current model
+            reconstruction_surprise = tf.math.sum([
+                -1 * belief.log_prob(truth)
+                for belief, truth in zip(reconstructions, normies)])
+            # surprise on loss prediction
+            loss_surprise = -1 * loss_prediction.log_prob(loss)
+            # total_surprise
+            surprise = reconstruction_surprise + state_surprise + loss_surprise
+            # how do you measure complexity?
+            # maybe L1/L2 reg or entropy/KL
+            # complexity = tf.math.log(model.count_params())
+            # complexity = 0.
+            # MaxEnt actions ...
+            # need empowerment / curiousity / optionality type loss over diversity of results (TODO!)
+            freedom = compute_freedom(actions)
+            free_energy = loss + surprise - freedom
+        gradients = tape.gradient([free_energy, model.losses],
+                                  model.trainable_variables)
+        agent.optimizer.apply_gradients(
+            zip(gradients, model.trainable_variables))
+        total_free_energy += free_energy
+    return total_free_energy
+
+# def get_trainer(agent, optimizer):
+#     @tf.function
+#     def run_mol_episode(element):
+#         print("tracing run_episode")
+#         current = tf.concat([positions, features], -1)
+#         target_distances = get_distances(target, target)
+#         total_forces = tf.zeros_like(positions)
+#         velocities = tf.zeros_like(positions)
+#         forces = tf.zeros_like(positions)
+#         initial_loss = 0.
+#         loss = 0.
+#         stop = 0.
+#         for step in tf.range(MAX_STEPS):
+#             with tf.GradientTape() as tape:
+#                 forces = agent(current) / masses
+#                 total_forces = total_forces + forces
+#                 velocities = velocities + forces
+#                 noise = tf.random.truncated_normal(
+#                     tf.shape(positions), stddev=(0.001 * TEMPERATURE))
+#                 positions = positions + velocities + noise
+#                 current = tf.concat([positions, features], -1)
+#                 loss = get_loss(target_distances, positions)
+#             gradients = tape.gradient(
+#                 [loss, tf.abs(total_forces), tf.abs(forces)],
+#                 agent.trainable_weights)
+#             optimizer.apply_gradients(zip(gradients, agent.trainable_weights))
+#             ema.apply(agent.weights)
+#             loss = tf.reduce_sum(loss)
+#             new_stop = loss * 1.2
+#             if step < 1:
+#                 initial_loss = loss
+#                 stop = new_stop
+#             if new_stop < stop:
+#                 stop = new_stop
+#             elif step > 0 and (loss > stop or loss != loss):
+#                 break
+#         change = ((loss - initial_loss) / initial_loss) * 100.
+#         return change if not tf.math.is_nan(change) else 420.
 
     @tf.function
     def mol_trainer(dataset):
@@ -234,6 +279,7 @@ class MolEnv(gym.Env):
         imageio.mimsave(gif_path, images)
         print("done generating gif at ", gif_path)
         shutil.rmtree(TEMP_PATH)
+
 
 def take_screenshot(step):
     screenshot_path = f"{TEMP_PATH}/{step}.png"

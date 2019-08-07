@@ -64,19 +64,29 @@ def read_clevr_dataset():
 
 def run_clevr_task(agent, task_key, task_dict):
     dataset = task_dict.dataset.shuffle(10000)
+    model = agent.models[task_key]
+    total_free_energy = 0.
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
         inputs = [image_tensor, embedded_question]
-        normies, codes, reconstructions, predictions, actions = \
-            agent(task_key, task_dict, inputs)
-        # compute Friston's free energy
-        one_hot_action = actions[0]
-        loss = tf.keras.losses.categorical_crossentropy(
-            one_hot_answer, one_hot_action)
-        reconstruction_error = 0.
-        for reconstruction, input in zip(reconstructions, inputs):
-            reconstruction_surprise = -1 * reconstruction.log_prob(input)
-            reconstruction_error = reconstruction_error + reconstruction_surprise
-        prediction_error = 0.
-        for reconstruction, input in zip()
-        surprise = reconstruction_error + prediction_error
-        free_energy = loss + surprise + behavioral_entropy
+        with tf.GradientTape() as tape:
+            normies, codes, reconstructions, state_predictions, loss_prediction, actions = \
+                model(inputs)
+            # compute free energy: loss + surprise + complexity - freedom
+            one_hot_action = actions[0]
+            loss = tf.keras.losses.categorical_crossentropy(
+                one_hot_answer, one_hot_action)
+            reconstruction_surprise = tf.math.sum([
+                -1 * belief.log_prob(truth)
+                for belief, truth in zip(reconstructions, normies)])
+            loss_surprise = -1 * loss_prediction.log_prob(loss)
+            surprise = reconstruction_surprise + loss_surprise
+            # how do you measure complexity?
+            # maybe L1/L2 reg or entropy/KL
+            freedom = actions[0].entropy()
+            free_energy = loss + surprise - freedom
+        gradients = tape.gradient([free_energy, model.losses],
+                                  model.trainable_variables)
+        agent.optimizer.apply_gradients(zip(gradients,
+                                            model.trainable_variables))
+        total_free_energy += free_energy
+    return total_free_energy

@@ -87,32 +87,3 @@ class Actuator:
 
     def call_onehot_or_discrete(self, code):
         return self.model(code)
-
-
-
-
-
-# def two_to_one(output, out_shape, hp):
-#     """ (H, W, C) ---> (W, C)"""
-#     output = concat_2D_coords(output)
-#     for i in range(hp.two_to_one_layers):
-#         output = get_conv2d(hp)(output)
-#     output = flatten_resize_reshape(output, out_shape)
-#     assert output.shape == out_shape
-#     return output
-
-
-# def get_interface(in_spec, out_spec, hp):
-#     """ return a keras model to convert in_spec into out_spec """
-#     in_shape, out_shape = in_spec.shape, out_spec.shape
-#     input = K.Input(in_shape)
-#     if len(in_shape) is 3 and len(out_shape) is 2:
-#         interface_function = two_to_one
-#     elif len(in_shape) is 2 and len(out_shape) is 2:
-#         interface_function = flatten_resize_reshape
-#     else:
-#         raise Exception(f"no interface for {str(in_spec)}--->{str(out_spec)}")
-#     output = interface_function(input, out_spec, hp)
-#     assert output.shape == out_shape
-#     output = K.activations.softmax(output) if out_spec.format is "onehot" else output
-#     return K.Model(input, output)

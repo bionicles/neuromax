@@ -1,14 +1,16 @@
 import tensorflow as tf
 
+from . import normalize
+
 
 @tf.function
-def get_cartesian_product(a, b, normalize=False):
+def get_cartesian_product(a, b, should_normalize=False):
     a = tf.range(a)
     a = tf.cast(a, tf.float32)
     b = tf.range(b)
-    if normalize:
-        a = a / tf.math.reduce_max(a)
-        b = b / tf.math.reduce_max(b)
+    if should_normalize:
+        a = normalize(a)
+        b = normalize(b)
     b = tf.cast(b, tf.float32)
     return tf.reshape(tf.stack(tf.meshgrid(a, b, indexing='ij'), axis=-1), (-1, 2))
 

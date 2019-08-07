@@ -5,9 +5,7 @@ import numpy as np
 import random
 
 from tools import map_attrdict, map_enumerate, get_spec, flatten_lists
-from .bricks.graphmodel import GraphModel
-from .bricks.actuator import Actuator
-from .bricks.sensor import Sensor
+from . import Brick
 
 
 K = tf.keras
@@ -32,7 +30,8 @@ class Agent:
         self.tasks = map_attrdict(self.register_shape_variables, tasks)
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
         self.decide_n_in_n_out()
-        self.shared_model = GraphModel(self.n_in, self.code_spec, self.n_out)
+        self.shared_model = Brick(self.n_in, self.code_spec, self.n_out,
+                                  agent=self, brick_type="GraphModel")
         self.parameters = AttrDict({})
         self.replay = []
 
@@ -57,10 +56,12 @@ class Agent:
     def add_sensors_and_actuators(self, task_key, task_dict):
         """Add coder sensors and interface actuators to an agent"""
         task_dict.sensors = [
-            Sensor(self, task_key, in_spec, self.code_spec, input_number)
+            Brick(task_key, in_spec, self.code_spec, input_number,
+                  agent=self, brick_type="Sensor")
             for input_number, in_spec in enumerate(task_dict.inputs)]
         task_dict.actuators = [
-            Actuator(self, task_key, self.code_spec, out_spec, output_number)
+            Brick(self, task_key, self.code_spec, out_spec, output_number,
+                  agent=self, brick_type="Sensor")
             for output_number, out_spec in enumerate(task_dict.outputs)]
         return task_key, task_dict
 

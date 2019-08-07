@@ -43,6 +43,8 @@ class Sensor:
             self.encoder.add(L.Dense(UNITS, ACTIVATION))
         elif in_spec.sensor_type is "lstm":
             self.encoder.add(L.LSTM(UNITS, ACTIVATION, return_sequences=True))
+        else:
+            self.encoder.add(L.SeparableConv2D(UNITS, ACTIVATION))
         self.encoder.add(L.Flatten())
         self.encoder.add(L.Dense(self.code_spec.size))
         self.encoder = add_distribution(self.encoder, self.code_spec.size)
