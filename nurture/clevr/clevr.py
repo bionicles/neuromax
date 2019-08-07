@@ -5,25 +5,22 @@ import spacy
 import json
 import os
 
+from tools import get_onehot
 
 task_path = os.path.dirname(os.path.realpath('__file__'))
 images_path = os.path.join(task_path, "CLEVR_v1.0", "images")
 data_path = os.path.join(task_path, "CLEVR_v1.0", "questions",
                          "CLEVR_train_questions.json")
 
-answers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'blue',
-           'brown', 'cube', 'cyan', 'cylinder', 'gray', 'green', 'large',
-           'metal', 'no', 'purple', 'red', 'rubber', 'small', 'sphere',
-           'yellow', 'yes']
+answer_choices = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+    'blue', 'brown', 'cube', 'cyan', 'cylinder', 'gray', 'green', 'large',
+    'metal', 'no', 'purple', 'red', 'rubber', 'small', 'sphere', 'yellow',
+    'yes']
 
 
 spacy.prefer_gpu()
 nlp = spacy.load("en_vectors_web_lg")
-
-
-def get_onehot(answer):
-    return tf.convert_to_tensor([0 if x != answers.index(answer) else 1
-                                 for x in range(28)])
 
 
 def get_dataframe():
@@ -48,18 +45,38 @@ def generate_clevr_item():
     question = questions[question_number]
     embedded_question = tf.convert_to_tensor(nlp(question), dtype=tf.float32)
     answer = image_data['answer'].split(",")[question_number]
-    one_hot_answer = [get_onehot(answer) for answer in answers]
+    one_hot_answer = get_onehot(answer, answer_choices)
     row_number += 1
     question_number += 1
     if question_number == len(questions):
         question_number = 0
-    return image_tensor, embedded_question, one_hot_answer, question, answer
+    return image_tensor, embedded_question, one_hot_answer
 
 
-def get_dataset():
+def read_clevr_dataset():
     global row_number, question_number
     row_number, question_number = 0, 0
     get_dataframe()
     return tf.data.Dataset.from_generator(generate_clevr_item,
                                           [tf.int32, tf.float32, tf.int32,
                                            tf.string, tf.string])
+
+
+def run_clevr_task(agent, task_key, task_dict):
+    dataset = task_dict.dataset.shuffle(10000)
+    for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
+        inputs = [image_tensor, embedded_question]
+        normies, codes, reconstructions, predictions, actions = \
+            agent(task_key, task_dict, inputs)
+        # compute Friston's free energy
+        one_hot_action = actions[0]
+        loss = tf.keras.losses.categorical_crossentropy(
+            one_hot_answer, one_hot_action)
+        reconstruction_error = 0.
+        for reconstruction, input in zip(reconstructions, inputs):
+            reconstruction_surprise = -1 * reconstruction.log_prob(input)
+            reconstruction_error = reconstruction_error + reconstruction_surprise
+        prediction_error = 0.
+        for reconstruction, input in zip()
+        surprise = reconstruction_error + prediction_error
+        free_energy = loss + surprise + behavioral_entropy

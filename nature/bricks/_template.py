@@ -1,4 +1,5 @@
 MY_PARAMETER_MIN, MY_PARAMETER_MAX = 1, 4
+MY_CHOICES = ["cake", "pie"]
 
 
 class MyBrick:
@@ -17,3 +18,4 @@ class MyBrick:
 
     def build(self):
         self.pull_numbers("my_parameter", MY_PARAMETER_MIN, MY_PARAMETER_MAX)
+        self.pull_choices("my_choice", MY_CHOICES)

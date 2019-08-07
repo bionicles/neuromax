@@ -9,7 +9,7 @@ from bricks.transformer import Transformer
 from bricks.kernel_conv import KConvSet
 from bricks.get_mlp import get_mlp
 
-from helpers import log, safe_sample
+from tools import log, safe_sample
 
 # initial
 MIN_INITIAL_BOXES, MAX_INITIAL_BOXES = 1, 4

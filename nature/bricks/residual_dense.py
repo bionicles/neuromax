@@ -6,9 +6,7 @@ L = K.layers
 def preact_conv(inputs, k=3, filters=64):
     outputs = L.BatchNormalization()(inputs)
     outputs = L.Activation('relu')(outputs)
-    outputs = L.Conv2D(filters, kernel_size=(k, k), padding='same',
-                     kernel_initializer="glorot_normal")(outputs)
-
+    outputs = L.Conv2D(filters, kernel_size=(k, k), padding='same')(outputs)
     return outputs
 
 

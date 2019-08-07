@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from helpers.log import log
+from tools.log import log
 
 K = tf.keras.backend
 

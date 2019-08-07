@@ -7,9 +7,9 @@ add, subtract, multiply, divide
 PRELU/RRELU
 mixed convolutions
 tfp layers
-tfp distributions
+tfp distributions -- see helpers.add_distribution
 tfp bijectors ?
-replay buffer (duh)
+replay buffer (duh) -- just using a list right now
 tied-weight autoencoder?
 pooling (ugh)
 noise?
@@ -26,3 +26,12 @@ could make the graphmodel a rnn cell to handle recurrent state ...
 # MOE: https://github.com/eminorhan/mixture-of-experts/blob/master/DenseMoE.py
 # NALU: https://arxiv.org/pdf/1808.00508.pdf
 # MDN: https://github.com/cpmpercussion/keras-mdn-layer/blob/master/mdn/__init__.py
+clockwork RNN https://github.com/flandolfi/clockwork-rnn/blob/master/cwrnn.py https://arxiv.org/pdf/1402.3511.pdf
+SWAG https://arxiv.org/abs/1811.11813 y = Dense()([x, x^2, ..., x^N])
+flow models
+sensors
+actuators
+optimizers - lookahead https://github.com/bojone/keras_lookahead#lookahead-optimizer-for-keras https://arxiv.org/abs/1907.08610
+
+done:
+  differentiable neural computer
