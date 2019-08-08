@@ -8,8 +8,10 @@ import random
 from bricks.transformer import Transformer
 from bricks.kernel_conv import KConvSet
 from bricks.get_mlp import get_mlp
-
 from tools import log, safe_sample
+
+K = tf.keras
+L = K.layers
 
 # initial
 MIN_INITIAL_BOXES, MAX_INITIAL_BOXES = 1, 4
@@ -22,9 +24,7 @@ MIN_MIN_LAYERS, MAX_MIN_LAYERS, MIN_MAX_LAYERS, MAX_MAX_LAYERS = 1, 2, 3, 4
 MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
 # bricks
 ACTIVATION_OPTIONS = ["tanh"]
-
-K = tf.keras
-L = K.layers
+BRICK_OPTIONS = ["conv1d", "transformer", "dnc", "mlp", "k_conv"]
 
 
 class GraphModel:
@@ -208,10 +208,10 @@ class GraphModel:
         global G
         node = G.node[id]
         log('build brick for', node)
-        brick_type = node["brick_type"]
+        brick_type = self.agent.pull_choices(f"{id}_brick_type", BRICK_OPTIONS)
         d_in = d_out = inputs.shape[-1]
         if brick_type == "input":
-            brick = L.Input(node['input_shape'])
+            brick = L.Input(self.agent.code_spec.shape)
         if brick_type == "sepconv1d":
             filters = self.pull_numbers(f"{id}_filters", 1, 32)
             activation = self.pull_choices(f"{id}_activation", ACTIVATION_OPTIONS)
@@ -219,7 +219,8 @@ class GraphModel:
         if brick_type in ["deep", "wide_deep"]:
             brick = get_mlp(self.agent, d_in, d_out, -1)
         if "k_conv" in brick_type:
-            brick = KConvSet(self.agent, d_in, d_out, -1)
+            set_size = brick_type[-1]
+            brick = KConvSet(self.agent, d_in, d_out, set_size)
         if brick_type == "transformer":
             brick = Transformer(self.agent)
         G.node[id]['brick'] = brick

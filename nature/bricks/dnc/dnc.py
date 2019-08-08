@@ -12,13 +12,16 @@ Conventions:
 """
 
 from collections import namedtuple, OrderedDict
-import tensorflow as tf
 from tensorflow.python.util import nest
+import tensorflow as tf
 
 from memory import Memory, EPSILON
 
+K = tf.keras
+L = K.layers
 
-class DNC(tf.keras.layers.Layer):
+
+class DNC(L.Layer):
     """DNC recurrent module that connects together the controller and memory.
     Performs a write and read operation against memory given 1) the previous state
     and 2) an interface vector defining how to interact with the memory at the
@@ -46,13 +49,11 @@ class DNC(tf.keras.layers.Layer):
         "free_gates",
         "allocation_gate",
         "write_gate",
-        "read_modes",
-    ])
+        "read_modes"])
 
     def __init__(self, output_size, controller_units=256, memory_size=256,
                  word_size=64, num_read_heads=4, **kwargs):
         super().__init__(name='DNC', **kwargs)
-
         self._output_size = output_size
         self.memory_size = memory_size
         self.num_read_heads = num_read_heads
@@ -61,18 +62,14 @@ class DNC(tf.keras.layers.Layer):
         self._interface_vector_size += 3 * self.word_size
         self._interface_vector_size += 5 * self.num_read_heads + 3
         self._clip = 20.0
-
-        self._controller = tf.keras.layers.LSTMCell(units=controller_units)
-        self._controller_to_interface_dense = tf.keras.layers.Dense(
-            self._interface_vector_size,
-            name='controller_to_interface'
-        )
+        self._controller = L.LSTMCell(units=controller_units)
+        self._controller_to_interface_dense = L.Dense(
+            self._interface_vector_size, name='controller_to_interface')
         self._memory = Memory(memory_size, word_size, num_read_heads)
-        self._final_output_dense = tf.keras.layers.Dense(self._output_size)
+        self._final_output_dense = L.Dense(self._output_size)
 
     def _parse_interface_vector(self, interface_vector):
         r, w = self.num_read_heads, self.word_size
-
         sizes = [r * w, r, w, 1, w, w, r, 1, 1, 3 * r]
         fns = OrderedDict([
             ("read_keys", lambda v: tf.reshape(v, (-1, w, r))),
@@ -84,12 +81,10 @@ class DNC(tf.keras.layers.Layer):
             ("free_gates", lambda v: tf.nn.sigmoid(tf.reshape(v, (-1, r)))),
             ("allocation_gate", lambda v: tf.nn.sigmoid(tf.reshape(v, (-1, 1)))),
             ("write_gate", lambda v: tf.nn.sigmoid(tf.reshape(v, (-1, 1)))),
-            ("read_modes", lambda v: tf.nn.softmax(tf.reshape(v, (-1, 3, r)), axis=1)),
-        ])
+            ("read_modes", lambda v: tf.nn.softmax(tf.reshape(v, (-1, 3, r)), axis=1))])
         indices = [[sum(sizes[:i]), sum(sizes[:i + 1])] for i in range(len(sizes))]
         zipped_items = zip(fns.keys(), fns.values(), indices)
         interface = {name: fn(interface_vector[:, i[0]:i[1]]) for name, fn, i in zipped_items}
-
         return DNC.interface(**interface)
 
     def _flatten_read_vectors(self, x):
@@ -125,8 +120,7 @@ class DNC(tf.keras.layers.Layer):
         return DNC.state(
             memory_state=self._memory.state_size,
             controller_state=self._controller.state_size,
-            read_vectors=tf.TensorShape([self.word_size, self.num_read_heads]),
-        )
+            read_vectors=tf.TensorShape([self.word_size, self.num_read_heads]))
 
     @property
     def state_size(self):
@@ -137,8 +131,7 @@ class DNC(tf.keras.layers.Layer):
         initial_state_nested = DNC.state(
             memory_state=self._memory.get_initial_state(batch_size, dtype=dtype),
             controller_state=self._controller.get_initial_state(batch_size=batch_size, dtype=dtype),
-            read_vectors=tf.fill([batch_size, self.word_size, self.num_read_heads], EPSILON),
-        )
+            read_vectors=tf.fill([batch_size, self.word_size, self.num_read_heads], EPSILON))
         return nest.flatten(initial_state_nested)
 
     @property
@@ -157,7 +150,6 @@ class DNC(tf.keras.layers.Layer):
                 'words_num': self.memory_size,
             },
             'clip': self._clip,
-            'output_size': self._output_size,
-        }
+            'output_size': self._output_size}
         base_config = super().get_config()
         return dict(list(base_config.items()) + list(config.items()))

@@ -4,7 +4,7 @@ import tensorflow as tf
 import numpy as np
 import random
 
-from tools import map_attrdict, map_enumerate, get_spec, get_onehot
+from tools import map_attrdict, map_enumerate, get_spec, get_onehot, get_size
 from bricks import Interface, GraphModel
 
 
@@ -12,10 +12,10 @@ K = tf.keras
 L = K.layers
 
 MIN_CODE_ATOMS, MAX_CODE_ATOMS = 8, 32
-MIN_CODE_SIZE, MAX_CODE_SIZE = 8, 32
+MIN_CODE_CHANNELS, MAX_CODE_CHANNELS = 8, 32
 EPISODES_PER_PRACTICE_SESSION = 5
-CONVERGENCE_THRESHOLD = 0.01
-N_LOOKBACK_STEPS = 5
+# CONVERGENCE_THRESHOLD = 0.01
+# N_LOOKBACK_STEPS = 5
 
 
 class Agent:
@@ -24,9 +24,10 @@ class Agent:
     def __init__(self, tasks):
         code_atoms = self.pull_numbers("code_atoms",
                                        MIN_CODE_ATOMS, MAX_CODE_ATOMS)
-        code_size = self.pull_numbers("code_size",
-                                      MIN_CODE_SIZE, MAX_CODE_SIZE)
-        self.code_spec = get_spec(shape=(code_atoms, code_size), format="code")
+        code_channels = self.pull_numbers("code_channels",
+                                          MIN_CODE_CHANNELS, MAX_CODE_CHANNELS)
+        self.code_spec = get_spec(shape=(code_atoms, code_channels), format="code")
+        self.code_spec.size = get_size(self.code_spec.shape)
         self.tasks = map_attrdict(self.register_shape_variables, tasks)
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
         task_name_spec = get_spec(shape=(len(tasks)), format="onehot")
@@ -99,8 +100,8 @@ class Agent:
                 task_dict.shape_variables[dimension_key].value = \
                     tf.shape(inputs[input_number])[dimension_number]
         self.current_task_dict = task_dict
-        onehot_task = get_onehot(task_key, self.tasks.keys)
-        inputs = [onehot_task] + inputs
+        task_input = get_onehot(task_key, self.tasks.keys())
+        inputs = [task_input] + inputs
         codes = map_enumerate(task_dict.sensors, inputs)
         judgments = self.shared_model(codes)
         world_model = tf.concat([*codes, *judgments], 0)

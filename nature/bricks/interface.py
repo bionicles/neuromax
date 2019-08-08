@@ -23,8 +23,6 @@ ONEHOT_ACTUATOR_ACTIVATION_OPTIONS = ["sigmoid"]
 RAGGED_ACTUATOR_ACTIVATION_OPTIONS = ["tanh"]
 # layers
 MIN_FILTERS, MAX_FILTERS = 32, 64
-MIN_D_MODEL, MAX_D_MODEL = 32, 64
-MIN_N_HEADS, MAX_N_HEADS = 1, 4
 MIN_UNITS, MAX_UNITS = 32, 64
 
 
@@ -36,6 +34,7 @@ class Interface:
     SENSORS:
         image -> code (eyeball)
         ragged -> code (NLP + atoms)
+        onehot -> code (task number)
 
     MESSAGES:
         code -> code (internal message passing)
@@ -71,8 +70,7 @@ class Interface:
         self.in_spec.shape[-1] += len(self.in_spec.shape)  # coords
         self.input = K.Input(self.in_spec.shape)
         self.output = InstanceNormalization()(self.input)
-        d_model, n_heads = self.get_transformer_params()
-        self.output = Transformer(d_model, n_heads)(self.output)
+        self.output = Transformer(self.agent)(self.output)
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
             model_type = f"{in_spec.format}_sensor"
@@ -93,13 +91,6 @@ class Interface:
             print("in_spec", in_spec)
             print("out_spec", out_spec)
         self.model = K.Model(self.input, self.output)
-
-    def get_transformer_params(self):
-        d_model = self.pull_numbers(f"{self.name}_d_model",
-                                    MIN_D_MODEL, MAX_D_MODEL)
-        n_heads = self.pull_numbers(f"{self.name}_n_heads",
-                                    MIN_N_HEADS, MAX_N_HEADS)
-        return d_model, n_heads
 
     def get_image_sensor_output(self):
         self.output = get_image_encoder_output(

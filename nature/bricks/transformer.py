@@ -4,12 +4,24 @@ L = tf.keras.layers
 tfd = tfp.distributions
 tfpl = tfp.layers
 
+TFP_OPTIONS = [True, False]
+D_MODEL_OPTIONS = [32, 64]
+N_HEADS_OPTIONS = [1, 2]
+
 
 class Transformer(L.Layer):
-    def __init__(self, d_model, n_heads, tfp_layer=False):
+    def __init__(self, agent):
         super(Transformer, self).__init__()
-        self.n_heads = n_heads
-        self.d_model = d_model
+        self.pull_choices = agent.pull_choices
+        self.pull_numbers = agent.pull_numbers
+        self.agent = agent
+        d_model = self.pull_choices(f"{self.name}_d_model",
+                                    D_MODEL_OPTIONS)
+        n_heads = self.pull_choices(f"{self.name}_n_heads",
+                                    N_HEADS_OPTIONS)
+        tfp_layer = self.pull_choices(f"{self.name}_tfp_layer",
+                                      TFP_OPTIONS)
+        self.d_model, self.n_heads = d_model, n_heads
         assert d_model % self.n_heads == 0
         self.depth = d_model // self.n_heads
         if tfp_layer:
