@@ -8,7 +8,8 @@ import random
 from bricks.transformer import Transformer
 from bricks.kernel_conv import KConvSet
 from bricks.get_mlp import get_mlp
-from tools import log, safe_sample
+
+from tools import log, safe_sample, get_unique_id
 
 K = tf.keras
 L = K.layers
@@ -38,6 +39,7 @@ class GraphModel:
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
         self.n_in, self.code_shape, self.n_out = n_in, code_shape, n_out
+        self.name = get_unique_id("GraphModel")
         self.get_graph()
         self.make_model()
 

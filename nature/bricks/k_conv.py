@@ -1,11 +1,11 @@
 # conv-kernel.py
 # why?: build a resnet with kernel and attention set convolutions
 
+from nanoid import generate
 import tensorflow as tf
-import random
 
+from bricks.mlp import get_mlp
 from tools import get_size
-from .mlp import get_mlp
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
@@ -13,7 +13,8 @@ B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 class KConvSet1D(L.Layer):
     """Convolve a learned kernel over sets of elements from a 1D tensor"""
 
-    def __init__(self, agent, in_spec, out_spec, set_size):
+    def __init__(self, agent, brick_id, in_spec, out_spec, set_size):
+        self.brick_id = brick_id
         self.agent = agent
         d_in = in_spec.shape[-1]
         d_out = out_spec.shape[-1]
@@ -28,8 +29,9 @@ class KConvSet1D(L.Layer):
             in_size = get_size(in_spec.shape)
             d_in = d_out + in_size
             self.call = self.call_with_code_for_one
-        self.kernel = get_mlp(agent, d_in, d_out, set_size)
-        super(KConvSet1D, self).__init__(name=f"KConvSet{set_size}-{random.randint(0, 9001)}")
+        self.kernel = get_mlp(agent, brick_id, d_in, d_out, set_size)
+        self.layer_id = f"{brick_id}_KConvSet{set_size}-{generate()}"
+        super(KConvSet1D, self).__init__(name=self.layer_id)
 
     # TODO: find a nice recursive approach to N-ary set convolutions
     def call_for_one(self, atoms):

@@ -112,6 +112,8 @@ class Agent:
         """
         Provide numbers from range(a, b, step).
 
+        WARNING!: IF KEY EXISTS, THIS RETURNS THE CURRENT VALUE, NOT A NEW ONE
+
         Args:
             pkey: string key for this parameter
             a: low end of the range
@@ -149,6 +151,8 @@ class Agent:
         """
         Choose from a set of options.
         Uniform sampling unless distribution is given
+
+        WARNING!: IF KEY EXISTS, THIS RETURNS THE CURRENT VALUE, NOT A NEW ONE
 
         Args:
             pkey: unique key to share values

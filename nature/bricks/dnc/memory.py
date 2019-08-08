@@ -75,7 +75,7 @@ class TemporalLinkAddressing:
         batch_size = prev_link_matrix.shape[0]
         words_num = prev_link_matrix.shape[1]
         write_weighting_i, write_weighting_j = [tf.expand_dims(write_weighting, axis) for axis in [2, 1]]
-        prev_precedence_vector_j = tf.expand_dims(prev_precedence_vector, 1)  # [b x 1 X N]
+        prev_precedence_vector_j = tf.expand_dims(prev_precedence_vector, 1)  #  [b x 1 X N]
         link_matrix = ((1 - write_weighting_i - write_weighting_j) * prev_link_matrix + (write_weighting_i * prev_precedence_vector_j))
         zero_diagonal = tf.zeros([batch_size, words_num], dtype=link_matrix.dtype)
         return tf.linalg.set_diag(link_matrix, zero_diagonal)
@@ -122,7 +122,7 @@ class AllocationAdressing:
         Returns:
             Tensor [B, N]: new usage vector
         """
-        #allocation_addressing
+        # allocation_addressing
         retention_vector = tf.reduce_prod(input_tensor=1 - tf.expand_dims(free_gates, 1) * prev_read_weightings, axis=2)
         usage_vector = ((prev_usage_vector + prev_write_weighting - (prev_usage_vector * prev_write_weighting)) * retention_vector)
         return usage_vector
@@ -223,11 +223,11 @@ class Memory:
                 read_weightings (Tensor [B, N, R]): read vectors taken out of the memory
                 read_vectors (Tensor [B, W, R]): read vectors taken out of the memory
         """
-        #content_addressing
+        # content_addressing
         lookup_weighting = ContentAddressing.weighting(memory_matrix, interface.read_keys, interface.read_strengths)
-        #temporal_link_addressing
+        # temporal_link_addressing
         forward_weighting, backward_weighting = TemporalLinkAddressing.weightings(link_matrix, prev_read_weightings,)
-        #blend_addressing_modes
+        # blend_addressing_modes
         read_weightings = tf.einsum( "bsr,bnrs->bnr", interface.read_modes, tf.stack([backward_weighting, lookup_weighting, forward_weighting], axis=3))
         read_vectors = tf.matmul(memory_matrix, read_weightings, adjoint_a=True)
         return read_weightings, read_vectors
@@ -245,17 +245,17 @@ class Memory:
                 link_matrix (Tensor [B, N, N])
                 precedence_vector (Tensor [B, N])
         """
-        #allocation_addressing
+        # allocation_addressing
         usage_vector = AllocationAdressing.update_usage_vector(interface.free_gates, prev_mem_state.read_weightings, prev_mem_state.write_weighting, prev_mem_state.usage_vector)
         allocation_weighting = AllocationAdressing.weighting(usage_vector)
-        #content_addressing
+        # content_addressing
         lookup_weighting = ContentAddressing.weighting(prev_mem_state.memory_matrix, interface.write_key, interface.write_strength)
         write_weighting = (interface.write_gate * (interface.allocation_gate * allocation_weighting + (1 - interface.allocation_gate) * tf.squeeze(lookup_weighting)))
-        #erase and write
+        # erase and write
         erase = prev_mem_state.memory_matrix * ((1 - tf.einsum("bn,bw->bnw", write_weighting, interface.erase_vector)))
         write = tf.einsum("bn,bw->bnw", write_weighting, interface.write_vector)
         memory_matrix = erase + write
-        #final update
+        # final update
         link_matrix = TemporalLinkAddressing.update_link_matrix(prev_mem_state.link_matrix, prev_mem_state.precedence_vector, write_weighting)
         precedence_vector = TemporalLinkAddressing.update_precedence_vector(prev_mem_state.precedence_vector, write_weighting)
         return usage_vector, write_weighting, memory_matrix, link_matrix, precedence_vector

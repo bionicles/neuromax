@@ -13,12 +13,21 @@ Conventions:
 
 from collections import namedtuple, OrderedDict
 from tensorflow.python.util import nest
+import tensorflow_probability as tfp
 import tensorflow as tf
 
 from memory import Memory, EPSILON
 
 K = tf.keras
 L = K.layers
+tfpl = tfp.layers
+
+CONTROLLER_UNITS = 256
+MEMORY_SIZE = 256
+WORD_SIZE = 64
+NUM_READ_HEADS = 4
+TFP_LAYER = tfpl.DenseFlipout
+DTYPE = tf.float32
 
 
 class DNC(L.Layer):
@@ -51,9 +60,13 @@ class DNC(L.Layer):
         "write_gate",
         "read_modes"])
 
-    def __init__(self, output_size, controller_units=256, memory_size=256,
-                 word_size=64, num_read_heads=4, **kwargs):
+    def __init__(self, agent, brick_id, output_size, controller_units=CONTROLLER_UNITS, memory_size=MEMORY_SIZE,
+                 word_size=WORD_SIZE, num_read_heads=NUM_READ_HEADS, tfp_layer=TFP_LAYER, **kwargs):
         super().__init__(name='DNC', **kwargs)
+        self.agent = agent
+        self.brick_id = brick_id
+        self.pull_choices = agent.pull_choices
+        self.pull_numbers = agent.pull_numbers
         self._output_size = output_size
         self.memory_size = memory_size
         self.num_read_heads = num_read_heads
@@ -63,10 +76,15 @@ class DNC(L.Layer):
         self._interface_vector_size += 5 * self.num_read_heads + 3
         self._clip = 20.0
         self._controller = L.LSTMCell(units=controller_units)
-        self._controller_to_interface_dense = L.Dense(
-            self._interface_vector_size, name='controller_to_interface')
-        self._memory = Memory(memory_size, word_size, num_read_heads)
-        self._final_output_dense = L.Dense(self._output_size)
+        if tfp_layer:
+            self._controller_to_interface_dense = tfp_layer(
+                self.interface_vector_size, name='controller_to_interface')
+            self._final_output_dense = tfp_layer(self._output_size)
+        else:
+            self._controller_to_interface_dense = L.Dense(
+                self._interface_vector_size, name='controller_to_interface')
+            self._memory = Memory(memory_size, word_size, num_read_heads)
+            self._final_output_dense = L.Dense(self._output_size)
 
     def _parse_interface_vector(self, interface_vector):
         r, w = self.num_read_heads, self.word_size
@@ -104,10 +122,9 @@ class DNC(L.Layer):
         interface = self._parse_interface_vector(interface)
         # update_memory
         read_vectors, memory_state = self._memory(interface, prev_dnc_state.memory_state)
-        state = DNC.state(
-            memory_state=memory_state,
-            controller_state=controller_state,
-            read_vectors=read_vectors,)
+        state = DNC.state(memory_state=memory_state,
+                          controller_state=controller_state,
+                          read_vectors=read_vectors)
         # join_outputs
         read_vectors_flat = self._flatten_read_vectors(read_vectors)
         final_output = tf.concat([controller_output, read_vectors_flat], 1)
@@ -126,7 +143,7 @@ class DNC(L.Layer):
     def state_size(self):
         return nest.flatten(self.state_size_nested)
 
-    def get_initial_state(self, inputs=None, batch_size=None, dtype=tf.float32):
+    def get_initial_state(self, inputs=None, batch_size=None, dtype=DTYPE):
         del inputs
         initial_state_nested = DNC.state(
             memory_state=self._memory.get_initial_state(batch_size, dtype=dtype),

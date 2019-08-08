@@ -60,8 +60,8 @@ class Interface:
         self.agent = agent
         out_spec.size = get_size(out_spec.shape) if out_spec.format is "code" else None
         self.task_id, self.out_spec, self.in_spec = task_id, in_spec, out_spec
-        self.name = f"{task_id}_{input_number}_{in_spec}_{out_spec}_interface"
-        print(f"Interface.__init__ {self.name}")
+        self.brick_id = f"{task_id}_interface_{input_number}_{in_spec.format}_to_{out_spec.format}"
+        print(f"Interface.__init__ -- {self.brick_id}")
         self.input_number = input_number
         self.shape_variable_key = None
         self.build_model()
@@ -70,7 +70,7 @@ class Interface:
         self.in_spec.shape[-1] += len(self.in_spec.shape)  # coords
         self.input = K.Input(self.in_spec.shape)
         self.output = InstanceNormalization()(self.input)
-        self.output = Transformer(self.agent)(self.output)
+        self.output = Transformer(self.agent, self.brick_id)(self.output)
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
             model_type = f"{in_spec.format}_sensor"
@@ -94,15 +94,15 @@ class Interface:
 
     def get_image_sensor_output(self):
         self.output = get_image_encoder_output(
-            self.agent, self.output, self.out_spec.shape)
+            self.agent, self.brick_id, self.output, self.out_spec.shape)
 
     def get_image_actuator_output(self):
         self.output = get_image_decoder_output(
-            self.agent, self.output, self.out_spec.shape)
+            self.agent, self.brick_id, self.output, self.out_spec.shape)
 
     def get_ragged_sensor_output(self):
         output = L.Flatten()(self.output)
-        activation = self.pull_choices(f"{self.name}_last_activation",
+        activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS)
         output = tfpl.DenseVariational(self.out_size, activation)
         self.output = L.Reshape(self.out_spec.shape)(output)
@@ -125,12 +125,12 @@ class Interface:
 
     def get_code_interface_output(self):
         code_size = self.out_spec.size
-        activation = self.pull_choices(f"{self.name}_last_activation",
+        activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        CODE_INTERFACE_LAST_ACTIVATION_OPTIONS)
         self.output = tfpl.DenseVariational(code_size, activation)(self.output)
 
     def get_onehot_actuator_output(self):
-        units = self.pull_numbers(f"{self.name}_units", MIN_UNITS, MAX_UNITS)
+        units = self.pull_numbers(f"{self.brick_id}_units", MIN_UNITS, MAX_UNITS)
         activation = self.pull_choices(f"{self.name}_activation",
                                        ONEHOT_ACTUATOR_ACTIVATION_OPTIONS)
         output = tfpl.DenseVariational(units, activation)(self.output)
