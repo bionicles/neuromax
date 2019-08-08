@@ -14,7 +14,7 @@ K = tf.keras
 L = K.layers
 
 
-def get_layer(lkey, agent, ltype=None, units=None, fn=None, tfp_layer):
+def get_layer(agent, lkey, tfp_layer, ltype=None, units=None, fn=None):
     if ltype not in LAYER_OPTIONS:
         ltype = agent.pull_choices(f"{lkey}-ltype", LAYER_OPTIONS)
     if units is None or units < MIN_UNITS or units > MAX_UNITS:

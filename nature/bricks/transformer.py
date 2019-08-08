@@ -4,6 +4,7 @@ L = tf.keras.layers
 tfd = tfp.distributions
 tfpl = tfp.layers
 
+
 class Transformer(L.Layer):
     def __init__(self, d_model, n_heads, tfp_layer=False):
         super(Transformer, self).__init__()
@@ -12,10 +13,10 @@ class Transformer(L.Layer):
         assert d_model % self.n_heads == 0
         self.depth = d_model // self.n_heads
         if tfp_layer:
-            self.wq = tfpl.DenseFlipout(d_model)
-            self.wk = tfpl.DenseFlipout(d_model)
-            self.wv = tfpl.DenseFlipout(d_model)
-            self.dense = tfpl.DenseFlipout(d_model)   
+            self.wq = tfpl.DenseVariational(d_model)
+            self.wk = tfpl.DenseVariational(d_model)
+            self.wv = tfpl.DenseVariational(d_model)
+            self.dense = tfpl.DenseVariational(d_model)
         else:
             self.wq = tf.keras.layers.Dense(d_model)
             self.wk = tf.keras.layers.Dense(d_model)
