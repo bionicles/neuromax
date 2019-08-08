@@ -31,6 +31,7 @@ class KConvSet1D(L.Layer):
         self.kernel = get_mlp(agent, d_in, d_out, set_size)
         super(KConvSet1D, self).__init__(name=f"KConvSet{set_size}-{random.randint(0, 9001)}")
 
+    # TODO: find a nice recursive approach to N-ary set convolutions
     def call_for_one(self, atoms):
         return tf.map_fn(lambda a1: self.kernel(a1), atoms)
 

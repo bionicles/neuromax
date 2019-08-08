@@ -2,23 +2,13 @@ from tensorflow_addons import InstanceNormalization
 import tensorflow_probability as tfp
 import tensorflow as tf
 
-from .kernel_conv import KConvSet1D
+from .k_conv import KConvSet1D
 from tools import normalize
 
 tfd = tfp.distributions
 tfpl = tfp.layers
 K = tf.keras
 L = K.layers
-
-# SENSORS:
-#     image -> code (eyeball)
-#     ragged -> code (NLP + atoms)
-
-# ACTUATORS
-#     code -> onehot (clevr answer)
-#     code -> int (discrete control for MountainCar-v0)
-#     code -> ragged (ragged force field for protein dynamics)
-#     code -> image (reconstruct image)
 
 ONEHOT_ACTIVATION_OPTIONS = ["sigmoid"]
 RAGGED_ACTIVATION_OPTIONS = ["tanh"]
@@ -30,6 +20,16 @@ class Interface:
     """
     Interface resizes + reshapes + reformats in_spec into out_spec
     because inputs have different sizes and shapes
+
+    SENSORS:
+        image -> code (eyeball)
+        ragged -> code (NLP + atoms)
+
+    ACTUATORS
+        code -> onehot (clevr answer)
+        code -> int (discrete control for MountainCar-v0)
+        code -> ragged (ragged force field for protein dynamics)
+        code -> image (reconstruct image)
 
     Args:
         agent: Agent which holds this brick and has pull_choices/pull_numbers

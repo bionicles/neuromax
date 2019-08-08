@@ -1,18 +1,26 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
 L = tf.keras.layers
-
+tfd = tfp.distributions
+tfpl = tfp.layers
 
 class Transformer(L.Layer):
-    def __init__(self, d_model, n_heads):
+    def __init__(self, d_model, n_heads, tfp_layer=False):
         super(Transformer, self).__init__()
         self.n_heads = n_heads
         self.d_model = d_model
         assert d_model % self.n_heads == 0
         self.depth = d_model // self.n_heads
-        self.wq = tf.keras.layers.Dense(d_model)
-        self.wk = tf.keras.layers.Dense(d_model)
-        self.wv = tf.keras.layers.Dense(d_model)
-        self.dense = tf.keras.layers.Dense(d_model)
+        if tfp_layer:
+            self.wq = tfpl.DenseFlipout(d_model)
+            self.wk = tfpl.DenseFlipout(d_model)
+            self.wv = tfpl.DenseFlipout(d_model)
+            self.dense = tfpl.DenseFlipout(d_model)   
+        else:
+            self.wq = tf.keras.layers.Dense(d_model)
+            self.wk = tf.keras.layers.Dense(d_model)
+            self.wv = tf.keras.layers.Dense(d_model)
+            self.dense = tf.keras.layers.Dense(d_model)
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (n_heads, depth).

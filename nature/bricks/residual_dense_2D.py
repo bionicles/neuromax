@@ -5,14 +5,14 @@ from . import preact_conv2D
 L = tf.keras.layers
 
 
-def ResidualBlock(inputs, kernal_size=3, filters=64):
+def ResidualBlock2D(inputs, kernal_size=3, filters=64):
     outputs = preact_conv2D(inputs, k=kernal_size, n_filters=filters)
     outputs = preact_conv2D(outputs, k=kernal_size, n_filters=filters)
     outputs = L.Add()([outputs, inputs])
     return outputs
 
 
-def DenseBlock(stack, n_layers, growth_rate):
+def DenseBlock2D(stack, n_layers, growth_rate):
     new_features = []
     for i in range(n_layers):
         layer_out = preact_conv2D(stack, filters=growth_rate)
