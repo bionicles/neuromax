@@ -14,9 +14,11 @@ Conventions:
 from collections import namedtuple, OrderedDict
 import tensorflow as tf
 from tensorflow.python.util import nest
+import tensorflow_probability as tfp
 
 from memory import Memory, EPSILON
 
+tfpl = tfp.layers
 
 class DNC(tf.keras.layers.Layer):
     """DNC recurrent module that connects together the controller and memory.
@@ -50,7 +52,7 @@ class DNC(tf.keras.layers.Layer):
     ])
 
     def __init__(self, output_size, controller_units=256, memory_size=256,
-                 word_size=64, num_read_heads=4, **kwargs):
+                 word_size=64, num_read_heads=4, tfp_layer=False, **kwargs):
         super().__init__(name='DNC', **kwargs)
 
         self._output_size = output_size
@@ -63,12 +65,16 @@ class DNC(tf.keras.layers.Layer):
         self._clip = 20.0
 
         self._controller = tf.keras.layers.LSTMCell(units=controller_units)
-        self._controller_to_interface_dense = tf.keras.layers.Dense(
-            self._interface_vector_size,
-            name='controller_to_interface'
-        )
-        self._memory = Memory(memory_size, word_size, num_read_heads)
-        self._final_output_dense = tf.keras.layers.Dense(self._output_size)
+        if tfp_layer:
+            self._controller_to_interface_dense = tfpl.DenseFlipout(self.interface_vector_size, name='controller_to_interface')
+            self._final_output_dense = tfpl.DenseFlipout(self._output_size)
+        else:
+            self._controller_to_interface_dense = tf.keras.layers.Dense(
+                self._interface_vector_size,
+                name='controller_to_interface'
+            )
+            self._memory = Memory(memory_size, word_size, num_read_heads)
+            self._final_output_dense = tf.keras.layers.Dense(self._output_size)
 
     def _parse_interface_vector(self, interface_vector):
         r, w = self.num_read_heads, self.word_size
