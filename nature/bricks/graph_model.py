@@ -85,8 +85,10 @@ class GraphModel:
              for box_number in range(n_initial_boxes)]
 
     def evolve_initial_graph(self):
-        self.n_mutations = self.pull_numbers("n_mutations", MIN_MUTATIONS, MAX_MUTATIONS)
-        self.mutations = self.pull_choices("mutations", MUTATION_OPTIONS, self.n_mutations)
+        self.n_mutations = self.pull_numbers("n_mutations",
+                                             MIN_MUTATIONS, MAX_MUTATIONS)
+        self.mutations = self.pull_choices("mutations",
+                                           MUTATION_OPTIONS, self.n_mutations)
         [locals()[mutation]() for mutation in self.mutations]
 
     def get_regulon(self, parent=None, layers=None):
@@ -234,7 +236,7 @@ class GraphModel:
                 log("nope!")
                 return False
         except Exception as e:
-            log("nope!")
+            log("nope!", e)
             return False
 
     def count_boxes(self):

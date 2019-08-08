@@ -5,7 +5,7 @@ import numpy as np
 import random
 
 from tools import map_attrdict, map_enumerate, get_spec, flatten_lists
-from . import Brick
+from bricks import Interface, GraphModel
 
 
 K = tf.keras
@@ -29,12 +29,11 @@ class Agent:
         self.code_spec = get_spec(shape=(code_atoms, code_size), format="ragged")
         self.tasks = map_attrdict(self.register_shape_variables, tasks)
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
-        task_name_sensor = Brick("task_key", get_spec(shape), self.code_spec, input_number,
-                        agent=self, brick_type="Interface")
-        self.sensors.append(task_brick)
+        task_name_spec = get_spec(shape=(len(tasks)), format="onehot")
+        task_name_sensor = Interface(self, "task_key", task_name_spec, self.code_spec)
+        self.sensors.append(task_name_sensor)
         self.decide_n_in_n_out()
-        self.shared_model = Brick(self.n_in, self.code_spec, self.n_out,
-                                  agent=self, brick_type="GraphModel")
+        self.shared_model = GraphModel(self)
         self.parameters = AttrDict({})
         self.replay = []
 
@@ -57,26 +56,24 @@ class Agent:
         return task_key, task_dict
 
     def add_sensors_and_actuators(self, task_key, task_dict):
-        """Add coder sensors and interface actuators to an agent"""
+        """Add interfaces to a task_dict"""
         task_dict.actuators = []
         task_dict.sensors = []
         for input_number, in_spec in enumerate(task_dict.inputs):
-            encoder = Brick(task_key, in_spec, self.code_spec, input_number,
-                            agent=self, brick_type="Interface")
+            encoder = Interface(self, task_key, in_spec, self.code_spec)
             task_dict.sensors.append(encoder)
-            decoder = Brick(task_key, self.code_spec, in_spec, input_number,
-                            agent=self, brick_type="Interface")
+            decoder = Interface(self, task_key, self.code_spec, in_spec)
             task_dict.actuators.append(decoder)
         for output_number, out_spec in enumerate(task_dict.outputs):
-            actuator = Brick(task_key, self.code_spec, out_spec, input_number,
-                             agent=self, brick_type="Interface")
+            actuator = Interface(self, task_key, self.code_spec, out_spec)
             task_dict.actuators.append(actuator)
         return task_key, task_dict
 
     def train(self):
-        [[v.task_runner(self, k, v) for k, v in self.tasks.items()]
+        """Run EPISODES_PER_PRACTICE_SESSION episodes"""
+        [[v.task_runner(self, k, v)
+          for k, v in self.tasks.items()]
             for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
-        return self.check_human_level(), self.check_convergence()
 
     def check_human_level(self):
         """True if N_LOOKBACK_STEPS have mean loss below task threshold"""

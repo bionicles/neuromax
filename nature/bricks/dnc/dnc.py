@@ -34,7 +34,7 @@ class DNC(tf.keras.layers.Layer):
     state = namedtuple("dnc_state", [
         "memory_state",
         "controller_state",
-        "read_vectors",])
+        "read_vectors"])
 
     interface = namedtuple("interface", [
         "read_keys",
@@ -55,9 +55,11 @@ class DNC(tf.keras.layers.Layer):
 
         self._output_size = output_size
         self.memory_size = memory_size
-        self.num_read_heads = num_read_heads 
+        self.num_read_heads = num_read_heads
         self.word_size = word_size
-        self._interface_vector_size = self.num_read_heads * self.word_size + 3 * self.word_size + 5 * self.num_read_heads + 3
+        self._interface_vector_size = self.num_read_heads * self.word_size
+        self._interface_vector_size += 3 * self.word_size
+        self._interface_vector_size += 5 * self.num_read_heads + 3
         self._clip = 20.0
 
         self._controller = tf.keras.layers.LSTMCell(units=controller_units)
@@ -65,7 +67,7 @@ class DNC(tf.keras.layers.Layer):
             self._interface_vector_size,
             name='controller_to_interface'
         )
-        self._memory = Memory(memory_size, word_size, num_read_heads )
+        self._memory = Memory(memory_size, word_size, num_read_heads)
         self._final_output_dense = tf.keras.layers.Dense(self._output_size)
 
     def _parse_interface_vector(self, interface_vector):
@@ -95,28 +97,27 @@ class DNC(tf.keras.layers.Layer):
 
     def call(self, inputs, prev_dnc_state):
         prev_dnc_state = nest.pack_sequence_as(self.state_size_nested, prev_dnc_state)
-        #inputs_to_controller
+        # inputs_to_controller
         read_vectors_flat = self._flatten_read_vectors(prev_dnc_state.read_vectors)
         input_augmented = tf.concat([inputs, read_vectors_flat], 1)
         controller_output, controller_state = self._controller(
             input_augmented,
             prev_dnc_state.controller_state,)
         controller_output = tf.clip_by_value(controller_output, -self._clip, self._clip)
-        #parse_interface
+        # parse_interface
         interface = self._controller_to_interface_dense(controller_output)
         interface = self._parse_interface_vector(interface)
-        #update_memory
+        # update_memory
         read_vectors, memory_state = self._memory(interface, prev_dnc_state.memory_state)
         state = DNC.state(
             memory_state=memory_state,
             controller_state=controller_state,
             read_vectors=read_vectors,)
-        #join_outputs
+        # join_outputs
         read_vectors_flat = self._flatten_read_vectors(read_vectors)
         final_output = tf.concat([controller_output, read_vectors_flat], 1)
         final_output = self._final_output_dense(final_output)
         final_output = tf.clip_by_value(final_output, -self._clip, self._clip)
-
         return final_output, nest.flatten(state)
 
     @property

@@ -1,17 +1,18 @@
 import tensorflow_probability as tfp
 import tensorflow_addons as tfa
 import tensorflow as tf
+import gin
 
 tfd = tfp.distributions
 tfpl = tfp.layers
 K = tf.keras
 L = K.layers
 
-
 MY_PARAMETER_MIN, MY_PARAMETER_MAX = 1, 4
 MY_CHOICES = ["cake", "pie"]
 
 
+@gin.configurable
 class MyBrick:
     """
     MyBrick [DOES STUFF]

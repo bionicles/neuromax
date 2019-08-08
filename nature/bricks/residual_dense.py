@@ -1,15 +1,8 @@
 import tensorflow as tf
-K = tf.keras
-L = K.layers
 
-PREACTIVATION = 'relu'
+from . import preact_conv2D
 
-
-def preact_conv2D(inputs, k=3, filters=64):
-    outputs = L.BatchNormalization()(inputs)
-    outputs = L.Activation(PREACTIVATION)(outputs)
-    outputs = L.Conv2D(filters, kernel_size=(k, k), padding='same')(outputs)
-    return outputs
+L = tf.keras.layers
 
 
 def ResidualBlock(inputs, kernal_size=3, filters=64):

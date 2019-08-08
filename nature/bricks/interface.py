@@ -1,5 +1,5 @@
+from tensorflow_addons import InstanceNormalization
 import tensorflow_probability as tfp
-import tensorflow_addons as tfa
 import tensorflow as tf
 
 from .kernel_conv import KConvSet1D
@@ -11,14 +11,14 @@ K = tf.keras
 L = K.layers
 
 # SENSORS:
-# image -> code (eyeball)
-# ragged -> code (NLP + atoms)
+#     image -> code (eyeball)
+#     ragged -> code (NLP + atoms)
 
 # ACTUATORS
-# code -> onehot (clevr answer)
-# code -> int (discrete control for MountainCar-v0)
-# code -> ragged (ragged force field for protein dynamics)
-# code -> image (reconstruct image)
+#     code -> onehot (clevr answer)
+#     code -> int (discrete control for MountainCar-v0)
+#     code -> ragged (ragged force field for protein dynamics)
+#     code -> image (reconstruct image)
 
 ONEHOT_ACTIVATION_OPTIONS = ["sigmoid"]
 RAGGED_ACTIVATION_OPTIONS = ["tanh"]
@@ -48,7 +48,8 @@ class Interface:
         self.task_id, self.out_spec, self.in_spec = task_id, in_spec, out_spec
         self.name = f"{task_id}_{in_spec}_{out_spec}_interface"
         self.input = K.Input(in_spec.shape)
-        self.normie = tfa.layers.InstanceNormalization()(self.input)
+        self.normie = InstanceNormalization()(self.input)
+        format = out_spec.format
         if format == "onehot":
             self.get_onehot_output()
         elif format == "discrete":
@@ -58,13 +59,13 @@ class Interface:
         self.model = K.Model(self.input, self.output)
 
     def get_onehot_actuator_output(self):
-        self.d_out = self.out_spec.shape[-1] if self.d_out is None else self.d_out
         units = self.pull_numbers(f"{self.name}_units", MIN_UNITS, MAX_UNITS)
         activation = self.pull_choices(f"{self.name}_activation",
                                        ONEHOT_ACTIVATION_OPTIONS)
-        output = tfpl.DenseReparameterization(units, activation)(self.normie)
-        output = tfpl.DenseReparameterization(self.d_out, activation)(output)
-        self.output = K.activations.softmax(output)
+        output = tfpl.DenseVariational(units, activation)(self.normie)
+        output = tfpl.DenseVariational(units, activation)(output)
+        d_out = self.out_spec.shape[-1] if self.d_out is None else self.d_out
+        self.output = tfpl.OneHotCategorical(d_out)(output)
 
     def get_discrete_actuator_output(self):
         self.d_out = self.out_spec.n
