@@ -32,6 +32,6 @@ flow models
 sensors
 actuators
 optimizers - lookahead https://github.com/bojone/keras_lookahead#lookahead-optimizer-for-keras https://arxiv.org/abs/1907.08610
-
-done:
-  differentiable neural computer
+quantizer
+# https://toolz.readthedocs.io/en/latest/api.html#dicttoolz might be fun
+differentiable neural computer

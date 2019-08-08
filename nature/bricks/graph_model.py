@@ -159,7 +159,7 @@ class GraphModel:
     def make_model(self):
         """Build the keras model described by a graph."""
         self.outputs = [self.get_output(id) for id in list(self.G.predecessors("sink"))]
-        self.inputs = [self.G.node[id]['op'] for id in list(self.G.successors('source'))]
+        self.inputs = [self.G.node[id]['brick'] for id in list(self.G.successors('source'))]
         self.model = K.Model(self.inputs, self.outputs)
 
     def get_output(self, id):

@@ -6,7 +6,7 @@ from nurture.mol.mol import read_mol_dataset, run_mol_task
 from nurture.gym.gym import get_env_io_specs, run_env_task
 from nature.agent import Agent
 
-from tools import map_attrdict, log, get_spec
+from tools import map_attrdict, get_spec
 
 WORD_VECTOR_LENGTH = 300
 MAX_LOOPS = 100
@@ -28,7 +28,7 @@ tasks = AttrDict({
     "clevr": {
         "type": "dataset",
         "name": "clevr",
-        "inputs": [get_spec(shape=(480, 320, 3), sensor_type="image"),
+        "inputs": [get_spec(shape=(480, 320, 3), format="image"),
                    get_spec(shape=(None, WORD_VECTOR_LENGTH),
                             sensor_type="lstm")],
         "outputs": [get_spec(shape=(28, ), format="onehot")],
@@ -38,14 +38,9 @@ tasks = AttrDict({
 
 # we build env I/O specs for gym tasks:
 tasks = map_attrdict(get_env_io_specs, tasks)
-
-human_level, converged, loops = False, False, 0
 agent = Agent(tasks)
 
-for loop_number in range(MAX_LOOPS):
-    human_level, converged = agent.train()
-    log(f"loop: {loop_number}")
-    log(f"human_level: {human_level}")
-    log(f"converged: {converged}")
-    if human_level or converged:
-        break
+results = [agent.train() for _ in range(MAX_LOOPS)]
+
+print("results")
+print(results)

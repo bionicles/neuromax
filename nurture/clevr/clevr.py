@@ -20,6 +20,9 @@ answer_choices = [
 
 
 spacy.prefer_gpu()
+
+# install pretrained word vectors:
+# python -m spacy download en_vectors_web_lg
 nlp = spacy.load("en_vectors_web_lg")
 
 

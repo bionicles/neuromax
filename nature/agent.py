@@ -26,9 +26,12 @@ class Agent:
                                        MIN_CODE_ATOMS, MAX_CODE_ATOMS)
         code_size = self.pull_numbers("code_size",
                                       MIN_CODE_SIZE, MAX_CODE_SIZE)
-        self.code_spec = get_spec(shape=(code_atoms, code_size))
+        self.code_spec = get_spec(shape=(code_atoms, code_size), format="ragged")
         self.tasks = map_attrdict(self.register_shape_variables, tasks)
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
+        task_name_sensor = Brick("task_key", get_spec(shape), self.code_spec, input_number,
+                        agent=self, brick_type="Interface")
+        self.sensors.append(task_brick)
         self.decide_n_in_n_out()
         self.shared_model = Brick(self.n_in, self.code_spec, self.n_out,
                                   agent=self, brick_type="GraphModel")
@@ -55,14 +58,19 @@ class Agent:
 
     def add_sensors_and_actuators(self, task_key, task_dict):
         """Add coder sensors and interface actuators to an agent"""
-        task_dict.sensors = [
-            Brick(task_key, in_spec, self.code_spec, input_number,
-                  agent=self, brick_type="Sensor")
-            for input_number, in_spec in enumerate(task_dict.inputs)]
-        task_dict.actuators = [
-            Brick(self, task_key, self.code_spec, out_spec, output_number,
-                  agent=self, brick_type="Sensor")
-            for output_number, out_spec in enumerate(task_dict.outputs)]
+        task_dict.actuators = []
+        task_dict.sensors = []
+        for input_number, in_spec in enumerate(task_dict.inputs):
+            encoder = Brick(task_key, in_spec, self.code_spec, input_number,
+                            agent=self, brick_type="Interface")
+            task_dict.sensors.append(encoder)
+            decoder = Brick(task_key, self.code_spec, in_spec, input_number,
+                            agent=self, brick_type="Interface")
+            task_dict.actuators.append(decoder)
+        for output_number, out_spec in enumerate(task_dict.outputs):
+            actuator = Brick(task_key, self.code_spec, out_spec, input_number,
+                             agent=self, brick_type="Interface")
+            task_dict.actuators.append(actuator)
         return task_key, task_dict
 
     def train(self):

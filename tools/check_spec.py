@@ -1,7 +1,11 @@
 import tensorflow as tf
 
 
-def inspect_tensor(spec, tensor):
+def check_spec(spec, maybe_tensor_or_distribution):
+    if hasattr(maybe_tensor_or_distribution, "entropy"):
+        tensor = maybe_tensor_or_distribution.sample()
+    else:
+        tensor = maybe_tensor_or_distribution
     tensor_shape = tf.shape(tensor)
     for dimension_number, dimension_value in enumerate(spec.shape):
         if dimension_value is not None:

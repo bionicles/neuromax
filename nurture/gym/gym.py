@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from tools import get_spec, compute_surprise, compute_freedom
+from tools import get_spec, compute_surprise, compute_freedom, compute_kl
 
 
 def space2spec(space):
@@ -37,8 +37,7 @@ def run_env_task(agent, task_key, task_dict):
                 reconstruction_surprise = compute_surprise(
                     reconstructions, normies)
                 if prior_state_predictions:
-                    state_surprise = compute_surprise(
-                        prior_state_predictions, codes)
+                    state_surprise = compute_kl(prior_state_predictions, codes)
                 else:
                     state_surprise = 0.
                 prior_state_predictions = state_predictions
