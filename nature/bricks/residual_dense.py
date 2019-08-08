@@ -1,14 +1,18 @@
 import tensorflow as tf
 K = tf.keras
 L = K.layers
-
+tfd = tfp.distributions
+tfpl = tfp.layers
 PREACTIVATION = 'relu'
 
 
-def preact_conv2D(inputs, k=3, filters=64):
+def preact_conv2D(inputs, k=3, filters=64, tfp_layer=False):
     outputs = L.BatchNormalization()(inputs)
     outputs = L.Activation(PREACTIVATION)(outputs)
-    outputs = L.Conv2D(filters, kernel_size=(k, k), padding='same')(outputs)
+    if tfp_layer:
+        outputs = tfpl.Convolution2DFlipout(filters, kernel_size=(k, k), padding='same')(outputs)
+    else:
+        outputs = L.Conv2D(filters, kernel_size=(k, k), padding='same')(outputs)
     return outputs
 
 
