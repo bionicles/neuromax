@@ -98,7 +98,7 @@ def run_mol_task(agent, task_key, task_dict):
             # complexity = 0.
             # MaxEnt actions ...
             # need empowerment / curiousity / optionality type loss over diversity of results (TODO!)
-            freedom = compute_freedom(actions)
+            freedom = sum_entropy(actions)
             free_energy = loss + surprise - freedom
         gradients = tape.gradient([free_energy, model.losses],
                                   model.trainable_variables)

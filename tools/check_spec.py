@@ -16,6 +16,7 @@ def check_spec(spec, maybe_tensor_or_distribution):
     if spec.format is "onehot":
         if tf.math.reduce_sum(tensor) > 1:
             print(f"spec calls for onehot but tensor sum > 1")
+            raising = True
     if raising:
         raise Exception(f"{tensor} does not meet {spec}")
     return True
