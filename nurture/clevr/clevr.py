@@ -5,12 +5,14 @@ import spacy
 import json
 import os
 
-from tools import get_onehot
+from tools.get_onehot import get_onehot
 
-task_path = os.path.dirname(os.path.realpath('__file__'))
+DATASET = "val"
+
+task_path = os.path.join(".", "nurture", "clevr")
 images_path = os.path.join(task_path, "CLEVR_v1.0", "images")
 data_path = os.path.join(task_path, "CLEVR_v1.0", "questions",
-                         "CLEVR_train_questions.json")
+                         f"CLEVR_{DATASET}_questions.json")
 
 answer_choices = [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
@@ -53,6 +55,8 @@ def generate_clevr_item():
     question_number += 1
     if question_number == len(questions):
         question_number = 0
+    print('image_tensor', 'embedded_question', 'one_hot_answer')
+    print(image_tensor, embedded_question, one_hot_answer)
     return image_tensor, embedded_question, one_hot_answer
 
 
@@ -61,8 +65,7 @@ def read_clevr_dataset():
     row_number, question_number = 0, 0
     get_dataframe()
     return tf.data.Dataset.from_generator(generate_clevr_item,
-                                          [tf.int32, tf.float32, tf.int32,
-                                           tf.string, tf.string])
+                                          (tf.int32, tf.float32, tf.int32))
 
 
 def run_clevr_task(agent, task_key, task_dict):

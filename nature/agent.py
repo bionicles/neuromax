@@ -4,9 +4,14 @@ import tensorflow as tf
 import numpy as np
 import random
 
-from tools import map_attrdict, map_enumerate, get_spec, get_onehot, get_size
-from nature.bricks.interface import Interface
+from tools.map_enumerate import map_enumerate
+from tools.map_attrdict import map_attrdict
+from tools.get_onehot import get_onehot
+from tools.get_size import get_size
+from tools.get_spec import get_spec
+
 from nature.bricks.graph_model import GraphModel
+from nature.bricks.interface import Interface
 
 
 K = tf.keras
@@ -23,6 +28,7 @@ class Agent:
     """Entity which learns to solve tasks using bricks"""
 
     def __init__(self, tasks):
+        self.parameters = AttrDict({})
         code_atoms = self.pull_numbers("code_atoms",
                                        MIN_CODE_ATOMS, MAX_CODE_ATOMS)
         code_channels = self.pull_numbers("code_channels",
@@ -31,12 +37,8 @@ class Agent:
         self.code_spec.size = get_size(self.code_spec.shape)
         self.tasks = map_attrdict(self.register_shape_variables, tasks)
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
-        task_name_spec = get_spec(shape=(len(tasks)), format="onehot")
-        task_name_sensor = Interface(self, "task_key", task_name_spec, self.code_spec)
-        self.sensors.append(task_name_sensor)
         self.decide_n_in_n_out()
         self.shared_model = GraphModel(self)
-        self.parameters = AttrDict({})
         self.replay = []
 
     def decide_n_in_n_out(self):
@@ -64,6 +66,9 @@ class Agent:
         """Add interfaces to a task_dict"""
         task_dict.actuators = []
         task_dict.sensors = []
+        task_name_spec = get_spec(shape=(len(self.tasks)), format="onehot")
+        task_name_sensor = Interface(self, "task_key", task_name_spec, self.code_spec)
+        self.sensors.append(task_name_sensor)
         for input_number, in_spec in enumerate(task_dict.inputs):
             encoder = Interface(self, task_key, in_spec, self.code_spec,
                                 input_number=input_number)

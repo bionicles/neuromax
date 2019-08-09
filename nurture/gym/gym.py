@@ -1,6 +1,10 @@
+from attrdict import AttrDict
 import tensorflow as tf
 
-from tools import get_spec, compute_surprise, sum_entropy, compute_kl
+from tools.compute_surprise import compute_surprise
+from tools.sum_entropy import sum_entropy
+from tools.compute_kl import compute_kl
+from tools.get_spec import get_spec
 
 
 def space2spec(space):
@@ -12,10 +16,13 @@ def space2spec(space):
     return spec
 
 
-def get_env_io_specs(task):
-    if task.type is "env":
-        task.inputs = [space2spec(task.env.observation_space)]
-        task.outputs = [space2spec(task.env.action_space)]
+def get_env_io_specs(task_key, task_dict):
+    print("get_env_io_specs", task_key, task_dict)
+    task_dict = AttrDict(task_dict)
+    if task_dict.type is "env":
+        task_dict.inputs = [space2spec(task_dict.env.observation_space)]
+        task_dict.outputs = [space2spec(task_dict.env.action_space)]
+    return task_key, task_dict
 
 
 def run_env_task(agent, task_key, task_dict):

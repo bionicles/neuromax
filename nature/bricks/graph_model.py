@@ -20,7 +20,8 @@ MIN_INITIAL_BOXES, MAX_INITIAL_BOXES = 1, 4
 # evolution
 MIN_MUTATIONS, MAX_MUTATIONS = 1, 4
 MUTATION_OPTIONS = ["insert_motifs"]
-MIN_MIN_P_INSERT, MAX_MIN_P_INSERT, MIN_MAX_P_INSERT, MAX_MAX_P_INSERT = 0, 0.49, 0.51, 1
+MIN_MIN_P_INSERT, MAX_MIN_P_INSERT = 0, 0.49
+MIN_MAX_P_INSERT, MAX_MAX_P_INSERT = 0.51, 1
 # regulons
 MIN_MIN_LAYERS, MAX_MIN_LAYERS, MIN_MAX_LAYERS, MAX_MAX_LAYERS = 1, 2, 3, 4
 MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
@@ -35,11 +36,13 @@ class GraphModel:
     because we need to be able to handle multiple inputs
     """
 
-    def __init__(self, agent, n_in, code_shape, n_out):
+    def __init__(self, agent, n_in=None, code_shape=None, n_out=None):
         self.agent = agent
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
-        self.n_in, self.code_shape, self.n_out = n_in, code_shape, n_out
+        self.n_in = agent.n_in if n_in is None else n_in
+        self.code_shape = agent.code_shape if code_shape is None else code_shape
+        self.n_out = agent.n_out if n_out is None else n_out
         self.name = get_unique_id("GraphModel")
         self.get_graph()
         self.make_model()
