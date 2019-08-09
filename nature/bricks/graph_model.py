@@ -5,13 +5,10 @@ import tensorflow as tf
 import networkx as nx
 import random
 
-from bricks.multi_head_attention import MultiHeadAttention
-from bricks.kernel_conv import KConvSet
-from bricks.get_mlp import get_mlp
-from bricks.dnc.dnc import DNC
 from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.get_mlp import get_mlp
+from nature.bricks.dnc.dnc import DNC
 
 from tools import log, safe_sample, get_unique_id
 
