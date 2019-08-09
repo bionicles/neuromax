@@ -5,16 +5,13 @@ import tensorflow as tf
 import networkx as nx
 import random
 
-<<<<<<< HEAD
 from bricks.multi_head_attention import MultiHeadAttention
 from bricks.kernel_conv import KConvSet
 from bricks.get_mlp import get_mlp
-from bricls.dnc.dnc import DNC
-=======
+from bricks.dnc.dnc import DNC
 from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.get_mlp import get_mlp
->>>>>>> 0a1a4e96186a8ce454544f14bb649b5f98d9ff87
 
 from tools import log, safe_sample, get_unique_id
 
@@ -239,8 +236,8 @@ class GraphModel:
             brick = MultiHeadAttention(self.agent)
         if brick_type == "dnc":
             controller_units = self.pull_choices(f"{id}_controller_units", MIN_CONTROLLER_UNITS, MAX_CONTROLLER_UNITS)
-            dnc_cell = DNC(self.agent, id, d_out, controller_units)
-            brick = L.RNN(dnc_cell)
+            brick, initial_state = DNC(self.agent, id, controller_units, d_out)
+            G.node[id]['initial_state'] = initial_state
         G.node[id]['brick'] = brick
         return brick
 
