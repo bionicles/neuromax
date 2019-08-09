@@ -8,6 +8,7 @@ from nature.bricks.k_conv import KConvSet1D
 
 from tools.concat_1D_coords import concat_1D_coords
 from tools.concat_2D_coords import concat_2D_coords
+from tools.rescale_for_box import rescale_for_box
 from tools.normalize import normalize
 from tools.get_size import get_size
 
@@ -68,8 +69,11 @@ class Interface:
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
         self.agent = agent
-        out_spec.size = get_size(out_spec.shape) if out_spec.format is "code" else None
-        self.task_id, self.out_spec, self.in_spec = task_id, in_spec, out_spec
+        try:
+            out_spec.size = get_size(out_spec.shape)
+        except Exception as e:
+            print("couldn't get size for out_spec", e, "\n")
+        self.task_id, self.in_spec, self.out_spec = task_id, in_spec, out_spec
         self.brick_id = f"{task_id}_interface_{input_number}_{in_spec.format}_to_{out_spec.format}"
         self.layer_class = self.pull_choices(f"{self.brick_id}_layer_class",
                                              LAYER_OPTIONS)
@@ -103,7 +107,7 @@ class Interface:
         if in_spec.format is "code" and out_spec.format is not "code":
             model_type = f"{out_spec.format}_actuator"
         builder_method = f"self.get_{model_type}_output()"
-    # try:
+        print(f"eval({builder_method})")
         eval(builder_method)
         if "ragged" in [in_spec.format, out_spec.format]:
             self.call = self.call_ragged
@@ -125,16 +129,26 @@ class Interface:
             self.agent, self.brick_id, self.output, self.out_spec.shape)
 
     def get_box_sensor_output(self):
+        print("get_box_sensor_output", self.in_spec, self.out_spec)
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        BOX_SENSOR_LAST_ACTIVATION_OPTIONS)
         output = self.layer_class(self.out_spec.size, activation)(self.output)
         self.output = L.Reshape(self.out_spec.shape)(output)
 
     def get_box_actuator_output(self):
+        print("get_box_actuator_output", self.in_spec, self.out_spec)
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        BOX_ACTUATOR_LAST_ACTIVATION_OPTIONS)
         output = self.layer_class(self.out_spec.size, activation)(self.output)
-        self.output = L.Reshape(self.out_spec.shape)(output)
+        output = L.Reshape(self.out_spec.shape)(output)
+        out_keys = self.out_spec.keys()
+        if "low" in out_keys and "high" in out_keys:
+            ones = tf.ones_like(output)
+            from_range = (-1 * ones, ones)
+            to_range = (self.out_spec.low, self.out_spec.high)
+            self.output = rescale_for_box(self.output, from_range, to_range)
+        else:
+            self.output = output
 
     def get_ragged_sensor_output(self):
         output = L.Flatten()(self.output)

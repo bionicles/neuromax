@@ -4,6 +4,7 @@ import tensorflow as tf
 
 
 def get_size(shape):
+    print("get size for", shape)
     if None in shape:
         raise Exception("cannot get size for shape:", shape)
     if isinstance(shape, tf.Tensor):
