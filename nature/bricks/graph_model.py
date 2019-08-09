@@ -8,6 +8,7 @@ import random
 from bricks.multi_head_attention import MultiHeadAttention
 from bricks.kernel_conv import KConvSet
 from bricks.get_mlp import get_mlp
+from bricls.dnc.dnc import DNC
 
 from tools import log, safe_sample, get_unique_id
 
@@ -26,6 +27,7 @@ MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
 # bricks
 ACTIVATION_OPTIONS = ["tanh"]
 BRICK_OPTIONS = ["conv1d", "attention", "dnc", "mlp", "k_conv"]
+MIN_CONTROLLER_UNITS, MAX_CONTROLLER_UNITS = 20, 40
 
 
 class GraphModel:
@@ -225,6 +227,10 @@ class GraphModel:
             brick = KConvSet(self.agent, d_in, d_out, set_size)
         if brick_type == "attention":
             brick = MultiHeadAttention(self.agent)
+        if brick_type == "dnc":
+            controller_units = self.pull_choices(f"{id}_controller_units", MIN_CONTROLLER_UNITS, MAX_CONTROLLER_UNITS)
+            dnc_cell = DNC(self.agent, id, d_out, controller_units)
+            brick = L.RNN(dnc_cell)
         G.node[id]['brick'] = brick
         return brick
 
