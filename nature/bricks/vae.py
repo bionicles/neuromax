@@ -25,7 +25,7 @@ def sampling(args):
     return z_mean + K.exp(0.5 * z_log_var) * epsilon
 
 
-def get_image_encoder(agent, brick_id, input, output_shape):
+def get_image_encoder_output(agent, brick_id, input, output_shape):
     dense_activation = agent.pull_choices(f"{brick_id}_dense_activation", DENSE_ACTIVATION)
     conv_activation = agent.pull_choices(f"{brick_id}_conv_activation", CONV_ACTIVATION)
     code_size = agent.code_size
