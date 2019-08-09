@@ -37,7 +37,7 @@ class Agent:
         self.code_spec = get_spec(shape=(code_atoms, code_channels), format="code")
         self.code_spec.size = get_size(self.code_spec.shape)
         # we add a sensor for task id
-        task_id_spec = get_spec(shape=(len(self.tasks.keys())), format="onehot")
+        task_id_spec = get_spec(shape=(len(self.tasks.keys()),), format="onehot")
         self.task_sensor = Interface(self, "task_key", task_id_spec, self.code_spec)
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
         self.decide_n_in_n_out()

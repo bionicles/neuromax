@@ -19,16 +19,18 @@ tfpl = tfp.layers
 K = tf.keras
 L = K.layers
 
-TFP_LAYER = tfpl.DenseReparameterization
+LAYER_OPTIONS = [tfpl.DenseReparameterization, L.Dense]
 # input2code
 RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS = ["tanh"]
 ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS = ['sigmoid']
+BOX_SENSOR_LAST_ACTIVATION_OPTIONS = ["tanh"]
 # code2code
 CODE_INTERFACE_LAST_ACTIVATION_OPTIONS = ["tanh"]
 CODE_INTERFACE_ACTIVATION_OPTIONS = ["tanh"]
 # code2output
 ONEHOT_ACTUATOR_ACTIVATION_OPTIONS = ["sigmoid"]
 RAGGED_ACTUATOR_ACTIVATION_OPTIONS = ["tanh"]
+BOX_ACTUATOR_LAST_ACTIVATION_OPTIONS = ["linear"]
 # layers
 MIN_FILTERS, MAX_FILTERS = 32, 64
 MIN_UNITS, MAX_UNITS = 32, 64
@@ -69,9 +71,14 @@ class Interface:
         out_spec.size = get_size(out_spec.shape) if out_spec.format is "code" else None
         self.task_id, self.out_spec, self.in_spec = task_id, in_spec, out_spec
         self.brick_id = f"{task_id}_interface_{input_number}_{in_spec.format}_to_{out_spec.format}"
+        self.layer_class = self.pull_choices(f"{self.brick_id}_layer_class",
+                                             LAYER_OPTIONS)
         print(f"Interface.__init__ -- {self.brick_id}")
+        print("in_spec", in_spec)
+        print("out_spec", out_spec)
         self.input_number = input_number
         self.shape_variable_key = None
+        self.d_out = None
         self.build_model()
 
     def add_coords_to_shape(shape):
@@ -117,11 +124,23 @@ class Interface:
         self.output = get_image_decoder_output(
             self.agent, self.brick_id, self.output, self.out_spec.shape)
 
+    def get_box_sensor_output(self):
+        activation = self.pull_choices(f"{self.brick_id}_last_activation",
+                                       BOX_SENSOR_LAST_ACTIVATION_OPTIONS)
+        output = self.layer_class(self.out_spec.size, activation)(self.output)
+        self.output = L.Reshape(self.out_spec.shape)(output)
+
+    def get_box_actuator_output(self):
+        activation = self.pull_choices(f"{self.brick_id}_last_activation",
+                                       BOX_ACTUATOR_LAST_ACTIVATION_OPTIONS)
+        output = self.layer_class(self.out_spec.size, activation)(self.output)
+        self.output = L.Reshape(self.out_spec.shape)(output)
+
     def get_ragged_sensor_output(self):
         output = L.Flatten()(self.output)
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS)
-        output = TFP_LAYER(self.out_size, activation)
+        output = self.layer_class(self.out_spec.size, activation)
         self.output = L.Reshape(self.out_spec.shape)(output)
 
     def get_ragged_actuator_output(self):
@@ -144,19 +163,19 @@ class Interface:
         code_size = self.out_spec.size
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        CODE_INTERFACE_LAST_ACTIVATION_OPTIONS)
-        self.output = TFP_LAYER(code_size, activation)(self.output)
+        self.output = self.layer_class(code_size, activation)(self.output)
 
     def get_onehot_sensor_output(self):
         code_size = self.out_spec.size
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS)
-        self.output = TFP_LAYER(code_size, activation)
+        self.output = self.layer_class(code_size, activation)(self.output)
 
     def get_onehot_actuator_output(self):
         units = self.pull_numbers(f"{self.brick_id}_units", MIN_UNITS, MAX_UNITS)
         activation = self.pull_choices(f"{self.brick_id}_activation",
                                        ONEHOT_ACTUATOR_ACTIVATION_OPTIONS)
-        output = TFP_LAYER(units, activation)(self.output)
+        output = self.layer_class(units, activation)(self.output)
         d_out = self.out_spec.shape[-1] if self.d_out is None else self.d_out
         self.output = tfpl.OneHotCategorical(d_out)(output)
 

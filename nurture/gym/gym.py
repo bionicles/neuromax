@@ -12,7 +12,8 @@ def space2spec(space):
     if type_name == "Discrete":
         spec = get_spec(format="discrete", n=space.n)
     if type_name == "Box":
-        spec = get_spec(format="box", shape=space.shape)
+        spec = get_spec(format="box", shape=space.shape,
+                        low=space.low, high=space.high)
     return spec
 
 

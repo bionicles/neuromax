@@ -1,14 +1,21 @@
-from attrdict import AttrDict
-
 # should we delete this and just use AttrDict?
+from attrdict import AttrDict
+import numpy as np
 
 
-def get_spec(shape=None, format=None, n=None, variables=None, add_coords=None):
+def get_spec(format=None, shape=None, n=None, variables=None, add_coords=None,
+             low=None, high=None):
     """
     Build an AttrDict for an input or output tensor
 
     Args:
         format: a string descriptor of the tensor's type ["onehot", "ragged"]
+        shape: tensor shape
+        n: number of discrete values
+        variables: list of (name, position) for shape variables in input
+        add__coords: boolean to determine if we should concat coordinates
+        low: number for the bottom of the range of possible values
+        high: number for the top of the range of possible values
     """
     spec = AttrDict({})
     if shape is not None:
@@ -21,4 +28,8 @@ def get_spec(shape=None, format=None, n=None, variables=None, add_coords=None):
         spec["variables"] = variables
     if add_coords is not None:
         spec["add_coords"] = True
+    if low is not None and low is not -np.inf:
+        spec["low"] = low
+    if high is not None and high is not np.inf:
+        spec["high"] = high
     return spec
