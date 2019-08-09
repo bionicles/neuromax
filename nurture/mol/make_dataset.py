@@ -6,7 +6,7 @@ import random
 import shutil
 import csv
 import os
-DATASETS_ROOT = os.path.join('.', 'src', 'nurture', 'mol', 'datasets')
+DATASETS_ROOT = os.path.join('nurture', 'mol', 'datasets')
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
 TEMP_PATH = "archive/temp"
 SHARDS_PER_DATASET = 100000

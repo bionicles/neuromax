@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from tools import get_spec, compute_surprise, compute_freedom, compute_kl
+from tools import get_spec, compute_surprise, sum_entropy, compute_kl
 
 
 def space2spec(space):
@@ -43,7 +43,7 @@ def run_env_task(agent, task_key, task_dict):
                 prior_state_predictions = state_predictions
                 loss_surprise = compute_surprise([loss_prediction], [loss])
                 surprise = reconstruction_surprise + state_surprise + loss_surprise
-                freedom = compute_freedom(actions)
+                freedom = sum_entropy(actions)
                 free_energy = loss + surprise - freedom
             gradients = tape.gradient([free_energy, model.losses], model.trainable_variables)
             agent.optimizer.apply_gradients(zip(gradients, model.trainable_variables))
