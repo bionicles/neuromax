@@ -9,9 +9,9 @@ D_MODEL_OPTIONS = [32, 64]
 N_HEADS_OPTIONS = [1, 2]
 
 
-class Transformer(L.Layer):
+class MultiHeadAttention(L.Layer):
     def __init__(self, agent, brick_id):
-        super(Transformer, self).__init__()
+        super(MultiHeadAttention, self).__init__()
         self.pull_choices = agent.pull_choices
         self.pull_numbers = agent.pull_numbers
         self.agent = agent

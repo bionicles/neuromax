@@ -1,5 +1,5 @@
 brick injector
-deformable conv
+deformable conv https://tensorlayer.readthedocs.io/en/latest/_modules/tensorlayer/layers/convolution/deformable_conv.html#DeformableConv2d
 capsules
 reservoirs # Echo State Network: https://github.com/cameronosmith/Echo-State-Network/blob/master/EchoStateNetwork.py
 differentiable neural dictionary https://github.com/mjacar/pytorch-nec/blob/master/dnd.py
@@ -35,3 +35,8 @@ optimizers - lookahead https://github.com/bojone/keras_lookahead#lookahead-optim
 quantizer
 # https://toolz.readthedocs.io/en/latest/api.html#dicttoolz might be fun
 differentiable neural computer
+subpixel conv
+pixelSnail
+pixelCNN
+bilinear https://pytorch.org/docs/stable/nn.html#torch.nn.Bilinear
+spatial_transformer

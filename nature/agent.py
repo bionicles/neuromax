@@ -110,9 +110,9 @@ class Agent:
 
     def pull_numbers(self, pkey, a, b, step=1, n=1):
         """
-        Provide numbers from range(a, b, step).
+        WARNING!: IF KEY EXISTS, RETURNS CURRENT VALUE, NOT A NEW ONE!
 
-        WARNING!: IF KEY EXISTS, THIS RETURNS THE CURRENT VALUE, NOT A NEW ONE
+        Provide numbers from range(a, b, step).
 
         Args:
             pkey: string key for this parameter
@@ -149,10 +149,10 @@ class Agent:
 
     def pull_choices(self, pkey, options, n=1, distribution=None):
         """
+        WARNING!: IF KEY EXISTS, RETURNS CURRENT VALUE, NOT A NEW ONE!
+
         Choose from a set of options.
         Uniform sampling unless distribution is given
-
-        WARNING!: IF KEY EXISTS, THIS RETURNS THE CURRENT VALUE, NOT A NEW ONE
 
         Args:
             pkey: unique key to share values

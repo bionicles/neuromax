@@ -5,7 +5,7 @@ import tensorflow as tf
 import networkx as nx
 import random
 
-from bricks.transformer import Transformer
+from bricks.multi_head_attention import MultiHeadAttention
 from bricks.kernel_conv import KConvSet
 from bricks.get_mlp import get_mlp
 
@@ -25,7 +25,7 @@ MIN_MIN_LAYERS, MAX_MIN_LAYERS, MIN_MAX_LAYERS, MAX_MAX_LAYERS = 1, 2, 3, 4
 MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
 # bricks
 ACTIVATION_OPTIONS = ["tanh"]
-BRICK_OPTIONS = ["conv1d", "transformer", "dnc", "mlp", "k_conv"]
+BRICK_OPTIONS = ["conv1d", "attention", "dnc", "mlp", "k_conv"]
 
 
 class GraphModel:
@@ -223,8 +223,8 @@ class GraphModel:
         if "k_conv" in brick_type:
             set_size = brick_type[-1]
             brick = KConvSet(self.agent, d_in, d_out, set_size)
-        if brick_type == "transformer":
-            brick = Transformer(self.agent)
+        if brick_type == "attention":
+            brick = MultiHeadAttention(self.agent)
         G.node[id]['brick'] = brick
         return brick
 

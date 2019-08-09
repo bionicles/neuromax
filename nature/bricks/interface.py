@@ -2,7 +2,7 @@ from tensorflow_addons import InstanceNormalization
 import tensorflow_probability as tfp
 import tensorflow as tf
 
-from bricks.transformer import Transformer
+from bricks.multi_head_attention import MultiHeadAttention
 from bricks.vae import get_image_encoder_output, get_image_decoder_output
 from bricks.k_conv import KConvSet1D
 
@@ -15,6 +15,7 @@ L = K.layers
 
 # input2code
 RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS = ["tanh"]
+ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS = ['sigmoid']
 # code2code
 CODE_INTERFACE_LAST_ACTIVATION_OPTIONS = ["tanh"]
 CODE_INTERFACE_ACTIVATION_OPTIONS = ["tanh"]
@@ -70,7 +71,9 @@ class Interface:
         self.in_spec.shape[-1] += len(self.in_spec.shape)  # coords
         self.input = K.Input(self.in_spec.shape)
         self.output = InstanceNormalization()(self.input)
-        self.output = Transformer(self.agent, self.brick_id)(self.output)
+        if self.in_spec.format is not "image":
+            self.output = MultiHeadAttention(
+                self.agent, self.brick_id)(self.output)
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
             model_type = f"{in_spec.format}_sensor"
@@ -128,6 +131,12 @@ class Interface:
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        CODE_INTERFACE_LAST_ACTIVATION_OPTIONS)
         self.output = tfpl.DenseVariational(code_size, activation)(self.output)
+
+    def get_onehot_sensor_output(self):
+        code_size = self.out_spec.size
+        activation = self.pull_choices(f"{self.brick_id}_last_activation",
+                                       ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS)
+        self.output = tfpl.DenseVariational(code_size, activation)
 
     def get_onehot_actuator_output(self):
         units = self.pull_numbers(f"{self.brick_id}_units", MIN_UNITS, MAX_UNITS)
