@@ -6,7 +6,11 @@ from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
 from nature.bricks.k_conv import KConvSet1D
 
-from tools import normalize, get_size, concat_1D_coords, concat_2D_coords
+from tools.concat_1D_coords import concat_1D_coords
+from tools.concat_2D_coords import concat_2D_coords
+from tools.normalize import normalize
+from tools.get_size import get_size
+
 
 InstanceNormalization = tfa.layers.InstanceNormalization
 
@@ -69,8 +73,15 @@ class Interface:
         self.shape_variable_key = None
         self.build_model()
 
+    def add_coords_to_shape(shape):
+        """Increase channels of a shape to account for coordinates"""
+        new_shape = list(shape)
+        new_shape[-1] += len(new_shape) - 1
+        return tuple(new_shape)
+
     def build_model(self):
-        self.in_spec.shape[-1] += len(self.in_spec.shape)  # coords
+        if "add_coords" in self.in_spec.keys():
+            self.in_spec.shape = self.add_coords_to_shape(self.in_spec.shape)
         self.input = K.Input(self.in_spec.shape)
         self.output = InstanceNormalization()(self.input)
         if self.in_spec.format is not "image":

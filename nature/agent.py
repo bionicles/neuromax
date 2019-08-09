@@ -28,6 +28,7 @@ class Agent:
     """Entity which learns to solve tasks using bricks"""
 
     def __init__(self, tasks):
+        self.tasks = tasks
         self.parameters = AttrDict({})
         code_atoms = self.pull_numbers("code_atoms",
                                        MIN_CODE_ATOMS, MAX_CODE_ATOMS)
@@ -35,7 +36,6 @@ class Agent:
                                           MIN_CODE_CHANNELS, MAX_CODE_CHANNELS)
         self.code_spec = get_spec(shape=(code_atoms, code_channels), format="code")
         self.code_spec.size = get_size(self.code_spec.shape)
-        self.tasks = map_attrdict(self.register_shape_variables, tasks)
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
         self.decide_n_in_n_out()
         self.shared_model = GraphModel(self)
@@ -43,32 +43,16 @@ class Agent:
 
     def decide_n_in_n_out(self):
         self.n_in = max([len(task_dict.inputs)
-                         for task_key, task_dict in self.tasks.items()])
+                         for task_id, task_dict in self.tasks.items()])
         self.n_out = max([len(task_dict.outputs)
-                          for task_key, task_dict in self.tasks.items()])
-
-    @staticmethod
-    def get_shape_var_id(task_id, input_number, dimension_number):
-        return f"{task_id}_{input_number}_{dimension_number}"
-
-    def register_shape_variables(self, task_key, task_dict):
-        """Register shape variables in the task dictionary"""
-        for input_number, in_spec in enumerate(task_dict.inputs):
-            for dimension_number, dimension in enumerate(in_spec.shape):
-                if isinstance(dimension, str):
-                    shape_var_id = self.get_shape_var_id(
-                        task_key, input_number, dimension_number)
-                    self.parameters[shape_var_id] = None
-                    task_dict.inputs[input_number].shape[dimension_number] = None
-        return task_key, task_dict
+                          for task_id, task_dict in self.tasks.items()])
 
     def add_sensors_and_actuators(self, task_key, task_dict):
         """Add interfaces to a task_dict"""
         task_dict.actuators = []
         task_dict.sensors = []
-        task_name_spec = get_spec(shape=(len(self.tasks)), format="onehot")
-        task_name_sensor = Interface(self, "task_key", task_name_spec, self.code_spec)
-        self.sensors.append(task_name_sensor)
+        task_name_spec = get_spec(shape=(len(self.tasks.keys())), format="onehot")
+        self.task_sensor = Interface(self, "task_key", task_name_spec, self.code_spec)
         for input_number, in_spec in enumerate(task_dict.inputs):
             encoder = Interface(self, task_key, in_spec, self.code_spec,
                                 input_number=input_number)
@@ -79,6 +63,8 @@ class Agent:
         for output_number, out_spec in enumerate(task_dict.outputs):
             actuator = Interface(self, task_key, self.code_spec, out_spec)
             task_dict.actuators.append(actuator)
+        task_dict.actuators = list(task_dict.actuators)
+        task_dict.sensor = list(task_dict.sensor)
         return task_key, task_dict
 
     def train(self):
@@ -87,28 +73,28 @@ class Agent:
           for k, v in self.tasks.items()]
             for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
 
-    def __call__(self, task_key, task_dict, inputs):
+    def __call__(self, task_id, task_dict, inputs):
         """
         Encode, reconstruct, predict, and decide for a task's input[s]
 
         Args:
-            tkey: string key of the task
+            task_id: string key of the task
+            task_dict: dictionary for the task w/ sensors
             inputs: a list of tensors
 
         Returns: tuple of tensors
             normies, codes, reconstructions, predictions, actions
         """
-        # we update shape variables
-        if "shape_variables" in task_dict.keys():
-            for dimension_key in task_dict.shape_variables.keys():
-                input_number, dimension_number = \
-                    task_dict.shape_variables[dimension_key].path
-                task_dict.shape_variables[dimension_key].value = \
-                    tf.shape(inputs[input_number])[dimension_number]
+        for output_number, output in enumerate(task_dict.outputs):
+            if "variables" in output.keys():
+                for var_id, var_position in output.variables:
+                    value = inputs[output_number][var_position]
+                    self.parameters[var_id] = value
         self.current_task_dict = task_dict
-        task_input = get_onehot(task_key, self.tasks.keys())
-        inputs = [task_input] + inputs
+        task_input = get_onehot(task_id, self.tasks.keys())
+        task_code = self.task_sensor(task_input)
         codes = map_enumerate(task_dict.sensors, inputs)
+        codes = [task_code] + codes
         judgments = self.shared_model(codes)
         world_model = tf.concat([*codes, *judgments], 0)
         actions = map_enumerate(task_dict.actuators, world_model, task_dict)

@@ -10,9 +10,9 @@ from tools.get_spec import get_spec
 def space2spec(space):
     type_name = type(space).__name__
     if type_name == "Discrete":
-        spec = get_spec(format="discrete", n=space.n, sensor_type="dense")
+        spec = get_spec(format="discrete", n=space.n)
     if type_name == "Box":
-        spec = get_spec(shape=space.shape, format="box", sensor_type="dense")
+        spec = get_spec(format="box", shape=space.shape)
     return spec
 
 

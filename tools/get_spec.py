@@ -3,7 +3,13 @@ from attrdict import AttrDict
 # should we delete this and just use AttrDict?
 
 
-def get_spec(shape=None, format=None, n=None, sensor_type=None):
+def get_spec(shape=None, format=None, n=None, variables=None, add_coords=None):
+    """
+    Build an AttrDict for an input or output tensor
+
+    Args:
+        format: a string descriptor of the tensor's type ["onehot", "ragged"]
+    """
     spec = AttrDict({})
     if shape is not None:
         spec["shape"] = shape
@@ -11,6 +17,8 @@ def get_spec(shape=None, format=None, n=None, sensor_type=None):
         spec["format"] = format
     if n is not None:
         spec["n"] = n
-    if sensor_type is not None:
-        spec["sensor_type"] = sensor_type
+    if variables is not None:
+        spec["variables"] = variables
+    if add_coords is not None:
+        spec["add_coords"] = True
     return spec
