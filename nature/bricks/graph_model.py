@@ -1,17 +1,24 @@
 # graph_model.py - bion
 # why?: learn to map N inputs to M outputs with graph GP
-from tensorflow_addons import InstanceNormalization
+import tensorflow_addons as tfa
 import tensorflow as tf
 import networkx as nx
 import random
 
+<<<<<<< HEAD
 from bricks.multi_head_attention import MultiHeadAttention
 from bricks.kernel_conv import KConvSet
 from bricks.get_mlp import get_mlp
 from bricls.dnc.dnc import DNC
+=======
+from nature.bricks.multi_head_attention import MultiHeadAttention
+from nature.bricks.k_conv import KConvSet1D
+from nature.bricks.get_mlp import get_mlp
+>>>>>>> 0a1a4e96186a8ce454544f14bb649b5f98d9ff87
 
 from tools import log, safe_sample, get_unique_id
 
+InstanceNormalization = tfa.layers.InstanceNormalization
 K = tf.keras
 L = K.layers
 
@@ -20,7 +27,8 @@ MIN_INITIAL_BOXES, MAX_INITIAL_BOXES = 1, 4
 # evolution
 MIN_MUTATIONS, MAX_MUTATIONS = 1, 4
 MUTATION_OPTIONS = ["insert_motifs"]
-MIN_MIN_P_INSERT, MAX_MIN_P_INSERT, MIN_MAX_P_INSERT, MAX_MAX_P_INSERT = 0, 0.49, 0.51, 1
+MIN_MIN_P_INSERT, MAX_MIN_P_INSERT = 0, 0.49
+MIN_MAX_P_INSERT, MAX_MAX_P_INSERT = 0.51, 1
 # regulons
 MIN_MIN_LAYERS, MAX_MIN_LAYERS, MIN_MAX_LAYERS, MAX_MAX_LAYERS = 1, 2, 3, 4
 MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
@@ -36,11 +44,13 @@ class GraphModel:
     because we need to be able to handle multiple inputs
     """
 
-    def __init__(self, agent, n_in, code_shape, n_out):
+    def __init__(self, agent, n_in=None, code_shape=None, n_out=None):
         self.agent = agent
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
-        self.n_in, self.code_shape, self.n_out = n_in, code_shape, n_out
+        self.n_in = agent.n_in if n_in is None else n_in
+        self.code_shape = agent.code_shape if code_shape is None else code_shape
+        self.n_out = agent.n_out if n_out is None else n_out
         self.name = get_unique_id("GraphModel")
         self.get_graph()
         self.make_model()
@@ -224,7 +234,7 @@ class GraphModel:
             brick = get_mlp(self.agent, d_in, d_out, -1)
         if "k_conv" in brick_type:
             set_size = brick_type[-1]
-            brick = KConvSet(self.agent, d_in, d_out, set_size)
+            brick = KConvSet1D(self.agent, d_in, d_out, set_size)
         if brick_type == "attention":
             brick = MultiHeadAttention(self.agent)
         if brick_type == "dnc":

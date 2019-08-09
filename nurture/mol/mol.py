@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from datetime import datetime
 import tensorflow as tf
 from pymol import cmd, util
@@ -9,8 +9,8 @@ import shutil
 import gym
 import os
 
-from src.nurture.mol.make_dataset import load, load_proteins
-from src.nurture.spaces import Ragged
+from nurture.mol.make_dataset import load, load_proteins
+from nurture.gym.spaces.ragged import Ragged
 
 K = tf.keras
 B, L = K.backend, K.layers
@@ -39,9 +39,9 @@ def parse_item(example):
     return id_string, n_atoms, target, positions, features, masses
 
 
-def read_shards(datatype):
-    print("read_shards", datatype)
-    dataset_path = os.path.join('.', 'src', 'nurture', 'mol', 'datasets', 'tfrecord', datatype)
+def read_mol_dataset():
+    print("read_shards")
+    dataset_path = os.path.join('nurture', 'mol', 'datasets', 'tfrecord', 'cif')
     n_records = len(os.listdir(dataset_path))
     filenames = [os.path.join(dataset_path, str(i) + '.tfrecord') for i in range(n_records)]
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
@@ -146,23 +146,22 @@ def run_mol_task(agent, task_key, task_dict):
 #         change = ((loss - initial_loss) / initial_loss) * 100.
 #         return change if not tf.math.is_nan(change) else 420.
 
-    @tf.function
-    def mol_trainer(dataset):
-        print("tracing train")
-        changes = []
-        change = 0.
-        for episode_number, element in dataset.enumerate():
-            with tf.device('/gpu:0'):
-                change = run_episode(element)
-            tf.print(f'episode {episode_number + 1}
-                     {change} % change in loss')
-            tf.summary.scalar('change', change)
-            changes = tf.concat([changes, [change]], -1)
-            if episode >= EPISODES_PER_TASK - 1:
-                break
-        return changes
-
-    return mol_trainer
+    # @tf.function
+    # def mol_trainer(dataset):
+    #     print("tracing train")
+    #     changes = []
+    #     change = 0.
+    #     for episode_number, element in dataset.enumerate():
+    #         with tf.device('/gpu:0'):
+    #             change = run_episode(element)
+    #         tf.print(f'episode {episode_number + 1} {change} % change in loss')
+    #         tf.summary.scalar('change', change)
+    #         changes = tf.concat([changes, [change]], -1)
+    #         if episode >= EPISODES_PER_TASK - 1:
+    #             break
+    #     return changes
+    #
+    # return mol_trainer
 
 
 class MolEnv(gym.Env):
