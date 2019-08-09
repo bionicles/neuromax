@@ -19,6 +19,7 @@ tfpl = tfp.layers
 K = tf.keras
 L = K.layers
 
+TFP_LAYER = tfpl.DenseReparameterization
 # input2code
 RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS = ["tanh"]
 ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS = ['sigmoid']
@@ -95,17 +96,17 @@ class Interface:
         if in_spec.format is "code" and out_spec.format is not "code":
             model_type = f"{out_spec.format}_actuator"
         builder_method = f"self.get_{model_type}_output()"
-        try:
-            eval(builder_method)
-            if "ragged" in [in_spec.format, out_spec.format]:
-                self.call = self.call_ragged
-            else:
-                self.call = self.call_model
-        except Exception as e:
-            print("INTERFACE FAILED TO BUILD!!!!!!!!!!!11111111one")
-            print("builder_method", builder_method)
-            print("in_spec", in_spec)
-            print("out_spec", out_spec)
+    # try:
+        eval(builder_method)
+        if "ragged" in [in_spec.format, out_spec.format]:
+            self.call = self.call_ragged
+        else:
+            self.call = self.call_model
+        # except Exception as e:
+        #     print("INTERFACE FAILED TO BUILD!!!!!!!!!!!11111111one")
+        #     print("builder_method", builder_method)
+        #     print("in_spec", in_spec)
+        #     print("out_spec", out_spec)
         self.model = K.Model(self.input, self.output)
 
     def get_image_sensor_output(self):
@@ -120,7 +121,7 @@ class Interface:
         output = L.Flatten()(self.output)
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS)
-        output = tfpl.DenseVariational(self.out_size, activation)
+        output = TFP_LAYER(self.out_size, activation)
         self.output = L.Reshape(self.out_spec.shape)(output)
 
     def get_ragged_actuator_output(self):
@@ -143,19 +144,19 @@ class Interface:
         code_size = self.out_spec.size
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        CODE_INTERFACE_LAST_ACTIVATION_OPTIONS)
-        self.output = tfpl.DenseVariational(code_size, activation)(self.output)
+        self.output = TFP_LAYER(code_size, activation)(self.output)
 
     def get_onehot_sensor_output(self):
         code_size = self.out_spec.size
         activation = self.pull_choices(f"{self.brick_id}_last_activation",
                                        ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS)
-        self.output = tfpl.DenseVariational(code_size, activation)
+        self.output = TFP_LAYER(code_size, activation)
 
     def get_onehot_actuator_output(self):
         units = self.pull_numbers(f"{self.brick_id}_units", MIN_UNITS, MAX_UNITS)
-        activation = self.pull_choices(f"{self.name}_activation",
+        activation = self.pull_choices(f"{self.brick_id}_activation",
                                        ONEHOT_ACTUATOR_ACTIVATION_OPTIONS)
-        output = tfpl.DenseVariational(units, activation)(self.output)
+        output = TFP_LAYER(units, activation)(self.output)
         d_out = self.out_spec.shape[-1] if self.d_out is None else self.d_out
         self.output = tfpl.OneHotCategorical(d_out)(output)
 

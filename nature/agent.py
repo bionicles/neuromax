@@ -36,6 +36,9 @@ class Agent:
                                           MIN_CODE_CHANNELS, MAX_CODE_CHANNELS)
         self.code_spec = get_spec(shape=(code_atoms, code_channels), format="code")
         self.code_spec.size = get_size(self.code_spec.shape)
+        # we add a sensor for task id
+        task_id_spec = get_spec(shape=(len(self.tasks.keys())), format="onehot")
+        self.task_sensor = Interface(self, "task_key", task_id_spec, self.code_spec)
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
         self.decide_n_in_n_out()
         self.shared_model = GraphModel(self)
@@ -49,22 +52,20 @@ class Agent:
 
     def add_sensors_and_actuators(self, task_key, task_dict):
         """Add interfaces to a task_dict"""
-        task_dict.actuators = []
-        task_dict.sensors = []
-        task_name_spec = get_spec(shape=(len(self.tasks.keys())), format="onehot")
-        self.task_sensor = Interface(self, "task_key", task_name_spec, self.code_spec)
+        actuators = []
+        sensors = []
         for input_number, in_spec in enumerate(task_dict.inputs):
             encoder = Interface(self, task_key, in_spec, self.code_spec,
                                 input_number=input_number)
-            task_dict.sensors.append(encoder)
+            sensors.append(encoder)
             decoder = Interface(self, task_key, self.code_spec, in_spec,
                                 input_number=input_number)
-            task_dict.actuators.append(decoder)
+            actuators.append(decoder)
         for output_number, out_spec in enumerate(task_dict.outputs):
             actuator = Interface(self, task_key, self.code_spec, out_spec)
             task_dict.actuators.append(actuator)
-        task_dict.actuators = list(task_dict.actuators)
-        task_dict.sensor = list(task_dict.sensor)
+        task_dict.actuators = list(actuators)
+        task_dict.sensor = list(sensors)
         return task_key, task_dict
 
     def train(self):

@@ -16,7 +16,7 @@ from tensorflow.python.util import nest
 import tensorflow_probability as tfp
 import tensorflow as tf
 
-from memory import Memory, EPSILON
+from nature.bricks.dnc.memory import Memory, EPSILON
 
 K = tf.keras
 L = K.layers
