@@ -143,10 +143,7 @@ class Interface:
         output = L.Reshape(self.out_spec.shape)(output)
         out_keys = self.out_spec.keys()
         if "low" in out_keys and "high" in out_keys:
-            ones = tf.ones_like(output)
-            from_range = (-1 * ones, ones)
-            to_range = (self.out_spec.low, self.out_spec.high)
-            self.output = rescale_for_box(self.output, from_range, to_range)
+            self.output = output * self.out_spec.high - self.out_spec.low
         else:
             self.output = output
 
@@ -195,7 +192,8 @@ class Interface:
 
     def get_discrete_actuator_output(self):
         self.d_out = self.out_spec.n
-        self.get_onehot_output()
+        self.out_spec.size = self.out_spec.n
+        self.get_onehot_actuator_output()
         self.output = tf.argmax(self.output, axis=0)
 
     def call_model(self, input):
