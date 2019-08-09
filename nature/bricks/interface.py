@@ -2,8 +2,8 @@ import tensorflow_probability as tfp
 import tensorflow_addons as tfa
 import tensorflow as tf
 
-from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
+from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.k_conv import KConvSet1D
 
 from tools.concat_1D_coords import concat_1D_coords

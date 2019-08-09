@@ -4,7 +4,8 @@ L = tf.keras.layers
 tfd = tfp.distributions
 tfpl = tfp.layers
 
-TFP_OPTIONS = [True, False]
+TFP_LAYER_OPTIONS = [tfpl.DenseReparameterization, tfpl.DenseFlipout]
+TRUE_FALSE = [True, False]
 D_MODEL_OPTIONS = [32, 64]
 N_HEADS_OPTIONS = [1, 2]
 
@@ -20,21 +21,23 @@ class MultiHeadAttention(L.Layer):
                                     D_MODEL_OPTIONS)
         n_heads = self.pull_choices(f"{self.brick_id}_transformer_n_heads",
                                     N_HEADS_OPTIONS)
-        # tfp_layer = self.pull_choices(f"{self.brick_id}_transformer_tfp_layer",
-        #                               TFP_OPTIONS)
+        use_tfp = self.pull_choices(f"{self.brick_id}_transformer_use_tfp",
+                                    TRUE_FALSE)
         self.d_model, self.n_heads = d_model, n_heads
         assert d_model % self.n_heads == 0
         self.depth = d_model // self.n_heads
-        # if tfp_layer:
-        #     self.wq = tfpl.DenseVariational(d_model)
-        #     self.wk = tfpl.DenseVariational(d_model)
-        #     self.wv = tfpl.DenseVariational(d_model)
-        #     self.dense = tfpl.DenseVariational(d_model)
-        # else:
-        self.wq = L.Dense(d_model)
-        self.wk = L.Dense(d_model)
-        self.wv = L.Dense(d_model)
-        self.dense = L.Dense(d_model)
+        if use_tfp:
+            tfp_layer = self.pull_choices(f"{self.brick_id}_transformer_tfp_layer",
+                                          TFP_LAYER_OPTIONS)
+            self.wq = tfp_layer(d_model)
+            self.wk = tfp_layer(d_model)
+            self.wv = tfp_layer(d_model)
+            self.dense = tfp_layer(d_model)
+        else:
+            self.wq = L.Dense(d_model)
+            self.wk = L.Dense(d_model)
+            self.wv = L.Dense(d_model)
+            self.dense = L.Dense(d_model)
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (n_heads, depth).

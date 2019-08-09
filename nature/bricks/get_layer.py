@@ -4,14 +4,14 @@ import tensorflow as tf
 from nature.bricks.activations import clean_activation
 from nature.bricks.noisedrop import NoiseDrop
 
-tfd = tfp.distributions
+# tfd = tfp.distributions
 tfpl = tfp.layers
 K = tf.keras
 L = K.layers
 
 
 LAYER_OPTIONS = [NoiseDrop, L.Dense, tfpl.DenseFlipout,
-                 tfpl.DenseVariational, tfpl.DenseReparameterization]
+                 tfpl.DenseReparameterization]
 FN_OPTIONS = ["tanh", "linear", "swish", "lisht", "sigmoid"]
 MIN_STDDEV, MAX_STDDEV = 1e-4, 0.1
 MIN_UNITS, MAX_UNITS = 32, 512
