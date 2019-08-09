@@ -5,6 +5,10 @@ import tensorflow as tf
 import networkx as nx
 import random
 
+from bricks.multi_head_attention import MultiHeadAttention
+from bricks.kernel_conv import KConvSet
+from bricks.get_mlp import get_mlp
+from bricks.dnc.dnc import DNC
 from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.get_mlp import get_mlp
@@ -28,6 +32,7 @@ MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
 # bricks
 ACTIVATION_OPTIONS = ["tanh"]
 BRICK_OPTIONS = ["conv1d", "attention", "dnc", "mlp", "k_conv"]
+MIN_CONTROLLER_UNITS, MAX_CONTROLLER_UNITS = 20, 40
 
 
 class GraphModel:
@@ -229,6 +234,10 @@ class GraphModel:
             brick = KConvSet1D(self.agent, d_in, d_out, set_size)
         if brick_type == "attention":
             brick = MultiHeadAttention(self.agent)
+        if brick_type == "dnc":
+            controller_units = self.pull_choices(f"{id}_controller_units", MIN_CONTROLLER_UNITS, MAX_CONTROLLER_UNITS)
+            brick, initial_state = DNC(self.agent, id, controller_units, d_out)
+            G.node[id]['initial_state'] = initial_state
         G.node[id]['brick'] = brick
         return brick
 
