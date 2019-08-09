@@ -1,16 +1,17 @@
 # graph_model.py - bion
 # why?: learn to map N inputs to M outputs with graph GP
-from tensorflow_addons import InstanceNormalization
+import tensorflow_addons as tfa
 import tensorflow as tf
 import networkx as nx
 import random
 
-from bricks.multi_head_attention import MultiHeadAttention
-from bricks.kernel_conv import KConvSet
-from bricks.get_mlp import get_mlp
+from nature.bricks.multi_head_attention import MultiHeadAttention
+from nature.bricks.k_conv import KConvSet1D
+from nature.bricks.get_mlp import get_mlp
 
 from tools import log, safe_sample, get_unique_id
 
+InstanceNormalization = tfa.layers.InstanceNormalization
 K = tf.keras
 L = K.layers
 
@@ -222,7 +223,7 @@ class GraphModel:
             brick = get_mlp(self.agent, d_in, d_out, -1)
         if "k_conv" in brick_type:
             set_size = brick_type[-1]
-            brick = KConvSet(self.agent, d_in, d_out, set_size)
+            brick = KConvSet1D(self.agent, d_in, d_out, set_size)
         if brick_type == "attention":
             brick = MultiHeadAttention(self.agent)
         G.node[id]['brick'] = brick

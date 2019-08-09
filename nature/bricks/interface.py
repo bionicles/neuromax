@@ -1,12 +1,14 @@
-from tensorflow_addons import InstanceNormalization
 import tensorflow_probability as tfp
+import tensorflow_addons as tfa
 import tensorflow as tf
 
-from bricks.multi_head_attention import MultiHeadAttention
-from bricks.vae import get_image_encoder_output, get_image_decoder_output
-from bricks.k_conv import KConvSet1D
+from nature.bricks.multi_head_attention import MultiHeadAttention
+from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
+from nature.bricks.k_conv import KConvSet1D
 
 from tools import normalize, get_size, concat_1D_coords, concat_2D_coords
+
+InstanceNormalization = tfa.layers.InstanceNormalization
 
 tfd = tfp.distributions
 tfpl = tfp.layers

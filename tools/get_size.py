@@ -1,4 +1,4 @@
-from itertools import reduce
+from functools import reduce
 from operator import mul
 import tensorflow as tf
 

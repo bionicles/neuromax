@@ -6,7 +6,8 @@ from nurture.mol.mol import read_mol_dataset, run_mol_task
 from nurture.gym.gym import get_env_io_specs, run_env_task
 from nature.agent import Agent
 
-from tools import map_attrdict, get_spec
+from tools.map_attrdict import map_attrdict
+from tools.get_spec import get_spec
 
 WORD_VECTOR_SIZE = 300
 MAX_LOOPS = 100

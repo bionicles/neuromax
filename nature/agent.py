@@ -5,7 +5,8 @@ import numpy as np
 import random
 
 from tools import map_attrdict, map_enumerate, get_spec, get_onehot, get_size
-from bricks import Interface, GraphModel
+from nature.bricks.interface import Interface
+from nature.bricks.graph_model import GraphModel
 
 
 K = tf.keras

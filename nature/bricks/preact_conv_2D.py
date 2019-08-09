@@ -1,12 +1,13 @@
-from tensorflow_addons import InstanceNormalization
 # from tensorlayer.layers import DeformableConv2d
 import tensorflow_probability as tfp
+import tensorflow_addons as tfa
 import tensorflow as tf
 
+InstanceNormalization = tfa.layers.InstanceNormalization
 L = tf.keras.layers
 tfpl = tfp.layers
 
-TFP_LAYER = tfpl.Conv2DFlipout
+TFP_LAYER = tfpl.Convolution2DFlipout
 ACTIVATION = "relu"
 NORM = "instance"
 PADDING = "same"

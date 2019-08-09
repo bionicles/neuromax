@@ -1,8 +1,8 @@
 import tensorflow_probability as tfp
 import tensorflow as tf
 
-from bricks.activations import clean_activation
-from bricks import NoiseDrop
+from nature.bricks.activations import clean_activation
+from nature.bricks.noisedrop import NoiseDrop
 
 tfd = tfp.distributions
 tfpl = tfp.layers

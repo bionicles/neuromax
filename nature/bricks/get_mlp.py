@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from helpers import get_unique_id
-from bricks import get_layer
+from nature.bricks import get_layer
+from tools import get_unique_id
 
 K = tf.keras
 L = K.layers
