@@ -157,10 +157,13 @@ class Interface:
         self.output = tf.argmax(self.output, axis=0)
 
     def flatten_resize_reshape(self):
-        out = L.Flatten()(self.output)
-        activation = self.pull_choices(f"{self.brick_id}_activation",
-                                       RESIZE_ACTIVATION_OPTIONS)
-        out = self.layer_class(self.out_spec.size, activation)(out)
+        if self.output.shape[1] is None:
+            out = L.LSTM(self.out_spec.size)(self.output)
+        else:
+            out = L.Flatten()(self.output)
+            activation = self.pull_choices(f"{self.brick_id}_activation",
+                                        RESIZE_ACTIVATION_OPTIONS)
+            out = self.layer_class(self.out_spec.size, activation)(out)
         self.output = self.reshape(out)
 
     def call_model(self, input):
