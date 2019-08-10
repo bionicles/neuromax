@@ -4,7 +4,7 @@
 from nanoid import generate
 import tensorflow as tf
 
-from nature.bricks.get_mlp import get_mlp
+from nature.bricks.kernel import get_kernel
 from tools.get_size import get_size
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
@@ -27,9 +27,9 @@ class KConvSet1D(L.Layer):
         elif set_size is "code_for_one":
             # if we convolve a code over noise then d_in = d_out + in_size
             in_size = get_size(in_spec.shape)
-            d_in = d_out + in_size
+            d_in = len(in_spec.shape) - 1 + in_size
             self.call = self.call_all_to_one
-        self.kernel = get_mlp(agent, brick_id, d_in, d_out, set_size)
+        self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size)
         self.layer_id = f"{brick_id}_KConvSet{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
 

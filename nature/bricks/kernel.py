@@ -1,7 +1,8 @@
 import tensorflow as tf
 
 from nature.bricks import get_layer
-from tools import get_unique_id
+from tools.get_unique_id import get_unique_id
+from tools.log import log
 
 K = tf.keras
 L = K.layers
@@ -11,8 +12,10 @@ MIN_LAYERS, MAX_LAYERS = 1, 4
 MODEL_OPTIONS = ["deep", "wide_deep"]
 
 
-def get_mlp(agent, brick_id, d_in, d_out, set_size, name=None, input_shape=None):
+def get_kernel(agent, brick_id, d_in, d_out, set_size,
+               name=None, input_shape=None):
     """build a deep or wide and deep dense mlp"""
+    log("get_kernel", brick_id, d_in, d_out, set_size)
     assert set_size in [-1, 1, 2, 3]
     name = get_unique_id(f"{brick_id}_mlp") if name is None else name
     n_layers = agent.pull_numbers(f"{name}-n_layers", MIN_LAYERS, MAX_LAYERS)

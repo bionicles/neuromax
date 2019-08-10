@@ -164,7 +164,7 @@ class Interface:
         else:
             out = L.Flatten()(self.output)
             activation = self.pull_choices(f"{self.brick_id}_activation",
-                                        RESIZE_ACTIVATION_OPTIONS)
+                                           RESIZE_ACTIVATION_OPTIONS)
             out = self.layer_class(self.out_spec.size, activation)(out)
         self.output = self.reshape(out)
 
@@ -178,15 +178,15 @@ class Interface:
     def get_ragged_sensor_output(self):
         self.output = L.Bidirectional(L.LSTM(self.out_spec.size))(self.output)
 
-    def get_ragged_actuator_output(self):
-        self.shape_variable_key = self.out_spec.variables[0][0]
-        self.output = KConvSet1D(
-            self.agent, self.brick_id, self.in_spec, self.out_spec,
-            "code_for_one")(self.output)
-
     def call_ragged_sensor(self, input):
         coords = normalize(range(self.out_spec.size))
         return self.model([coords, input])
+
+    def get_ragged_actuator_output(self):
+        self.shape_var_key = self.out_spec.variables[0][0]
+        self.output = KConvSet1D(
+            self.agent, self.brick_id, self.in_spec, self.out_spec,
+            "code_for_one")(self.output)
 
     def call_ragged_actuator(self, input):
         ragged_dimension = self.agent.parameters[self.shape_var_key]
