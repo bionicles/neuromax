@@ -2,7 +2,9 @@ import tensorflow_probability as tfp
 from tools import get_size
 import tensorflow as tf
 
-from nature.bricks.preact_conv_2D import preact_conv_2D, preact_deconv_2D
+from nature.bricks import preact_conv_2D
+
+get_preact_conv_2D_output, get_preact_deconv_2D_output = preact_conv_2D
 
 L = tf.keras.layers
 K = tf.keras.backend
@@ -37,11 +39,11 @@ def get_image_encoder_output(agent, brick_id, input, output_shape):
         agent.pull_numbers(f"{brick_id}_{layer_number}_filters",
                            MIN_FILTER_CONV, MAX_FILTER_CONV)
         for layer_number in range(num_conv_layers)]
-    output = preact_conv_2D(input, filters=filters_list[0],
-                            activation=conv_activation)(input)
+    output = get_preact_conv_2D_output(input, filters=filters_list[0],
+                                       activation=conv_activation)
     for filters in filters_list[1:]:
-        output = preact_conv_2D(output, filters=filter,
-                                activation=conv_activation)(output)
+        output = get_preact_conv_2D_output(output, filters=filter,
+                                           activation=conv_activation)
     flat_output = L.Flatten()(output)
     x_units = agent.pull_numbers(f"{brick_id}_x_layer_units",
                                  MIN_X_LAYER_UNITS, MAX_X_LAYER_UNITS)
@@ -69,8 +71,9 @@ def get_image_decoder_output(agent, brick_id, input, output_shape):
                                        MIN_FILTER_DECONV, MAX_FILTER_DECONV)
                     for layer_number in num_deconv_layers]
     for filters in filters_list:
-        reshaped_code = preact_deconv_2D(reshaped_code, filters=filters,
-                                         activation=deconv_activation)
-    image_output = preact_deconv_2D(reshaped_code, filters=output_shape[-1],
-                                    activation=LAST_DECODER_ACTIVATION)
+        reshaped_code = get_preact_deconv_2D_output(
+            reshaped_code, filters=filters, activation=deconv_activation)
+    image_output = get_preact_deconv_2D_output(
+        reshaped_code, filters=output_shape[-1],
+        activation=LAST_DECODER_ACTIVATION)
     return image_output

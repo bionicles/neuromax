@@ -14,6 +14,17 @@ MAX_LOOPS = 100
 
 print("neuromax.py running")
 tasks = AttrDict({
+    "clevr": {
+        "type": "dataset",
+        "inputs": [get_spec(shape=(480, 320, 4),
+                            add_coords=True,
+                            format="image"),
+                   get_spec(shape=(None, WORD_VECTOR_SIZE),
+                            add_coords=True,
+                            format="ragged")],
+        "outputs": [get_spec(shape=(28, ), format="onehot")],
+        "dataset": read_clevr_dataset(),
+        "runner": run_clevr_task},
     "MountainCar-v0": {
         "type": "env",
         "env": gym.make("MountainCar-v0"),
@@ -28,18 +39,8 @@ tasks = AttrDict({
                              format="ragged",
                              variables=[("n_atoms", -2)])],
         "dataset": read_mol_dataset(),
-        "runner": run_mol_task},
-    "clevr": {
-        "type": "dataset",
-        "inputs": [get_spec(shape=(480, 320, 4),
-                            add_coords=True,
-                            format="image"),
-                   get_spec(shape=(None, WORD_VECTOR_SIZE),
-                            add_coords=True,
-                            format="ragged")],
-        "outputs": [get_spec(shape=(28, ), format="onehot")],
-        "dataset": read_clevr_dataset(),
-        "runner": run_clevr_task}})
+        "runner": run_mol_task}
+                 })
 
 # we build env I/O specs for gym tasks:
 print("preparing tasks:\n", tasks)

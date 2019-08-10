@@ -15,9 +15,9 @@ KERNEL_SIZE = 3
 FILTERS = 64
 
 
-def preact_conv_2D(inputs, activation=ACTIVATION, k=KERNEL_SIZE,
-                   filters=FILTERS, norm=NORM, tfp_layer=TFP_LAYER,
-                   padding=PADDING):
+def get_preact_conv_2D_output(inputs, activation=ACTIVATION, k=KERNEL_SIZE,
+                              filters=FILTERS, norm=NORM, tfp_layer=TFP_LAYER,
+                              padding=PADDING):
     if norm is "instance":
         outputs = InstanceNormalization()(inputs)
     else:
@@ -29,9 +29,9 @@ def preact_conv_2D(inputs, activation=ACTIVATION, k=KERNEL_SIZE,
         return L.Conv2D(filters, kernel_size=(k, k), padding=padding)(outputs)
 
 
-def preact_deconv_2D(inputs, activation=ACTIVATION, k=KERNEL_SIZE,
-                     filters=FILTERS, norm=NORM, tfp_layer=TFP_LAYER,
-                     padding=PADDING):
+def get_preact_deconv_2D_output(inputs, activation=ACTIVATION, k=KERNEL_SIZE,
+                                filters=FILTERS, norm=NORM,
+                                tfp_layer=TFP_LAYER, padding=PADDING):
     if norm is "instance":
         outputs = InstanceNormalization()(inputs)
     else:
