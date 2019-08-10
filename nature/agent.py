@@ -63,7 +63,7 @@ class Agent:
             actuators.append(decoder)
         for output_number, out_spec in enumerate(task_dict.outputs):
             actuator = Interface(self, task_key, self.code_spec, out_spec)
-            task_dict.actuators.append(actuator)
+            actuators.append(actuator)
         task_dict.actuators = list(actuators)
         task_dict.sensor = list(sensors)
         return task_key, task_dict
