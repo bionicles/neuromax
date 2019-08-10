@@ -25,9 +25,10 @@ class KConvSet1D(L.Layer):
             self.call = self.call_for_three
         elif set_size is "code_for_one":
             self.call = self.call_code_for_one
+            self.flatten = L.Flatten()
             d_in = 1
         self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size)
-        self.layer_id = f"{brick_id}_KConvSet{set_size}-{generate()}"
+        self.layer_id = f"{brick_id}_KConvSet_{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
 
     # TODO: find a nice recursive approach to N-ary set convolutions
@@ -40,12 +41,13 @@ class KConvSet1D(L.Layer):
     def call_for_three(self, atoms):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.reduce_sum(tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), axis=0), atoms), axis=0), atoms)
 
-    def call_code_for_one(self, normalized_desired_output_range, input):
-        input = tf.flatten(input)
-        return tf.map_fn(lambda normalized_desired_output_element:
+    def call_code_for_one(self, inputs):
+        normalized_output_coords, code = inputs
+        flat_code = self.flatten(code)
+        return tf.map_fn(lambda normalized_output_coord:
                          self.kernel([
-                             normalized_desired_output_element, input
-                             ]), normalized_desired_output_range)
+                             normalized_output_coord, flat_code
+                             ]), normalized_output_coords)
 
     def call_one_to_all(self, output_placeholder, input):
         return tf.foldl(

@@ -184,11 +184,13 @@ class Interface:
 
     def get_ragged_actuator_output(self):
         self.shape_var_key = self.out_spec.variables[0][0]
+        self.coords_input = K.Input((None, 1))
+        self.input = [self.coords_input, self.input]
         self.output = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
-            "code_for_one")(self.output)
+            "code_for_one")([self.coords_input, self.output])
 
-    def call_ragged_actuator(self, input):
+    def call_ragged_actuator(self, code):
         ragged_dimension = self.agent.parameters[self.shape_var_key]
-        coords = normalize(tf.range(ragged_dimension))
-        return self.model([coords, input])
+        normalized_output_coords = normalize(tf.range(ragged_dimension))
+        return self.model([normalized_output_coords, code])
