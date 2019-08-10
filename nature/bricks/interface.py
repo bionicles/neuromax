@@ -11,6 +11,7 @@ from tools.concat_2D_coords import concat_2D_coords
 from tools.normalize import normalize
 from tools.get_size import get_size
 
+import time
 
 InstanceNormalization = tfa.layers.InstanceNormalization
 
@@ -88,14 +89,15 @@ class Interface:
         self.reshape = L.Reshape(self.out_spec.shape)
         self.build_model()
 
-    def add_coords_to_shape(shape):
+    def add_coords_to_shape(*args):
         """Increase channels of a shape to account for coordinates"""
-        new_shape = list(shape)
+        new_shape = list(args[1])
         new_shape[-1] += len(new_shape) - 1
         return tuple(new_shape)
 
     def build_model(self):
         if "add_coords" in self.in_spec.keys():
+            print("self.in_spec.shape: ", self.in_spec.shape)
             self.in_spec.shape = self.add_coords_to_shape(self.in_spec.shape)
         self.input = K.Input(self.in_spec.shape)
         self.output = InstanceNormalization()(self.input)
