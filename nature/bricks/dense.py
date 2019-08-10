@@ -32,7 +32,7 @@ def get_dense_out(agent, brick_id, input, layer=None, units=None, fn=None,
     if layer is NoiseDrop:
         stddev = agent.pull_numbers(f"{brick_id}-stddev",
                                     MIN_STDDEV, MAX_STDDEV)
-        return NoiseDrop(units, activation=fn, stddev=stddev)
+        return NoiseDrop(units, activation=fn, stddev=stddev)(input)
     else:
-        return layer(units, activation=fn)
+        return layer(units, activation=fn)(input)
     raise Exception(f"get_layer failed on {brick_id} {layer} {units} {fn}")
