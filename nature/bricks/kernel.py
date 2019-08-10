@@ -7,7 +7,7 @@ from tools.log import log
 K = tf.keras
 L = K.layers
 
-SET_OPTIONS = [-1, 1, 2, 3, "code_for_one"]
+SET_OPTIONS = [-1, 1, 2, 3, "code_for_one", "one_for_all"]
 MODEL_OPTIONS = ["deep", "wide_deep"]
 MIN_LAYERS, MAX_LAYERS = 1, 4
 

@@ -12,7 +12,7 @@ LAST_DECODER_ACTIVATION = "sigmoid"
 
 def sample_fn(args):
     code_mean, code_variance = args
-    epsilon = tf.random.normal(tf.shape(code_mean))
+    epsilon = tf.random.normal(tf.shape(code_variance))
     print(code_mean, code_variance, epsilon)
     sample = code_mean + B.exp(0.5 * code_variance) * epsilon
     return sample
