@@ -17,13 +17,17 @@ MIN_STDDEV, MAX_STDDEV = 1e-4, 0.1
 MIN_UNITS, MAX_UNITS = 32, 512
 
 
-def get_layer(agent, brick_id, layer=None, units=None, fn=None):
-    if layer not in LAYER_OPTIONS:
+def get_dense_out(agent, brick_id, input, layer=None, units=None, fn=None,
+                  fn_options=None):
+    if layer is None:
         layer = agent.pull_choices(f"{brick_id}-layer_type", LAYER_OPTIONS)
     if units is None or units < MIN_UNITS or units > MAX_UNITS:
         units = agent.pull_numbers(f"{brick_id}-units", MIN_UNITS, MAX_UNITS)
-    if fn not in FN_OPTIONS:
-        fn = agent.pull_choices(f"{brick_id}-fn", FN_OPTIONS)
+    if fn is None:
+        if fn_options is None:
+            fn = agent.pull_choices(f"{brick_id}-fn", FN_OPTIONS)
+        else:
+            fn = agent.pull_choices(f"{brick_id}-fn", fn_options)
     fn = clean_activation(fn)
     if layer is NoiseDrop:
         stddev = agent.pull_numbers(f"{brick_id}-stddev",

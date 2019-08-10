@@ -7,7 +7,7 @@ InstanceNormalization = tfa.layers.InstanceNormalization
 L = tf.keras.layers
 tfpl = tfp.layers
 
-TFP_LAYER = tfpl.Convolution2DFlipout
+TFP_LAYER = None
 ACTIVATION = "relu"
 NORM = "instance"
 PADDING = "same"
@@ -15,26 +15,26 @@ KERNEL_SIZE = 3
 FILTERS = 64
 
 
-def get_preact_conv_2D_output(inputs, activation=ACTIVATION, k=KERNEL_SIZE,
-                              filters=FILTERS, norm=NORM, tfp_layer=TFP_LAYER,
-                              padding=PADDING):
+def get_preact_conv_2D_output(agent, brick_id, input, activation=ACTIVATION,
+                              k=KERNEL_SIZE, filters=FILTERS, norm=NORM,
+                              tfp_layer=TFP_LAYER, padding=PADDING):
     if norm is "instance":
-        outputs = InstanceNormalization()(inputs)
+        output = InstanceNormalization()(input)
     else:
-        outputs = L.BatchNormalization()(inputs)
-    outputs = L.Activation(activation)(outputs)
-    if tfp_layer is not None:
-        return tfp_layer(filters, kernel_size=(k, k), padding=padding)(outputs)
+        output = L.BatchNormalization()(input)
+    output = L.Activation(activation)(output)
+    if tfp_layer is None:
+        return L.Conv2D(filters, kernel_size=(k, k), padding=padding)(output)
     else:
-        return L.Conv2D(filters, kernel_size=(k, k), padding=padding)(outputs)
+        return tfp_layer(filters, kernel_size=(k, k), padding=padding)(output)
 
 
-def get_preact_deconv_2D_output(inputs, activation=ACTIVATION, k=KERNEL_SIZE,
-                                filters=FILTERS, norm=NORM,
+def get_preact_deconv_2D_output(agent, brick_id, input, activation=ACTIVATION,
+                                k=KERNEL_SIZE, filters=FILTERS, norm=NORM,
                                 tfp_layer=TFP_LAYER, padding=PADDING):
     if norm is "instance":
-        outputs = InstanceNormalization()(inputs)
+        output = InstanceNormalization()(input)
     else:
-        outputs = L.BatchNormalization()(inputs)
+        output = L.BatchNormalization()(input)
     return L.Conv2DTranspose(filters, kernel_size=(k, k), padding=padding,
-                             activation=activation)(outputs)
+                             activation=activation)(output)

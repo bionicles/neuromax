@@ -10,7 +10,9 @@ from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.kernel import get_kernel
 from nature.bricks.dnc.dnc import DNC
 
-from tools import log, safe_sample, get_unique_id
+from tools.get_unique_id import get_unique_id
+from tools.safe_sample import safe_sample
+from tools.log import log
 
 InstanceNormalization = tfa.layers.InstanceNormalization
 K = tf.keras
@@ -28,7 +30,7 @@ MIN_MIN_LAYERS, MAX_MIN_LAYERS, MIN_MAX_LAYERS, MAX_MAX_LAYERS = 1, 2, 3, 4
 MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
 # bricks
 ACTIVATION_OPTIONS = ["tanh"]
-BRICK_OPTIONS = ["conv1d", "attention", "dnc", "mlp", "k_conv"]
+BRICK_OPTIONS = ["conv1d", "attention", "dnc", "kernel", "k_conv"]
 MIN_CONTROLLER_UNITS, MAX_CONTROLLER_UNITS = 20, 40
 
 
@@ -224,8 +226,8 @@ class GraphModel:
             filters = self.pull_numbers(f"{id}_filters", 1, 32)
             activation = self.pull_choices(f"{id}_activation", ACTIVATION_OPTIONS)
             brick = L.SeparableConv1D(filters, 1, activation=activation)
-        if brick_type in ["deep", "wide_deep"]:
-            brick = get_mlp(self.agent, d_in, d_out, -1)
+        if brick_type == "kernel":
+            brick = get_kernel(self.agent, d_in, d_out, -1)
         if "k_conv" in brick_type:
             set_size = brick_type[-1]
             brick = KConvSet1D(self.agent, d_in, d_out, set_size)

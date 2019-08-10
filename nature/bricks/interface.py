@@ -11,8 +11,6 @@ from tools.concat_2D_coords import concat_2D_coords
 from tools.normalize import normalize
 from tools.get_size import get_size
 
-import time
-
 InstanceNormalization = tfa.layers.InstanceNormalization
 
 tfd = tfp.distributions
@@ -127,11 +125,11 @@ class Interface:
 
     def get_image_sensor_output(self):
         self.output = get_image_encoder_output(
-            self.agent, self.brick_id, self.output, self.out_spec.shape)
+            self.agent, self.brick_id, self.output, self.out_spec)
 
     def get_image_actuator_output(self):
         self.output = get_image_decoder_output(
-            self.agent, self.brick_id, self.output, self.out_spec.shape)
+            self.agent, self.brick_id, self.output, self.out_spec)
 
     def get_box_sensor_output(self):
         self.flatten_resize_reshape()
