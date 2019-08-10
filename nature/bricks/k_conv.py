@@ -5,7 +5,7 @@ from nanoid import generate
 import tensorflow as tf
 
 from nature.bricks.get_mlp import get_mlp
-from tools import get_size
+from tools.get_size import get_size
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
