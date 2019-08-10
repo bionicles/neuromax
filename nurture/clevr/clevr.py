@@ -11,8 +11,11 @@ DATASET = "val"
 
 task_path = os.path.join(".", "nurture", "clevr")
 images_path = os.path.join(task_path, "CLEVR_v1.0", "images")
-data_path = os.path.join(task_path, "CLEVR_v1.0", "questions",
+json_data_path = os.path.join(task_path, "CLEVR_v1.0", "questions",
                          f"CLEVR_{DATASET}_questions.json")
+
+csv_data_path = os.path.join(task_path, "CLEVR_v1.0", "questions",
+                         f"CLEVR_{DATASET}_questions.csv")
 
 answer_choices = [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
@@ -31,15 +34,21 @@ nlp = spacy.load("en_vectors_web_lg")
 
 def get_dataframe():
     global clevr_data
-    print("loading clevr JSON file, please wait.")
-    clevr_data = json.load(open(data_path))
-    print("done loading clevr JSON file")
-    print("converting data to dataframe")
-    clevr_data = pd.DataFrame(clevr_data["questions"])
-    clevr_data.set_index("image_filename", inplace=True)
-    question = clevr_data.groupby("image_filename")['question'].apply(lambda x: ','.join(x.astype(str))).reset_index().drop("image_filename", axis=1)
-    answer = clevr_data.groupby("image_filename")['answer'].apply(lambda x: ','.join(x.astype(str))).reset_index()
-    clevr_data = pd.concat([question, answer], axis=1)
+    if not os.path.exists(csv_data_path):
+        print("loading clevr JSON file, please wait.")
+        clevr_data = json.load(open(json_data_path))
+        print("done loading clevr JSON file")
+        print("converting data to dataframe")
+        clevr_data = pd.DataFrame(clevr_data["questions"])
+        clevr_data.set_index("image_filename", inplace=True)
+        question = clevr_data.groupby("image_filename")['question'].apply(lambda x: ','.join(x.astype(str))).reset_index().drop("image_filename", axis=1)
+        answer = clevr_data.groupby("image_filename")['answer'].apply(lambda x: ','.join(x.astype(str))).reset_index()
+        clevr_data = pd.concat([question, answer], axis=1)
+        clevr_data.to_csv(csv_data_path)
+    else:
+        print("loading clevr csv file, please wait.")
+        clevr_data = pd.read_csv(csv_data_path)
+        print("done loading clevr csv file")
 
 
 def generate_clevr_item():
