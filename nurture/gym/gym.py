@@ -10,7 +10,8 @@ from tools.get_spec import get_spec
 def space2spec(space):
     type_name = type(space).__name__
     if type_name == "Discrete":
-        spec = get_spec(format="discrete", n=space.n)
+        spec = get_spec(format="discrete", n=space.n, size=space.n,
+                        shape=(space.n,))
     if type_name == "Box":
         spec = get_spec(format="box", shape=space.shape,
                         low=space.low, high=space.high)

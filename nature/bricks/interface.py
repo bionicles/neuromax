@@ -8,7 +8,6 @@ from nature.bricks.k_conv import KConvSet1D
 
 from tools.concat_1D_coords import concat_1D_coords
 from tools.concat_2D_coords import concat_2D_coords
-from tools.rescale_for_box import rescale_for_box
 from tools.normalize import normalize
 from tools.get_size import get_size
 
@@ -21,6 +20,7 @@ K = tf.keras
 L = K.layers
 
 LAYER_OPTIONS = [tfpl.DenseReparameterization, L.Dense]
+RESIZE_ACTIVATION_OPTIONS = ["tanh"]
 # input2code
 RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS = ["tanh"]
 ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS = ['sigmoid']
@@ -46,6 +46,7 @@ class Interface:
         image -> code (eyeball)
         ragged -> code (NLP + atoms)
         onehot -> code (task number)
+        box -> code (gym arrays)
 
     MESSAGES:
         code -> code (internal message passing)
@@ -55,6 +56,8 @@ class Interface:
         code -> int (discrete control for MountainCar-v0)
         code -> ragged (ragged force field for protein dynamics)
         code -> image (reconstruct image)
+        code -> box (gym arrays)
+
 
     Args:
         agent: Agent which holds this brick and has pull_choices/pull_numbers
@@ -82,7 +85,7 @@ class Interface:
         print("out_spec", out_spec)
         self.input_number = input_number
         self.shape_variable_key = None
-        self.d_out = None
+        self.reshape = L.Reshape(self.out_spec.shape)
         self.build_model()
 
     def add_coords_to_shape(shape):
@@ -109,8 +112,8 @@ class Interface:
         builder_method = f"self.get_{model_type}_output()"
         print(f"eval({builder_method})")
         eval(builder_method)
-        if "ragged" in [in_spec.format, out_spec.format]:
-            self.call = self.call_ragged
+        if out_spec.format is "ragged":
+            self.call = self.call_ragged_actuator
         else:
             self.call = self.call_model
         # except Exception as e:
@@ -129,72 +132,36 @@ class Interface:
             self.agent, self.brick_id, self.output, self.out_spec.shape)
 
     def get_box_sensor_output(self):
-        print("get_box_sensor_output", self.in_spec, self.out_spec)
-        activation = self.pull_choices(f"{self.brick_id}_last_activation",
-                                       BOX_SENSOR_LAST_ACTIVATION_OPTIONS)
-        output = self.layer_class(self.out_spec.size, activation)(self.output)
-        self.output = L.Reshape(self.out_spec.shape)(output)
+        self.flatten_resize_reshape()
 
     def get_box_actuator_output(self):
-        print("get_box_actuator_output", self.in_spec, self.out_spec)
-        activation = self.pull_choices(f"{self.brick_id}_last_activation",
-                                       BOX_ACTUATOR_LAST_ACTIVATION_OPTIONS)
-        output = self.layer_class(self.out_spec.size, activation)(self.output)
-        output = L.Reshape(self.out_spec.shape)(output)
+        self.flatten_resize_reshape()
         out_keys = self.out_spec.keys()
         if "low" in out_keys and "high" in out_keys:
-            self.output = output * self.out_spec.high - self.out_spec.low
+            self.output = self.output * self.out_spec.high - self.out_spec.low
         else:
-            self.output = output
-
-    def get_ragged_sensor_output(self):
-        output = L.Flatten()(self.output)
-        activation = self.pull_choices(f"{self.brick_id}_last_activation",
-                                       RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS)
-        output = self.layer_class(self.out_spec.size, activation)
-        self.output = L.Reshape(self.out_spec.shape)(output)
-
-    def get_ragged_actuator_output(self):
-        if None in self.out_spec.shape:
-            self.shape_variable_key = self.agent.get_shape_var_id(
-                self.task_id, self.input_number, 0)
-        self.d_out = self.out_spec.shape[-1]
-        self.output = KConvSet1D(self.agent, self.in_spec, self.out_spec, 1)(self.output)
-
-    def call_ragged(self, input):
-        if self.shape_variable_key is None:
-            input = concat_1D_coords(input, normalize=True)
-        else:
-            ragged_dimension = self.agent.parameters[self.shape_var_key]
-            coords = normalize(tf.range(ragged_dimension))  # need expand_dims?
-            input = tf.concat([input, coords], -1)
-        return self.model(input)
+            self.output = self.output
 
     def get_code_interface_output(self):
-        code_size = self.out_spec.size
-        activation = self.pull_choices(f"{self.brick_id}_last_activation",
-                                       CODE_INTERFACE_LAST_ACTIVATION_OPTIONS)
-        self.output = self.layer_class(code_size, activation)(self.output)
+        self.flatten_resize_reshape()
 
     def get_onehot_sensor_output(self):
-        code_size = self.out_spec.size
-        activation = self.pull_choices(f"{self.brick_id}_last_activation",
-                                       ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS)
-        self.output = self.layer_class(code_size, activation)(self.output)
+        self.flatten_resize_reshape()
 
     def get_onehot_actuator_output(self):
-        units = self.pull_numbers(f"{self.brick_id}_units", MIN_UNITS, MAX_UNITS)
-        activation = self.pull_choices(f"{self.brick_id}_activation",
-                                       ONEHOT_ACTUATOR_ACTIVATION_OPTIONS)
-        output = self.layer_class(units, activation)(self.output)
-        d_out = self.out_spec.shape[-1] if self.d_out is None else self.d_out
-        self.output = tfpl.OneHotCategorical(d_out)(output)
+        self.flatten_resize_reshape()
+        self.output = L.Activation("softmax")(self.output)
 
     def get_discrete_actuator_output(self):
-        self.d_out = self.out_spec.n
-        self.out_spec.size = self.out_spec.n
         self.get_onehot_actuator_output()
         self.output = tf.argmax(self.output, axis=0)
+
+    def flatten_resize_reshape(self):
+        out = L.Flatten()(self.output)
+        activation = self.pull_choices(f"{self.brick_id}_activation",
+                                       RESIZE_ACTIVATION_OPTIONS)
+        out = self.layer_class(self.out_spec.size, activation)(out)
+        self.output = self.reshape(out)
 
     def call_model(self, input):
         if self.in_spec.format is "image":
@@ -202,3 +169,21 @@ class Interface:
         else:
             input = concat_1D_coords(input, normalize=True)
         return self.model(input)
+
+    def get_ragged_sensor_output(self):
+        self.output = L.Bidirectional(L.LSTM(self.out_spec.size))(self.output)
+
+    def get_ragged_actuator_output(self):
+        self.shape_variable_key = self.out_spec.variables[0][0]
+        self.output = KConvSet1D(
+            self.agent, self.brick_id, self.in_spec, self.out_spec,
+            "code_for_one")(self.output)
+
+    def call_ragged_sensor(self, input):
+        coords = normalize(range(self.out_spec.size))
+        return self.model([coords, input])
+
+    def call_ragged_actuator(self, input):
+        ragged_dimension = self.agent.parameters[self.shape_var_key]
+        coords = normalize(tf.range(ragged_dimension))
+        return self.model([coords, input])

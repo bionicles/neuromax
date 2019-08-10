@@ -3,10 +3,10 @@ from natsort import natsorted
 import imageio
 import os
 
-from .debug import log
+from log import log
 
 
-def make_gif(folder_path="archive/nets", out_path="archive/movies",
+def make_gif(folder_path="set_conv/pics", out_path="archive/movies",
              image_x=1024, image_y=1024, brand_y=128,
              brand="Bit Pharma", movie=True, framerate=24.):
     image_size = f"{image_x}x{image_y}"
@@ -40,3 +40,8 @@ def make_gif(folder_path="archive/nets", out_path="archive/movies",
         gif_path = os.path.join(out_path, f"net-{now}.gif")
         imageio.mimsave(gif_path, images, duration=(1/framerate))
         log(f"SAVED GIF TO {gif_path}")
+
+
+if __name__ == "__main__":
+    log = print
+    make_gif()

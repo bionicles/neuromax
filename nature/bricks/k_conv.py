@@ -43,9 +43,19 @@ class KConvSet1D(L.Layer):
     def call_for_three(self, atoms):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.reduce_sum(tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), axis=0), atoms), axis=0), atoms)
 
-    def call_with_code_for_one(self, noise_with_coords, code):
-        code = tf.flatten(code)
-        return tf.map_fn(lambda item: self.kernel([item, code]), noise_with_coords)
+    def call_all_to_one(self, normalized_desired_output_range, input):
+        input = tf.flatten(input)
+        return tf.map_fn(lambda normalized_desired_output_element:
+                         self.kernel([
+                             normalized_desired_output_element, input
+                             ]), normalized_desired_output_range)
+
+    def call_one_to_all(self, output_placeholder, input):
+        return tf.foldl(
+            lambda output_placeholder, input_element:
+                output_placeholder + self.kernel([
+                    output_placeholder, input_element
+                    ]), input)
 
     # TOO COMPLICATED:
     # def call_autoregressive(self, code, coords):
