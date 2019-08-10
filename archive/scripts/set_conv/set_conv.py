@@ -6,12 +6,45 @@ import imageio
 import os
 
 MAX_INPUTS, MAX_OUTPUTS = 6,6
-PIC_PATH = "set_conv/pics"
+PIC_PATH = "archive/scripts/set_conv/pics"
 log = print
 
 graph_number = 1
 
-def make_gif(folder_path="set_conv/pics", out_path="set_conv/gifs",
+
+def conv_set(inputs=4, input_set_size=4, outputs=6, output_set_size=2):
+    global graph_number
+    G = nx.MultiDiGraph()
+    for n in range(inputs):
+        G.add_node(f"input-{n}", label="", color="blue", style="filled", shape="circle")
+    for m in range(outputs):
+        G.add_node(f"output-{m}", label="", color="red", style="filled", shape="triangle")
+    N_set_keys = []
+    for set in combinations(range(inputs), input_set_size):
+        set_node_key = f"input-set-" + '-'.join([str(s) for s in set])
+        N_set_keys.append(set_node_key)
+        G.add_node(set_node_key, label="", shape="square", style="filled", color="black")
+        [G.add_edge(f"input-{n}", set_node_key) for n in set]
+    M_set_keys = []
+    for set in combinations(range(outputs), output_set_size):
+        set_node_key = f"output-set-" + '-'.join([str(s) for s in set])
+        M_set_keys.append(set_node_key)
+        G.add_node(set_node_key, label="", shape="square", style="filled", color="black")
+        [G.add_edge(set_node_key, f"output-{m}") for m in set]
+    for N_set_key in N_set_keys:
+        for M_set_key in M_set_keys:
+            G.add_edge(N_set_key, M_set_key)
+    G.name = f"{graph_number}_{inputs}_choose_{input_set_size}_to_{outputs}_choose_{output_set_size}"
+    # G.name = f"{inputs}-{outputs}-{G.size()}-{graph_number}"
+    # G.name = f"{G.size()}-{graph_number}"
+    graph_number += 1
+    return G
+
+# for m in M:
+# get_outputs(m)
+# for
+
+def make_gif(folder_path="archive/scripts/set_conv/pics", out_path="set_conv/gifs",
              image_x=1024, image_y=512, brand_y=64,
              brand="Bit Pharma", movie=True, framerate=12):
     image_size = f"{image_x}x{image_y}"
@@ -48,37 +81,6 @@ def screenshot_graph(G, folderpath, filename):
     A = nx.nx_agraph.to_agraph(G)
     A.graph_attr.update()
     A.draw(path=imagepath, prog="dot")
-
-
-def sets(N, i):
-    return combinations(range(N), i)
-
-
-def conv_set(inputs=4, input_set_size=4, outputs=6, output_set_size=2):
-    global graph_number
-    G = nx.MultiDiGraph()
-    G.add_nodes_from([f"input-{n}" for n in range(inputs)])
-    G.add_nodes_from([f"output-{m}" for m in range(outputs)])
-    N_set_keys = []
-    for set in sets(inputs, input_set_size):
-        set_node_key = f"input-set-" + '-'.join([str(s) for s in set])
-        N_set_keys.append(set_node_key)
-        G.add_node(set_node_key)
-        [G.add_edge(f"input-{n}", set_node_key) for n in set]
-    M_set_keys = []
-    for set in sets(outputs, output_set_size):
-        set_node_key = f"output-set-" + '-'.join([str(s) for s in set])
-        M_set_keys.append(set_node_key)
-        G.add_node(set_node_key)
-        [G.add_edge(set_node_key, f"output-{m}") for m in set]
-    for N_set_key in N_set_keys:
-        for M_set_key in M_set_keys:
-            G.add_edge(N_set_key, M_set_key)
-    G.name = f"{graph_number}_{inputs}_choose_{input_set_size}_to_{outputs}_choose_{output_set_size}"
-    # G.name = f"{inputs}-{outputs}-{G.size()}-{graph_number}"
-    # G.name = f"{G.size()}-{graph_number}"
-    graph_number += 1
-    return G
 
 
 def empty_folder():

@@ -10,7 +10,6 @@ def tf_int_round(num):
 
 
 class ResizeImage(tf.keras.layers.Layer):
-    # Initialize variables
     def __init__(self, scale, **kwargs):
         self.scale = scale
         super(ResizeImage, self).__init__(**kwargs)

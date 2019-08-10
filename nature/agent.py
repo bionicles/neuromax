@@ -17,11 +17,10 @@ from nature.bricks.interface import Interface
 K = tf.keras
 L = K.layers
 
-MIN_CODE_ATOMS, MAX_CODE_ATOMS = 8, 32
 MIN_CODE_CHANNELS, MAX_CODE_CHANNELS = 8, 32
+MIN_CODE_ATOMS, MAX_CODE_ATOMS = 8, 32
 EPISODES_PER_PRACTICE_SESSION = 5
-# CONVERGENCE_THRESHOLD = 0.01
-# N_LOOKBACK_STEPS = 5
+IMAGE_SHAPE = (128, 128, 4)
 
 
 class Agent:
@@ -34,11 +33,22 @@ class Agent:
                                        MIN_CODE_ATOMS, MAX_CODE_ATOMS)
         code_channels = self.pull_numbers("code_channels",
                                           MIN_CODE_CHANNELS, MAX_CODE_CHANNELS)
-        self.code_spec = get_spec(shape=(code_atoms, code_channels), format="code")
+        self.code_spec = get_spec(shape=(code_atoms, code_channels),
+                                  format="code")
         self.code_spec.size = get_size(self.code_spec.shape)
         # we add a sensor for task id
-        task_id_spec = get_spec(shape=(len(self.tasks.keys()),), format="onehot")
-        self.task_sensor = Interface(self, "task_key", task_id_spec, self.code_spec)
+        n_tasks = len(self.tasks.keys())
+        task_id_spec = get_spec(shape=n_tasks, format="onehot")
+        self.task_sensor = Interface(self, "task_key",
+                                     task_id_spec, self.code_spec)
+        # we add a sensor for images
+        self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image",
+                                   add_coords=True)
+        self.image_sensor = Interface(self, "image_sensor",
+                                      self.image_spec, self.code_spec)
+        self.image_actuator = Interface(self, "image_actuator",
+                                        self.code_spec, self.image_spec)
+        # we add task sensors
         self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
         self.decide_n_in_n_out()
         self.shared_model = GraphModel(self)
@@ -52,17 +62,24 @@ class Agent:
 
     def add_sensors_and_actuators(self, task_key, task_dict):
         """Add interfaces to a task_dict"""
-        actuators = []
-        sensors = []
+        sensors, actuators = [], []
         for input_number, in_spec in enumerate(task_dict.inputs):
-            encoder = Interface(self, task_key, in_spec, self.code_spec,
-                                input_number=input_number)
-            sensors.append(encoder)
-            decoder = Interface(self, task_key, self.code_spec, in_spec,
-                                input_number=input_number)
-            actuators.append(decoder)
+            if in_spec.format is "image":
+                self.image_sensor.add_channel_changer(in_spec.shape[-1])
+                sensor = self.image_sensor
+                actuator = self.image_actuator
+            else:
+                sensor = Interface(self, task_key, in_spec, self.code_spec,
+                                   input_number=input_number)
+                actuator = Interface(self, task_key, self.code_spec, in_spec,
+                                     input_number=input_number)
+            sensors.append(sensor)
+            actuators.append(actuator)
         for output_number, out_spec in enumerate(task_dict.outputs):
-            actuator = Interface(self, task_key, self.code_spec, out_spec)
+            if out_spec.format is "image":
+                actuator = self.image_actuator
+            else:
+                actuator = Interface(self, task_key, self.code_spec, out_spec)
             actuators.append(actuator)
         task_dict.actuators = list(actuators)
         task_dict.sensor = list(sensors)
@@ -166,15 +183,3 @@ class Agent:
             maybe_choice_or_choices = maybe_choice_or_choices[0]
         self.parameters[pkey] = maybe_choice_or_choices
         return maybe_choice_or_choices
-
-    # def check_human_level(self):
-    #     """True if N_LOOKBACK_STEPS have mean loss below task threshold"""
-    #     return all([np.mean(
-    #         flatten_lists(v.losses[N_LOOKBACK_STEPS:])
-    #         ) < v.threshold for _, v in self.tasks.items()])
-    #
-    # def check_convergence(self):
-    #     """True if N_LOOKBACK_STEPS have loss variance below CONVERGENCE_THRESHOLD"""
-    #     return all([np.var(
-    #             flatten_lists(v.losses[N_LOOKBACK_STEPS:])
-    #             ) < CONVERGENCE_THRESHOLD for _, v in self.tasks.items()])

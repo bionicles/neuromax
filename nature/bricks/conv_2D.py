@@ -10,12 +10,12 @@ tfpl = tfp.layers
 TFP_LAYER = None
 ACTIVATION = "relu"
 NORM = "instance"
-PADDING = "same"
+PADDING = "valid"
 KERNEL_SIZE = 3
-FILTERS = 64
+FILTERS = 16
 
-
-def get_preact_conv_2D_output(agent, brick_id, input, activation=ACTIVATION,
+# TODO: add "rank" so we can reuse this for 1D conv
+def get_conv_2D_out(agent, brick_id, input, activation=ACTIVATION,
                               k=KERNEL_SIZE, filters=FILTERS, norm=NORM,
                               tfp_layer=TFP_LAYER, padding=PADDING):
     if norm is "instance":
@@ -24,17 +24,17 @@ def get_preact_conv_2D_output(agent, brick_id, input, activation=ACTIVATION,
         output = L.BatchNormalization()(input)
     output = L.Activation(activation)(output)
     if tfp_layer is None:
-        return L.Conv2D(filters, kernel_size=(k, k), padding=padding)(output)
+        return L.Conv2D(filters, kernel_size=k, padding=padding)(output)
     else:
-        return tfp_layer(filters, kernel_size=(k, k), padding=padding)(output)
+        return tfp_layer(filters, kernel_size=k, padding=padding)(output)
 
 
-def get_preact_deconv_2D_output(agent, brick_id, input, activation=ACTIVATION,
+def get_deconv_2D_out(agent, brick_id, input, activation=ACTIVATION,
                                 k=KERNEL_SIZE, filters=FILTERS, norm=NORM,
                                 tfp_layer=TFP_LAYER, padding=PADDING):
     if norm is "instance":
         output = InstanceNormalization()(input)
     else:
         output = L.BatchNormalization()(input)
-    return L.Conv2DTranspose(filters, kernel_size=(k, k), padding=padding,
+    return L.Conv2DTranspose(filters, kernel_size=k, padding=padding,
                              activation=activation)(output)

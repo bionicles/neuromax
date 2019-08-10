@@ -223,6 +223,7 @@ class GraphModel:
         if brick_type == "input":
             brick = L.Input(self.agent.code_spec.shape)
         if brick_type == "sepconv1d":
+            # this could be a brick:
             filters = self.pull_numbers(f"{id}_filters", 1, 32)
             activation = self.pull_choices(f"{id}_activation", ACTIVATION_OPTIONS)
             brick = L.SeparableConv1D(filters, 1, activation=activation)

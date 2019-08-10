@@ -2,19 +2,38 @@ import tensorflow_probability as tfp
 import tensorflow as tf
 
 from nature.bricks.activations import clean_activation
-from nature.bricks.noisedrop import NoiseDrop
 
 # tfd = tfp.distributions
 tfpl = tfp.layers
 K = tf.keras
-L = K.layers
+B, L = K.backend, K.layers
+
+FN_OPTIONS = ["tanh", "linear", "swish", "lisht", "sigmoid"]
+MIN_STDDEV, MAX_STDDEV = 1e-4, 0.1
+MIN_UNITS, MAX_UNITS = 32, 512
+
+
+class NoiseDrop(L.Dense):
+    def __init__(self, *args, **kwargs):
+        self.stddev = kwargs.pop('stddev')
+        super(NoiseDrop, self).__init__(*args, **kwargs)
+
+    @tf.function
+    def add_noise(self):
+        return (
+            self.kernel + tf.random.truncated_normal(
+                tf.shape(self.kernel), stddev=self.stddev),
+            self.bias + tf.random.truncated_normal(
+                tf.shape(self.bias), stddev=self.stddev))
+
+    def call(self, x):
+        kernel, bias = self.add_noise()
+        return self.activation(
+                    tf.nn.bias_add(B.dot(x, tf.nn.dropout(kernel, 0.5)), bias))
 
 
 LAYER_OPTIONS = [NoiseDrop, L.Dense, tfpl.DenseFlipout,
                  tfpl.DenseReparameterization]
-FN_OPTIONS = ["tanh", "linear", "swish", "lisht", "sigmoid"]
-MIN_STDDEV, MAX_STDDEV = 1e-4, 0.1
-MIN_UNITS, MAX_UNITS = 32, 512
 
 
 def get_dense_out(agent, brick_id, input, layer=None, units=None, fn=None,

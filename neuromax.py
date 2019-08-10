@@ -16,12 +16,17 @@ print("neuromax.py running")
 tasks = AttrDict({
     "clevr": {
         "type": "dataset",
-        "inputs": [get_spec(shape=(480, 320, 4),
-                            add_coords=True,
-                            format="image"),
-                   get_spec(shape=(None, WORD_VECTOR_SIZE),
-                            add_coords=True,
-                            format="ragged")],
+        "inputs": [get_spec(
+            shape=(480, 320, 4),
+            add_coords=True,
+            format="image"
+            ),
+                   get_spec(
+            shape=(None, WORD_VECTOR_SIZE),
+            add_coords=True,
+            format="ragged",
+            variables=[("n_words", -2)]
+            )],
         "outputs": [get_spec(shape=(28, ), format="onehot")],
         "dataset": read_clevr_dataset(),
         "runner": run_clevr_task},

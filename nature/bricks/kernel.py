@@ -45,15 +45,12 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         code = K.Input((agent.code_spec.size,))
         inputs = [atom1, code]
         concat = L.Concatenate(-1)([atom1, code])
-    lkey = f"{name}_0"
-    output = get_dense_out(agent, lkey)(concat)
+    output = get_dense_out(agent, f"{name}_0", concat)
     for i in range(n_layers - 1):
-        lkey = f"{name}_{i}"
-        output = get_dense_out(agent, lkey)(output)
+        output = get_dense_out(agent, f"{name}_{i}", output)
     if model_type == "wide_deep":
         stuff_to_concat = inputs + [output]
         output = L.Concatenate(-1)(stuff_to_concat)
-    lkey = f"{name}_{n_layers}"
-    output = get_dense_out(agent, lkey)(output)
+    output = get_dense_out(agent, f"{name}_{n_layers}", output, units=d_out)
     name = f"{name}_{n_layers}_{model_type}"
     return K.Model(inputs, output, name=name)
