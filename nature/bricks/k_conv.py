@@ -5,7 +5,6 @@ from nanoid import generate
 import tensorflow as tf
 
 from nature.bricks.kernel import get_kernel
-from tools.get_size import get_size
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
@@ -25,10 +24,8 @@ class KConvSet1D(L.Layer):
         elif set_size is 3:
             self.call = self.call_for_three
         elif set_size is "code_for_one":
-            # if we convolve a code over noise then d_in = d_out + in_size
-            in_size = get_size(in_spec.shape)
-            d_in = len(in_spec.shape) - 1 + in_size
-            self.call = self.call_all_to_one
+            self.call = self.call_code_for_one
+            d_in = 1
         self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size)
         self.layer_id = f"{brick_id}_KConvSet{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
@@ -43,7 +40,7 @@ class KConvSet1D(L.Layer):
     def call_for_three(self, atoms):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.reduce_sum(tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), axis=0), atoms), axis=0), atoms)
 
-    def call_all_to_one(self, normalized_desired_output_range, input):
+    def call_code_for_one(self, normalized_desired_output_range, input):
         input = tf.flatten(input)
         return tf.map_fn(lambda normalized_desired_output_element:
                          self.kernel([
