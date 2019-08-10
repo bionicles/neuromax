@@ -28,7 +28,7 @@ class KConvSet1D(L.Layer):
             # if we convolve a code over noise then d_in = d_out + in_size
             in_size = get_size(in_spec.shape)
             d_in = d_out + in_size
-            self.call = self.call_with_code_for_one
+            self.call = self.call_all_to_one
         self.kernel = get_mlp(agent, brick_id, d_in, d_out, set_size)
         self.layer_id = f"{brick_id}_KConvSet{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
