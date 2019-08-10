@@ -1,13 +1,13 @@
 import tensorflow as tf
 
-from nature.bricks import get_layer
+from nature.bricks.get_layer import get_layer
 from tools.get_unique_id import get_unique_id
 from tools.log import log
 
 K = tf.keras
 L = K.layers
 
-
+SET_OPTIONS = [-1, 1, 2, 3, "code_for_one"]
 MIN_LAYERS, MAX_LAYERS = 1, 4
 MODEL_OPTIONS = ["deep", "wide_deep"]
 
@@ -16,7 +16,7 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
                name=None, input_shape=None):
     """build a deep or wide and deep dense mlp"""
     log("get_kernel", brick_id, d_in, d_out, set_size)
-    assert set_size in [-1, 1, 2, 3]
+    assert set_size in SET_OPTIONS, f"{set_size} not in {SET_OPTIONS}"
     name = get_unique_id(f"{brick_id}_mlp") if name is None else name
     n_layers = agent.pull_numbers(f"{name}-n_layers", MIN_LAYERS, MAX_LAYERS)
     model_type = agent.pull_choices(f"{name}-model_type", MODEL_OPTIONS)
@@ -41,9 +41,15 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         d12 = L.Subtract()([atom1, atom2])
         d13 = L.Subtract()([atom1, atom3])
         concat = L.Concatenate(-1)([d12, d13, atom1, atom2, atom3])
+    elif set_size is "code_for_one":
+        coord = K.Input((1,))
+        code = K.Input(agent.code_spec.shape)
+        inputs = [coord, code]
+        flat_code = L.Flatten()(code)
+        concat = L.Concatenate(-1)([atom1, flat_code])
     lkey = f"{name}_0"
     output = get_layer(agent, lkey)(concat)
-    for i in range(len(n_layers) - 1):
+    for i in range(n_layers - 1):
         lkey = f"{name}_{i}"
         output = get_layer(agent, lkey)(output)
     if model_type == "wide_deep":
