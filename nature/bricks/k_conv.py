@@ -3,11 +3,13 @@
 
 from nanoid import generate
 import tensorflow as tf
+from blessings import Terminal
 
 from nature.bricks.kernel import get_kernel
 
-B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
+B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
+T = Terminal()
 
 class KConvSet1D(L.Layer):
     """Convolve a learned kernel over sets of elements from a 1D tensor"""
@@ -32,7 +34,7 @@ class KConvSet1D(L.Layer):
             self.call = self.call_one_for_all
             self.flatten = L.Flatten()
             d_out = out_spec.size
-        print("kconvset1D init d_in", d_in, "d_out", d_out)
+        print(T.red("kconvset1D init d_in"), d_in, T.red("d_out"), d_out)
         self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size)
         self.layer_id = f"{brick_id}_KConvSet_{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
@@ -51,21 +53,21 @@ class KConvSet1D(L.Layer):
         """Each input element innervates all output elements"""
         input, output_placehodl = inputs
         output_placehodl = self.flatten(output_placehodl)
-        print("call_one_for_all input", input,
-              "output_placehodl", output_placehodl)
+        print(T.red("call_one_for_all input"), input,
+        T.red("output_placehodl"), output_placehodl)
         output = tf.map_fn(lambda input_item: self.kernel([
             input_item, output_placehodl]), input)
         output = tf.math.reduce_sum(output, axis=0)
-        print("call_one_for_all output", output)
+        print(T.red("call_one_for_all output"), output)
         reshaped = self.reshape(output)
-        print("call_one_for_all reshaped", reshaped)
+        print(T.red("call_one_for_all reshaped"), reshaped)
         return reshaped
 
     def call_all_for_one(self, inputs):  # output unknown needs ragged actuator
         """Each output element recieves all input elements"""
         normalized_output_coords, code = inputs
         flat_code = self.flatten(code)
-        print("call_one_for_all", normalized_output_coords, flat_code)
+        print(T.red("call_one_for_all"), normalized_output_coords, flat_code)
         return tf.map_fn(lambda normalized_output_coord:
                          self.kernel([
                              normalized_output_coord, flat_code
