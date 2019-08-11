@@ -63,7 +63,6 @@ class GraphModel:
         self.max_p_insert = self.pull_numbers("max_p_insert", MIN_MAX_P_INSERT, MAX_MAX_P_INSERT)
         self.get_initial_graph()
         self.evolve_initial_graph()
-        self.differentiate()
 
     def get_initial_graph(self):
         """Create a graph connecting inputs to outputs with a black box."""
@@ -99,7 +98,7 @@ class GraphModel:
                                              MIN_MUTATIONS, MAX_MUTATIONS)
         self.mutations = self.pull_choices("mutations",
                                            MUTATION_OPTIONS, self.n_mutations)
-        [locals()[mutation]() for mutation in self.mutations]
+        [getattr(GraphModel, mutation)(self) for mutation in self.mutations]
 
     def get_regulon(self, parent=None, layers=None):
         """Build a subgraph to replace a node."""
@@ -153,6 +152,7 @@ class GraphModel:
                 self.G.add_edge(predecessor, successor)
         self.G.remove_node(id)
 
+    @staticmethod
     def insert_motifs(self):
         """with probability P, replace nodes with random feedforward regulons"""
         nodes = self.G.nodes(data=True)
