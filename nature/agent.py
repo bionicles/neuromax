@@ -176,7 +176,7 @@ class Agent:
         if pkey in self.parameters.keys():
             return self.parameters[pkey]
         if distribution is None:
-            maybe_choice_or_choices = random.sample(options, n)
+            maybe_choice_or_choices = random.sample(options, int(n))
         else:
             maybe_choice_or_choices = np.random.choice(options, n, p=distribution).tolist()
         if n is 1:
