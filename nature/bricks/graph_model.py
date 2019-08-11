@@ -45,7 +45,7 @@ class GraphModel:
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
         self.n_in = agent.n_in if n_in is None else n_in
-        self.code_shape = agent.code_shape if code_shape is None else code_shape
+        self.code_shape = agent.code_spec.size if code_shape is None else code_shape
         self.n_out = agent.n_out if n_out is None else n_out
         self.name = get_unique_id("GraphModel")
         self.get_graph()
