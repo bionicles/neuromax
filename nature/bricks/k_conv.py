@@ -49,16 +49,17 @@ class KConvSet1D(L.Layer):
 
     def call_one_for_all(self, inputs):  # input unknown needs ragged sensor
         """Each input element innervates all output elements"""
-        input, output_placeholder = inputs
-        output_placeholder = self.flatten(output_placeholder)
+        input, output_placehodl = inputs
+        output_placehodl = self.flatten(output_placehodl)
         print("call_one_for_all input", input,
-              "output_placehodl", output_placeholder)
-        output = tf.foldl(
-            lambda output_placeholder, input_element:
-                output_placeholder + self.kernel(
-                    [input_element, output_placeholder]
-                    ), input)
-        return self.reshape(output)
+              "output_placehodl", output_placehodl)
+        output = tf.map_fn(lambda input_item: self.kernel([
+            input_item, output_placehodl]), input)
+        output = tf.math.reduce_sum(output, axis=0)
+        print("call_one_for_all output", output)
+        reshaped = self.reshape(output)
+        print("call_one_for_all reshaped", reshaped)
+        return reshaped
 
     def call_all_for_one(self, inputs):  # output unknown needs ragged actuator
         """Each output element recieves all input elements"""

@@ -7,7 +7,7 @@ from tools.log import log
 K = tf.keras
 L = K.layers
 
-SET_OPTIONS = [-1, 1, 2, 3, "code_for_one", "one_for_all"]
+SET_OPTIONS = [-1, 1, 2, 3, "all_for_one", "one_for_all"]
 MODEL_OPTIONS = ["deep", "wide_deep"]
 MIN_LAYERS, MAX_LAYERS = 1, 4
 
@@ -54,6 +54,7 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
     if model_type == "wide_deep":
         stuff_to_concat = inputs + [output]
         output = L.Concatenate(-1)(stuff_to_concat)
-    output = get_dense_out(agent, f"{name}_{n_layers}", output, units=d_out)
+    print("last layer...", output)
+    output = get_dense_out(agent, f"{name}_dense_{n_layers}", output, units=d_out)
     name = f"{name}_{n_layers}_{model_type}"
     return K.Model(inputs, output, name=name)
