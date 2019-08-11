@@ -32,6 +32,36 @@ spacy.prefer_gpu()
 nlp = spacy.load("en_vectors_web_lg")
 
 
+def run_clevr_task(agent, task_key, task_dict):
+    dataset = task_dict.dataset.shuffle(10000)
+    model = agent.models[task_key]
+    total_free_energy = 0.
+    for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
+        inputs = [image_tensor, embedded_question]
+        with tf.GradientTape() as tape:
+            normies, codes, reconstructions, state_predictions, loss_prediction, actions = \
+                model(inputs)
+            # compute free energy: loss + surprise + complexity - freedom
+            one_hot_action = actions[0]
+            loss = tf.keras.losses.categorical_crossentropy(
+                one_hot_answer, one_hot_action)
+            reconstruction_surprise = tf.math.sum([
+                -1 * belief.log_prob(truth)
+                for belief, truth in zip(reconstructions, normies)])
+            loss_surprise = -1 * loss_prediction.log_prob(loss)
+            surprise = reconstruction_surprise + loss_surprise
+            # how do you measure complexity?
+            # maybe L1/L2 reg or entropy/KL
+            freedom = actions[0].entropy()
+            free_energy = loss + surprise - freedom
+        gradients = tape.gradient([free_energy, model.losses],
+                                  model.trainable_variables)
+        agent.optimizer.apply_gradients(zip(gradients,
+                                            model.trainable_variables))
+        total_free_energy += free_energy
+    return total_free_energy
+
+
 def get_dataframe():
     global clevr_data
     if not os.path.exists(csv_data_path):
@@ -76,33 +106,3 @@ def read_clevr_dataset():
     get_dataframe()
     return tf.data.Dataset.from_generator(generate_clevr_item,
                                           (tf.int32, tf.float32, tf.int32))
-
-
-def run_clevr_task(agent, task_key, task_dict):
-    dataset = task_dict.dataset.shuffle(10000)
-    model = agent.models[task_key]
-    total_free_energy = 0.
-    for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
-        inputs = [image_tensor, embedded_question]
-        with tf.GradientTape() as tape:
-            normies, codes, reconstructions, state_predictions, loss_prediction, actions = \
-                model(inputs)
-            # compute free energy: loss + surprise + complexity - freedom
-            one_hot_action = actions[0]
-            loss = tf.keras.losses.categorical_crossentropy(
-                one_hot_answer, one_hot_action)
-            reconstruction_surprise = tf.math.sum([
-                -1 * belief.log_prob(truth)
-                for belief, truth in zip(reconstructions, normies)])
-            loss_surprise = -1 * loss_prediction.log_prob(loss)
-            surprise = reconstruction_surprise + loss_surprise
-            # how do you measure complexity?
-            # maybe L1/L2 reg or entropy/KL
-            freedom = actions[0].entropy()
-            free_energy = loss + surprise - freedom
-        gradients = tape.gradient([free_energy, model.losses],
-                                  model.trainable_variables)
-        agent.optimizer.apply_gradients(zip(gradients,
-                                            model.trainable_variables))
-        total_free_energy += free_energy
-    return total_free_energy

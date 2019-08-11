@@ -1,3 +1,4 @@
+Merge brick that's gonna take N tensors and figure out how to merge them
 brick injector
 deformable conv https://tensorlayer.readthedocs.io/en/latest/_modules/tensorlayer/layers/convolution/deformable_conv.html#DeformableConv2d
 capsules

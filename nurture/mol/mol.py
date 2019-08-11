@@ -12,6 +12,8 @@ import os
 from nurture.mol.make_dataset import load, load_proteins
 from nurture.gym.spaces.ragged import Ragged
 
+from tools.sum_entropy import sum_entropy
+
 K = tf.keras
 B, L = K.backend, K.layers
 
@@ -19,47 +21,6 @@ CSV_FILE_NAME = 'sorted-less-than-256.csv'
 TEMP_PATH = "archive/temp"
 stddev = 273 * 0.001
 DTYPE = tf.float32
-
-
-@tf.function
-def parse_item(example):
-    context_features = {'id': tf.io.FixedLenFeature([], dtype=tf.string)}
-    sequence_features = {'target': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-                         'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-                         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
-                         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
-    context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
-    target = tf.reshape(tf.io.parse_tensor(sequence['target'][0], tf.float32), [-1, 10])
-    positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
-    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 7])
-    masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
-    masses = tf.concat([masses, masses, masses], 1)
-    n_atoms = tf.shape(positions)[0]
-    id_string = context['id']
-    return id_string, n_atoms, target, positions, features, masses
-
-
-def read_mol_dataset():
-    print("read_shards")
-    dataset_path = os.path.join('nurture', 'mol', 'datasets', 'tfrecord', 'cif')
-    n_records = len(os.listdir(dataset_path))
-    filenames = [os.path.join(dataset_path, str(i) + '.tfrecord') for i in range(n_records)]
-    dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
-    dataset = dataset.map(map_func=parse_item, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    dataset = dataset.batch(1)
-    dataset = dataset.shuffle(n_records)
-    return n_records, dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-
-
-@tf.function
-def get_distances(a, b):  # L2
-    a, b = tf.squeeze(a, 0), tf.squeeze(b, 0)
-    return B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)
-
-
-def get_loss(target_distances, current):
-    current = get_distances(current, current)
-    return tf.keras.losses.MAE(target_distances, current)
 
 
 def run_mol_task(agent, task_key, task_dict):
@@ -106,6 +67,47 @@ def run_mol_task(agent, task_key, task_dict):
             zip(gradients, model.trainable_variables))
         total_free_energy += free_energy
     return total_free_energy
+
+
+@tf.function
+def parse_item(example):
+    context_features = {'id': tf.io.FixedLenFeature([], dtype=tf.string)}
+    sequence_features = {'target': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'positions': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'features': tf.io.FixedLenSequenceFeature([], dtype=tf.string),
+                         'masses': tf.io.FixedLenSequenceFeature([], dtype=tf.string)}
+    context, sequence = tf.io.parse_single_sequence_example(example, context_features=context_features, sequence_features=sequence_features)
+    target = tf.reshape(tf.io.parse_tensor(sequence['target'][0], tf.float32), [-1, 10])
+    positions = tf.reshape(tf.io.parse_tensor(sequence['positions'][0], tf.float32), [-1, 3])
+    features = tf.reshape(tf.io.parse_tensor(sequence['features'][0], tf.float32), [-1, 7])
+    masses = tf.reshape(tf.io.parse_tensor(sequence['masses'][0], tf.float32), [-1, 1])
+    masses = tf.concat([masses, masses, masses], 1)
+    n_atoms = tf.shape(positions)[0]
+    id_string = context['id']
+    return id_string, n_atoms, target, positions, features, masses
+
+
+def read_mol_dataset():
+    print("read_shards")
+    dataset_path = os.path.join('nurture', 'mol', 'datasets', 'tfrecord', 'cif')
+    n_records = len(os.listdir(dataset_path))
+    filenames = [os.path.join(dataset_path, str(i) + '.tfrecord') for i in range(n_records)]
+    dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')
+    dataset = dataset.map(map_func=parse_item, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.batch(1)
+    dataset = dataset.shuffle(n_records)
+    return n_records, dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+
+@tf.function
+def get_distances(a, b):  # L2
+    a, b = tf.squeeze(a, 0), tf.squeeze(b, 0)
+    return B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)
+
+
+def get_loss(target_distances, current):
+    current = get_distances(current, current)
+    return tf.keras.losses.MAE(target_distances, current)
 
 # def get_trainer(agent, optimizer):
 #     @tf.function

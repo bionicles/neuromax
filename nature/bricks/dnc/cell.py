@@ -30,10 +30,12 @@ TFP_LAYER = tfpl.DenseFlipout
 DTYPE = tf.float32
 
 
-class DNC(L.Layer):
-    """DNC recurrent module that connects together the controller and memory.
-    Performs a write and read operation against memory given 1) the previous state
-    and 2) an interface vector defining how to interact with the memory at the
+class DNC_Cell(L.Layer):
+    """DNC cell module that connects together the controller and memory.
+    Performs a write and read operation against memory given
+    1) the previous state
+    and
+    2) an interface vector defining how to interact with the memory at the
     current time step.
     Args:
         output_size (int): size of final output dimension for the whole DNC cell at each time step
@@ -62,7 +64,7 @@ class DNC(L.Layer):
 
     def __init__(self, agent, brick_id, output_size, controller_units=CONTROLLER_UNITS, memory_size=MEMORY_SIZE,
                  word_size=WORD_SIZE, num_read_heads=NUM_READ_HEADS, tfp_layer=TFP_LAYER, **kwargs):
-        super().__init__(name='DNC', **kwargs)
+        super().__init__(name='DNC_Cell', **kwargs)
         self.agent = agent
         self.brick_id = brick_id
         self.pull_choices = agent.pull_choices
@@ -103,7 +105,7 @@ class DNC(L.Layer):
         indices = [[sum(sizes[:i]), sum(sizes[:i + 1])] for i in range(len(sizes))]
         zipped_items = zip(fns.keys(), fns.values(), indices)
         interface = {name: fn(interface_vector[:, i[0]:i[1]]) for name, fn, i in zipped_items}
-        return DNC.interface(**interface)
+        return DNC_Cell.interface(**interface)
 
     def _flatten_read_vectors(self, x):
         return tf.reshape(x, (-1, self.word_size * self.num_read_heads))
@@ -122,7 +124,7 @@ class DNC(L.Layer):
         interface = self._parse_interface_vector(interface)
         # update_memory
         read_vectors, memory_state = self._memory(interface, prev_dnc_state.memory_state)
-        state = DNC.state(memory_state=memory_state,
+        state = DNC_Cell.state(memory_state=memory_state,
                           controller_state=controller_state,
                           read_vectors=read_vectors)
         # join_outputs
@@ -134,7 +136,7 @@ class DNC(L.Layer):
 
     @property
     def state_size_nested(self):
-        return DNC.state(
+        return DNC_Cell.state(
             memory_state=self._memory.state_size,
             controller_state=self._controller.state_size,
             read_vectors=tf.TensorShape([self.word_size, self.num_read_heads]))
@@ -145,7 +147,7 @@ class DNC(L.Layer):
 
     def get_initial_state(self, inputs=None, batch_size=1, dtype=DTYPE):
         del inputs
-        initial_state_nested = DNC.state(
+        initial_state_nested = DNC_Cell.state(
             memory_state=self._memory.get_initial_state(batch_size, dtype=dtype),
             controller_state=self._controller.get_initial_state(batch_size=batch_size, dtype=dtype),
             read_vectors=tf.fill([batch_size, self.word_size, self.num_read_heads], EPSILON))

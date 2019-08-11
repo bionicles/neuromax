@@ -10,7 +10,7 @@ from tools.get_onehot import get_onehot
 from tools.get_size import get_size
 from tools.get_spec import get_spec
 
-from nature.bricks.graph_model import GraphModel
+from nature.bricks.graph_model.graph_model import GraphModel
 from nature.bricks.interface import Interface
 
 
@@ -87,7 +87,7 @@ class Agent:
 
     def train(self):
         """Run EPISODES_PER_PRACTICE_SESSION episodes"""
-        [[v.task_runner(self, k, v)
+        [[v.runner(self, k, v)
           for k, v in self.tasks.items()]
             for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
 

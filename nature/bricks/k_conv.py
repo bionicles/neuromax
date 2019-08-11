@@ -1,24 +1,28 @@
 # conv-kernel.py
 # why?: build a resnet with kernel and attention set convolutions
-
 from nanoid import generate
 import tensorflow as tf
-from blessings import Terminal
 
 from nature.bricks.kernel import get_kernel
 
-
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
-T = Terminal()
+
+SET_OPTIONS = [-1, 1, 2, 3]  # todo ... fix one_for_all and all_for_one inside graph_model
+
 
 class KConvSet1D(L.Layer):
     """Convolve a learned kernel over sets of elements from a 1D tensor"""
 
     def __init__(self, agent, brick_id, in_spec, out_spec, set_size):
+        self.out_spec = out_spec
+        self.in_spec = in_spec
+        d_out = out_spec if isinstance(out_spec, int) else out_spec.shape[-1]
+        d_in = in_spec if isinstance(in_spec, int) else in_spec.shape[-1]
+        if set_size is None:
+            set_size = agent.pull_choices(f"{brick_id}_KConvSet_set_size",
+                                          SET_OPTIONS)
         self.brick_id = brick_id
         self.agent = agent
-        d_in = in_spec.shape[-1]
-        d_out = out_spec.shape[-1]
         if set_size is 1:
             self.call = self.call_for_one
         elif set_size is 2:
@@ -34,7 +38,6 @@ class KConvSet1D(L.Layer):
             self.call = self.call_one_for_all
             self.flatten = L.Flatten()
             d_out = out_spec.size
-        print(T.red("kconvset1D init d_in"), d_in, T.red("d_out"), d_out)
         self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size)
         self.layer_id = f"{brick_id}_KConvSet_{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
@@ -53,21 +56,16 @@ class KConvSet1D(L.Layer):
         """Each input element innervates all output elements"""
         input, output_placehodl = inputs
         output_placehodl = self.flatten(output_placehodl)
-        print(T.red("call_one_for_all input"), input,
-        T.red("output_placehodl"), output_placehodl)
         output = tf.map_fn(lambda input_item: self.kernel([
             input_item, output_placehodl]), input)
         output = tf.math.reduce_sum(output, axis=0)
-        print(T.red("call_one_for_all output"), output)
         reshaped = self.reshape(output)
-        print(T.red("call_one_for_all reshaped"), reshaped)
         return reshaped
 
     def call_all_for_one(self, inputs):  # output unknown needs ragged actuator
         """Each output element recieves all input elements"""
         normalized_output_coords, code = inputs
         flat_code = self.flatten(code)
-        print(T.red("call_one_for_all"), normalized_output_coords, flat_code)
         return tf.map_fn(lambda normalized_output_coord:
                          self.kernel([
                              normalized_output_coord, flat_code

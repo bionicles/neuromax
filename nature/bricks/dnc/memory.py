@@ -231,6 +231,7 @@ class Memory:
         read_weightings = tf.einsum( "bsr,bnrs->bnr", interface.read_modes, tf.stack([backward_weighting, lookup_weighting, forward_weighting], axis=3))
         read_vectors = tf.matmul(memory_matrix, read_weightings, adjoint_a=True)
         return read_weightings, read_vectors
+
     @staticmethod
     def write(prev_mem_state, interface):
         """Perform write on memory.
