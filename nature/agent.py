@@ -141,7 +141,7 @@ class Agent:
             maybe_number_or_numbers = [a for _ in range(n)]
         if a > b:
             a, b = b, a
-        elif isinstance(a, int) and isinstance(b, int):
+        elif isinstance(a, int) and isinstance(b, int) and a != b:
             maybe_number_or_numbers = [
                 random.randrange(a, b, step) for _ in range(n)]
         else:
