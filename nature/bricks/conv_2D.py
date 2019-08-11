@@ -14,10 +14,11 @@ PADDING = "valid"
 KERNEL_SIZE = 3
 FILTERS = 16
 
+
 # TODO: add "rank" so we can reuse this for 1D conv
 def get_conv_2D_out(agent, brick_id, input, activation=ACTIVATION,
-                              k=KERNEL_SIZE, filters=FILTERS, norm=NORM,
-                              tfp_layer=TFP_LAYER, padding=PADDING):
+                    k=KERNEL_SIZE, filters=FILTERS, norm=NORM,
+                    tfp_layer=TFP_LAYER, padding=PADDING):
     if norm is "instance":
         output = InstanceNormalization()(input)
     else:
@@ -30,8 +31,8 @@ def get_conv_2D_out(agent, brick_id, input, activation=ACTIVATION,
 
 
 def get_deconv_2D_out(agent, brick_id, input, activation=ACTIVATION,
-                                k=KERNEL_SIZE, filters=FILTERS, norm=NORM,
-                                tfp_layer=TFP_LAYER, padding=PADDING):
+                      k=KERNEL_SIZE, filters=FILTERS, norm=NORM,
+                      tfp_layer=TFP_LAYER, padding=PADDING):
     if norm is "instance":
         output = InstanceNormalization()(input)
     else:

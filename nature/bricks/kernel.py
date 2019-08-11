@@ -41,10 +41,13 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         d12 = L.Subtract()([atom1, atom2])
         d13 = L.Subtract()([atom1, atom3])
         concat = L.Concatenate(-1)([d12, d13, atom1, atom2, atom3])
-    elif set_size is "code_for_one":
-        code = K.Input((agent.code_spec.size,))
+    elif set_size in ["all_for_one", "one_for_all"]:
+        print("get_kernel set_size", set_size)
+        d_in2 = 1 if set_size is "all_for_one" else agent.code_spec.size
+        code = K.Input((d_in2,))
         inputs = [atom1, code]
         concat = L.Concatenate(-1)([atom1, code])
+    print("get_kernel concat", concat)
     output = get_dense_out(agent, f"{name}_0", concat)
     for i in range(n_layers - 1):
         output = get_dense_out(agent, f"{name}_{i}", output)

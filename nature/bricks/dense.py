@@ -11,6 +11,7 @@ B, L = K.backend, K.layers
 FN_OPTIONS = ["tanh", "linear", "swish", "lisht", "sigmoid"]
 MIN_STDDEV, MAX_STDDEV = 1e-4, 0.1
 MIN_UNITS, MAX_UNITS = 32, 512
+P_DROP = 0.5
 
 
 class NoiseDrop(L.Dense):
@@ -29,7 +30,8 @@ class NoiseDrop(L.Dense):
     def call(self, x):
         kernel, bias = self.add_noise()
         return self.activation(
-                    tf.nn.bias_add(B.dot(x, tf.nn.dropout(kernel, 0.5)), bias))
+                    tf.nn.bias_add(
+                        B.dot(x, tf.nn.dropout(kernel, P_DROP)), bias))
 
 
 LAYER_OPTIONS = [NoiseDrop, L.Dense, tfpl.DenseFlipout,
@@ -38,9 +40,10 @@ LAYER_OPTIONS = [NoiseDrop, L.Dense, tfpl.DenseFlipout,
 
 def get_dense_out(agent, brick_id, input, layer=None, units=None, fn=None,
                   fn_options=None):
+    print("get_dense_out", brick_id, input, layer, units)
     if layer is None:
         layer = agent.pull_choices(f"{brick_id}-layer_type", LAYER_OPTIONS)
-    if units is None or units < MIN_UNITS or units > MAX_UNITS:
+    if units is None:
         units = agent.pull_numbers(f"{brick_id}-units", MIN_UNITS, MAX_UNITS)
     if fn is None:
         if fn_options is None:

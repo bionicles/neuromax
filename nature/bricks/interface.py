@@ -72,6 +72,7 @@ class Interface:
             print("couldn't get size for out_spec", e, "\n")
         self.task_id, self.in_spec, self.out_spec = task_id, in_spec, out_spec
         self.brick_id = f"{task_id}_interface_{input_number}_{in_spec.format}_to_{out_spec.format}"
+        print("")
         print(f"Interface.__init__ -- {self.brick_id}")
         print("in_spec", in_spec)
         print("out_spec", out_spec)
@@ -84,13 +85,12 @@ class Interface:
         if self.in_spec.format == "image":
             self.channels_before_concat_coords = self.in_spec.shape[-1]
             self.size_to_resize_to = self.get_hw(self.in_spec.shape)
-            self.channel_changers = {}
-        if "add_coords" in self.in_spec.keys():
             self.in_spec.shape = self.add_coords_to_shape(self.in_spec.shape)
             self.channels_after_concat_coords = self.in_spec.shape[-1]
+            self.channel_changers = {}
         self.input = K.Input(self.in_spec.shape)
-        print("interface input layer", self.input)
         self.output = InstanceNormalization()(self.input)
+        self.call = self.call_model  # might be overridden in builder fn
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
             model_type = f"{in_spec.format}_sensor"
@@ -98,14 +98,9 @@ class Interface:
             model_type = f"code_interface"
         if in_spec.format is "code" and out_spec.format is not "code":
             model_type = f"{out_spec.format}_actuator"
-        builder_method = f"self.get_{model_type}_output()"
-        eval(builder_method)
-        if out_spec.format is "ragged":
-            self.call = self.call_ragged_actuator
-        elif in_spec.format is "image":
-            self.call = self.call_image_sensor
-        else:
-            self.call = self.call_model
+        print(f"{model_type} interface input layer", self.input)
+        builder_fn = f"self.get_{model_type}_output()"
+        eval(builder_fn)
         self.model = K.Model(self.input, self.output)
 
     @staticmethod
@@ -120,6 +115,7 @@ class Interface:
         return tuple(new_shape)
 
     def get_image_sensor_output(self):
+        self.call = self.call_image_sensor
         self.output = get_image_encoder_output(
             self.agent, self.brick_id, self.output, self.out_spec)
 
@@ -178,31 +174,34 @@ class Interface:
         self.output = self.reshape(out)
 
     def call_model(self, input):
-        if self.in_spec.format is "image":
-            input = concat_2D_coords(input, normalize=True)
-        else:
-            input = concat_1D_coords(input, normalize=True)
         return self.model(input)
 
     def get_ragged_sensor_output(self):
-        output = MultiHeadAttention(self.agent, self.brick_id)(self.output)
+        """each input element innervates all output elements (one for all)"""
+        self.output_placeholder_input = K.Input(self.out_spec.shape)
+        self.input = [self.input, self.output_placeholder_input]
+        self.call = self.call_ragged_sensor
+        print("get_ragged_sensor_output self.output", self.output)
+        print("get_ragged_sensor_output self.output_placeholder_input", self.output_placeholder_input)
         self.output = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
-            "one_for_all")(output)
+            "one_for_all")([self.output, self.output_placeholder_input])
 
     def call_ragged_sensor(self, input):
-        coords = normalize(range(self.out_spec.size))
-        return self.model([coords, input])
+        code_placeholder = tf.random.normal(self.out_spec.shape)
+        return self.model([input, code_placeholder])
 
     def get_ragged_actuator_output(self):
+        """all input elements innervate each output element (all for one)"""
         self.shape_var_key = self.out_spec.variables[0][0]
-        self.coords_input = K.Input((None, 1))
-        self.input = [self.coords_input, self.input]
+        self.normalized_output_coords = K.Input((None, 1))
+        self.input = [self.normalized_output_coords, self.input]
+        self.call = self.call_ragged_actuator
         self.output = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
-            "all_for_one")([self.coords_input, self.output])
+            "all_for_one")([self.normalized_output_coords, self.output])
 
-    def call_ragged_actuator(self, code):
+    def call_ragged_actuator(self, input):
         ragged_dimension = self.agent.parameters[self.shape_var_key]
         normalized_output_coords = normalize(tf.range(ragged_dimension))
-        return self.model([normalized_output_coords, code])
+        return self.model([normalized_output_coords, input])
