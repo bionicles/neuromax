@@ -1,4 +1,5 @@
 import tensorflow_probability as tfp
+from blessings import Terminal
 import tensorflow as tf
 
 from nature.bricks.activations import clean_activation
@@ -7,6 +8,7 @@ from nature.bricks.activations import clean_activation
 tfpl = tfp.layers
 K = tf.keras
 B, L = K.backend, K.layers
+T = Terminal()
 
 FN_OPTIONS = ["tanh", "linear", "swish", "lisht", "sigmoid"]
 MIN_STDDEV, MAX_STDDEV = 1e-4, 0.1
@@ -40,7 +42,7 @@ LAYER_OPTIONS = [NoiseDrop, L.Dense, tfpl.DenseFlipout,
 
 def get_dense_out(agent, brick_id, input, layer=None, units=None, fn=None,
                   fn_options=None):
-    print("get_dense_out", brick_id, input, layer, units)
+    print(T.blue("get_dense_out"), brick_id, input, layer, units)
     if layer is None:
         layer = agent.pull_choices(f"{brick_id}-layer_type", LAYER_OPTIONS)
     if units is None:

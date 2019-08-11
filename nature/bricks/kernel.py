@@ -1,5 +1,5 @@
-import tensorflow as tf
 from blessings import Terminal
+import tensorflow as tf
 
 from nature.bricks.dense import get_dense_out
 from tools.get_unique_id import get_unique_id
@@ -47,7 +47,7 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         concat = L.Concatenate(-1)([d12, d13, atom1, atom2, atom3])
     elif set_size in ["all_for_one", "one_for_all"]:
         print(T.green("get_kernel set_size"), set_size)
-        d_in2 = 1 if set_size is "all_for_one" else agent.code_spec.size
+        d_in2 = agent.code_spec.size
         code = K.Input((d_in2,))
         inputs = [atom1, code]
         concat = L.Concatenate(-1)([atom1, code])
