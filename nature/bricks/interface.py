@@ -3,11 +3,9 @@ import tensorflow_addons as tfa
 import tensorflow as tf
 
 from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
-from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.dense import get_dense_out
 from nature.bricks.k_conv import KConvSet1D
 
-from tools.concat_1D_coords import concat_1D_coords
 from tools.concat_2D_coords import concat_2D_coords
 from tools.normalize import normalize
 from tools.get_size import get_size
@@ -49,7 +47,7 @@ class Interface:
         image -> code (eyeball)
         ragged -> code (NLP + atoms)
         onehot -> code (task number)
-        box -> code (gym arrays)
+        box -> code (bounded arrays)
 
     MESSAGES:
         code -> code (internal message passing)
@@ -59,7 +57,7 @@ class Interface:
         code -> int (discrete control for MountainCar-v0)
         code -> ragged (ragged force field for protein dynamics)
         code -> image (reconstruct image)
-        code -> box (gym arrays)
+        code -> box (bounded arrays)
     """
 
     def __init__(self, agent, task_id, in_spec, out_spec, input_number=None):
@@ -89,7 +87,8 @@ class Interface:
             self.channels_after_concat_coords = self.in_spec.shape[-1]
             self.channel_changers = {}
         self.input = K.Input(self.in_spec.shape)
-        self.output = InstanceNormalization()(self.input)
+        self.normie = InstanceNormalization()(self.input)
+        self.output = self.normie
         self.call = self.call_model  # might be overridden in builder fn
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
@@ -101,6 +100,8 @@ class Interface:
         print(f"{model_type} interface input layer", self.input)
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
+        if "sensor" in model_type:
+            self.output = [self.normie, self.output]
         self.model = K.Model(self.input, self.output)
 
     @staticmethod
@@ -169,8 +170,8 @@ class Interface:
     def flatten_resize_reshape(self):
         if len(self.output.shape) > 2:
             self.output = L.Flatten()(self.output)
-        print("flatten_resize_reshape", self.output)
-        out = get_dense_out(self.agent, self.brick_id, self.output, units=self.out_spec.size)
+        out = get_dense_out(self.agent, self.brick_id, self.output,
+                            units=self.out_spec.size)
         self.output = self.reshape(out)
 
     def call_model(self, input):
@@ -181,8 +182,6 @@ class Interface:
         self.output_placeholder_input = K.Input(self.out_spec.shape)
         self.input = [self.input, self.output_placeholder_input]
         self.call = self.call_ragged_sensor
-        print("get_ragged_sensor_output self.output", self.output)
-        print("get_ragged_sensor_output self.output_placeholder_input", self.output_placeholder_input)
         self.output = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "one_for_all")([self.output, self.output_placeholder_input])

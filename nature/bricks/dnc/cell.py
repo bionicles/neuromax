@@ -2,6 +2,8 @@
 # pylint: disable=W0221
 """
 Differentiable Neural Computer model definition.
+Source:
+    https://github.com/willsq/tf-DNC/blob/master/dnc/dnc.py
 Reference:
     http://www.nature.com/nature/journal/vaop/ncurrent/full/nature20101.html
 Conventions:

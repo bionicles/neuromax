@@ -34,13 +34,12 @@ nlp = spacy.load("en_vectors_web_lg")
 
 def run_clevr_task(agent, task_key, task_dict):
     dataset = task_dict.dataset.shuffle(10000)
-    model = agent.models[task_key]
     total_free_energy = 0.
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
         inputs = [image_tensor, embedded_question]
         with tf.GradientTape() as tape:
             normies, codes, reconstructions, state_predictions, loss_prediction, actions = \
-                model(inputs)
+                agent(task_key, task_dict, inputs)
             # compute free energy: loss + surprise + complexity - freedom
             one_hot_action = actions[0]
             loss = tf.keras.losses.categorical_crossentropy(
@@ -71,8 +70,10 @@ def get_dataframe():
         print("converting data to dataframe")
         clevr_data = pd.DataFrame(clevr_data["questions"])
         clevr_data.set_index("image_filename", inplace=True)
-        question = clevr_data.groupby("image_filename")['question'].apply(lambda x: ','.join(x.astype(str))).reset_index().drop("image_filename", axis=1)
-        answer = clevr_data.groupby("image_filename")['answer'].apply(lambda x: ','.join(x.astype(str))).reset_index()
+        question = clevr_data.groupby("image_filename")['question'].apply(
+            lambda x: ','.join(x.astype(str))).reset_index().drop("image_filename", axis=1)
+        answer = clevr_data.groupby("image_filename")['answer'].apply(
+            lambda x: ','.join(x.astype(str))).reset_index()
         clevr_data = pd.concat([question, answer], axis=1)
         clevr_data.to_csv(csv_data_path)
     else:

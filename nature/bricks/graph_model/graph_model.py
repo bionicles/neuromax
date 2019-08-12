@@ -5,7 +5,8 @@ import tensorflow as tf
 # TODO: fix attention and DNC memory bricks
 # from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.graph_model.graph import Graph
-from nature.bricks.dnc.cell import DNC_Cell
+# from nature.bricks.dnc.rnn import DNC_RNN
+from nature.bricks.conv_1D import get_conv_1D
 from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.kernel import get_kernel
 
@@ -19,10 +20,6 @@ L = K.layers
 
 # bricks
 BRICK_OPTIONS = ["conv1d", "kernel", "k_conv"]
-# these should get pulled by bricks
-MIN_FILTERS, MAX_FILTERS = 4, 32
-ACTIVATION_OPTIONS = ["tanh"]
-BATCH_SIZE = 8
 
 
 class GraphModel:
@@ -106,21 +103,15 @@ class GraphModel:
                 f"{id}_brick_type", BRICK_OPTIONS)
             log("building a ", brick_type, "brick")
         if brick_type == "conv1d":
-            filters = self.pull_numbers(f"{id}_filters", MIN_FILTERS, MAX_FILTERS)
-            activation = self.pull_choices(f"{id}_activation",
-                                           ACTIVATION_OPTIONS)
-            brick = L.SeparableConv1D(filters, 1, activation=activation)
+            brick = get_conv_1D(self.agent, id, d_out)
         if brick_type == "kernel":
             brick = get_kernel(self.agent, id, d_in, d_out, -1)
         if "k_conv" in brick_type:
             brick = KConvSet1D(self.agent, id, d_in, d_out, None)
         # if brick_type == "attention":
         #     brick = MultiHeadAttention(self.agent, id)
-        if brick_type == "dnc":
-            dnc_cell = DNC_Cell(self.agent, id, d_out)
-            initial_state = dnc_cell.get_initial_state(batch_size=BATCH_SIZE)
-            self.G.node[id]['initial_state'] = initial_state
-            brick = L.RNN(dnc_cell, return_sequences=True)
+        # if brick_type == "dnc":
+        #     brick = DNC_RNN(self.agent, id)
         self.G.node[id]['brick_type'] = brick_type
         self.G.node[id]['brick'] = brick
         log("built a", brick_type)

@@ -1,4 +1,6 @@
 """DNC memory operations and state.
+Source:
+    https://github.com/willsq/tf-DNC/blob/master/dnc/memory.py
 Conventions:
     B - batch size
     N - number of slots in memory
