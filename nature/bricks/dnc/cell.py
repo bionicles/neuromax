@@ -145,7 +145,7 @@ class DNC_Cell(L.Layer):
     def state_size(self):
         return nest.flatten(self.state_size_nested)
 
-    def get_initial_state(self, inputs=None, batch_size=3, dtype=DTYPE):
+    def get_initial_state(self, inputs=None, batch_size, dtype=DTYPE):
         del inputs
         initial_state_nested = DNC_Cell.state(
             memory_state=self._memory.get_initial_state(batch_size, dtype=dtype),

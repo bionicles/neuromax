@@ -132,7 +132,6 @@ class AllocationAdressing:
         """Permute each batch in a batch first tensor according to tensor
         of indices.
         """
-        print(indices)
         unpacked = tf.unstack(indices)
         indices_inverted = tf.stack([tf.math.invert_permutation(permutation) for permutation in unpacked])
         unpacked = zip(tf.unstack(tensor), tf.unstack(indices_inverted))

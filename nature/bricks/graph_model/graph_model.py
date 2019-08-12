@@ -22,7 +22,7 @@ BRICK_OPTIONS = ["conv1d", "kernel", "k_conv", "dnc"]
 # these should get pulled by bricks
 MIN_FILTERS, MAX_FILTERS = 4, 32
 ACTIVATION_OPTIONS = ["tanh"]
-
+BATCH_SIZE = 8
 
 class GraphModel:
     """
@@ -117,7 +117,7 @@ class GraphModel:
         #     brick = MultiHeadAttention(self.agent, id)
         if brick_type == "dnc":
             dnc_cell = DNC_Cell(self.agent, id, d_out)
-            initial_state = dnc_cell.get_initial_state()
+            initial_state = dnc_cell.get_initial_state(batch_size=BATCH_SIZE)
             self.G.node[id]['initial_state'] = initial_state
             brick = L.RNN(dnc_cell)
         self.G.node[id]['brick_type'] = brick_type
