@@ -4,10 +4,9 @@ import tensorflow as tf
 import numpy as np
 import random
 
-from tools.map_enumerate import map_enumerate
 from tools.map_attrdict import map_attrdict
 from tools.sum_entropy import sum_entropy
-from tools.get_onehot import get_onehot
+from tools.show_model import show_model
 from tools.get_size import get_size
 from tools.get_spec import get_spec
 
@@ -50,11 +49,13 @@ class Agent:
                                       self.image_spec, self.code_spec)
         self.image_actuator = Interface(self, "image_actuator",
                                         self.code_spec, self.image_spec)
-        # we add task sensors
-        self.tasks = map_attrdict(self.add_sensors_and_actuators, tasks)
+        # we add task-specific sensors and actuators
+        self.tasks = map_attrdict(self.add_sensors_and_actuators, self.tasks)
+        # we build the shared GraphModel
         self.decide_n_in_n_out()
         self.shared_model = GraphModel(self)
-        self.replay = []
+        # we build a keras model for each task
+        self.tasks = map_attrdict(self.make_task_model, self.tasks)
 
     def decide_n_in_n_out(self):
         self.max_in = max([len(task_dict.inputs)
@@ -90,38 +91,12 @@ class Agent:
         return task_key, task_dict
 
     def train(self):
-        """Run EPISODES_PER_PRACTICE_SESSION episodes"""
-        [[v.runner(self, k, v)
-          for k, v in self.tasks.items()]
+        """Run EPISODES_PER_PRACTICE_SESSION episodes
+        uses functions stored in self.tasks (indicated in neuromax.py tasks)
+        """
+        [[task_dict.run_agent_on_task(self, task_key, task_dict)
+          for task_key, task_dict in self.tasks.items()]
             for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
-
-    def __call__(self, task_id, task_dict, inputs):
-        """
-        Encode, reconstruct, predict, and decide for a task's input[s]
-
-        Args:
-            task_id: string key of the task
-            task_dict: dictionary for the task w/ sensors
-            inputs: a list of tensors
-
-        Returns: tuple of tensors
-            normies, codes, reconstructions, predictions, actions
-        """
-        if "model" not in task_dict.keys():
-            self.make_task_model(task_id)
-        for output_number, output in enumerate(task_dict.outputs):
-            if "variables" in output.keys():
-                for var_id, var_position in output.variables:
-                    value = inputs[output_number][var_position]
-                    self.parameters[var_id] = value
-        task_input = get_onehot(task_id, self.tasks.keys())
-        task_code = self.task_sensor(task_input)
-        codes = map_enumerate(task_dict.sensors, inputs)
-        codes = [task_code] + codes
-        judgments = self.shared_model(codes)
-        world_model = tf.concat([*codes, *judgments], 0)
-        actions = map_enumerate(task_dict.actuators, world_model, task_dict)
-        return codes, judgments, actions
 
     def make_task_model(self, task_id, task_dict):
         # we make an input for the task_id and encode it
@@ -155,12 +130,13 @@ class Agent:
         actions = [code_prediction, loss_prediction]
         # we pass codes and judgments to actuators to get actions
         for o in range(len(task_dict.outputs)):
-            action = task_dict.actuators[o](judgments[o])
+            action = task_dict.actuators[o](world_model)
             actions = actions + [action]
         # we build a model
         outputs = normies + code + judgment + actions
         task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
-        self.tasks[task_id].model = task_model
+        show_model(task_model, ".", task_id, ".png")
+        task_dict.model = task_model
 
     def compute_code_shape(self, task_dict):
         n_in = len(task_dict.inputs)

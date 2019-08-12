@@ -1,20 +1,26 @@
 from attrdict import AttrDict
 import tensorflow as tf
 
+from tools.get_onehot import get_onehot
 from tools.get_spec import get_spec
 
 
 def run_env_task(agent, task_key, task_dict):
-    model = agent.models[task_key]
+    model = task_dict.model
     total_free_energy = 0.
     env = task_dict.env
+    onehot_task_key = get_onehot(task_key, agent.tasks.keys())
     for _ in range(task_dict.episodes_per_session):
+        prior_loss_prediction = 0.
+        prior_code_prediction = tf.zeros(
+            agent.compute_code_shape(task_dict))
         observation = env.reset()
-        inputs = [observation]
+        inputs = [onehot_task_key, 0., observation]
         done = False
         while not done:
             with tf.GradientTape() as tape:
-                normies, codes, reconstructions, actions = model(inputs)
+                normies, code, actions = model(inputs)
+                code_prediction, loss_prediction, reconstructions, forces = agent.unpack_actions(task_key, actions)
                 action_samples = [action.sample() for action in actions]
                 rescale_boxes(action_samples, task_dict)
                 action_samples = action_samples[0] if len(task_dict.outputs) is 1 else action_samples

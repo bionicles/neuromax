@@ -33,10 +33,15 @@ nlp = spacy.load("en_vectors_web_lg")
 
 
 def run_clevr_task(agent, task_key, task_dict):
+    onehot_task_key = get_onehot(task_key, agent.tasks.keys())
     dataset = task_dict.dataset.shuffle(10000)
+    model = task_dict.model
     total_free_energy = 0.
+    loss = 0.
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
-        inputs = [image_tensor, embedded_question]
+        inputs = [onehot_task_key, loss, image_tensor, embedded_question]
+        prior_loss_prediction = 0.
+        prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
         with tf.GradientTape() as tape:
             normies, code, reconstructions, actions = \
                 agent(task_key, task_dict, inputs)
@@ -51,7 +56,7 @@ def run_clevr_task(agent, task_key, task_dict):
                 actions=actions
             )
         gradients = tape.gradient([free_energy, model.losses],
-                                  model.trainable_variables)
+                                   model.trainable_variables)
         agent.optimizer.apply_gradients(zip(gradients,
                                             model.trainable_variables))
         total_free_energy += free_energy

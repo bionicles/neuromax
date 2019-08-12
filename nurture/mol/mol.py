@@ -26,28 +26,25 @@ MAX_STEPS = 420
 
 def run_mol_task(agent, task_key, task_dict):
     dataset = task_dict.dataset.shuffle(10000)
-    model = agent.models[task_key]
+    model = task_dict.model
     total_free_energy = 0.
     onehot_task_key = get_onehot(task_key, agent.tasks.keys())
     for id_string, n_atoms, target, positions, features, masses in dataset.take(task_dict.examples_per_episode):
-        current = tf.concat([positions, features], -1)
-        target_distances = get_distances(target, target)
-        initial_loss = get_loss(target_distances, current)
-        prior_loss_prediction = 0.
         prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
+        target_distances = get_distances(target, target)
+        current = tf.concat([positions, features], -1)
+        initial_loss = get_loss(target_distances, current)
+        prior_loss_prediction = loss = stop = 0.
         velocities = tf.zeros_like(positions)
         forces = tf.zeros_like(positions)
-        initial_loss = 0.
-        loss = 0.
-        stop = 0.
         for step in range(MAX_STEPS):
             with tf.GradientTape() as tape:
                 inputs = [onehot_task_key, initial_loss, current]
                 normies, code, actions = model(inputs)
-                code_prediction, loss_prediction, reconstructions, forces = agent.unpack_actions(task_key)
-                velocities = velocities + forces
-                noise = tf.random.truncated_normal(
-                    tf.shape(positions), stddev=STDDEV)
+                code_prediction, loss_prediction, reconstructions, forces = agent.unpack_actions(task_key, actions)
+                accelerations = forces / masses
+                velocities = velocities + accelerations
+                noise = tf.random.truncated_normal(tf.shape(positions), stddev=STDDEV)
                 positions = positions + velocities + noise
                 loss = get_loss(target_distances, current)
                 free_energy = agent.compute_free_energy(
@@ -59,7 +56,7 @@ def run_mol_task(agent, task_key, task_dict):
                                       model.trainable_variables)
             agent.optimizer.apply_gradients(
                 zip(gradients, model.trainable_variables))
-            total_free_energy += free_energy
+            total_free_energy = total_free_energy + free_energy
             prior_code_prediction = code_prediction
             prior_loss_prediction = loss_prediction
             loss = tf.reduce_sum(loss)
