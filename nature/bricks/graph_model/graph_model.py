@@ -4,8 +4,8 @@ import tensorflow_addons as tfa
 import tensorflow as tf
 # TODO: fix attention and DNC memory bricks
 # from nature.bricks.multi_head_attention import MultiHeadAttention
-# from nature.bricks.dnc.rnn import DNC_RNN
 from nature.bricks.graph_model.graph import Graph
+from nature.bricks.dnc.cell import DNC_Cell
 from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.kernel import get_kernel
 
@@ -18,11 +18,11 @@ K = tf.keras
 L = K.layers
 
 # bricks
-BRICK_OPTIONS = ["conv1d", "kernel", "k_conv"]
+BRICK_OPTIONS = ["conv1d", "kernel", "k_conv", "dnc"]
 # these should get pulled by bricks
 MIN_FILTERS, MAX_FILTERS = 4, 32
 ACTIVATION_OPTIONS = ["tanh"]
-
+BATCH_SIZE = 8
 
 class GraphModel:
     """
@@ -40,7 +40,6 @@ class GraphModel:
         self.G = self.graph.G
         self.make_model()
         show_model(self.model, ".", "M", "png")
-
 
     def make_model(self):
         """Build the keras model described by a graph."""
@@ -73,7 +72,7 @@ class GraphModel:
                 else:
                     brick = self.build_brick(id, inputs)
                     log(f"got brick", brick)
-                    output = brick(inputs)
+                    output = brick(inputs, initial_state=self.G.node[id]['initial_state']) if "cell" in brick.__init__.__code__.co_varnames else brick(inputs)
                     if "output_shape" not in keys and "gives_feedback" not in keys:
                         try:
                             output = L.Add()([inputs, output])
@@ -116,9 +115,11 @@ class GraphModel:
             brick = KConvSet1D(self.agent, id, d_in, d_out, None)
         # if brick_type == "attention":
         #     brick = MultiHeadAttention(self.agent, id)
-        # if brick_type == "dnc":
-        #     brick, initial_state = DNC(self.agent, id, d_out)
-        #     self.G.node[id]['initial_state'] = initial_state
+        if brick_type == "dnc":
+            dnc_cell = DNC_Cell(self.agent, id, d_out)
+            initial_state = dnc_cell.get_initial_state(batch_size=BATCH_SIZE)
+            self.G.node[id]['initial_state'] = initial_state
+            brick = L.RNN(dnc_cell, return_sequences=True)
         self.G.node[id]['brick_type'] = brick_type
         self.G.node[id]['brick'] = brick
         log("built a", brick_type)
