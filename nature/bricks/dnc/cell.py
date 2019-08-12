@@ -80,13 +80,13 @@ class DNC_Cell(L.Layer):
         self._controller = L.LSTMCell(units=controller_units)
         if tfp_layer:
             self._controller_to_interface_dense = tfp_layer(
-                self.interface_vector_size, name='controller_to_interface')
+                self._interface_vector_size, name='controller_to_interface')
             self._final_output_dense = tfp_layer(self._output_size)
         else:
             self._controller_to_interface_dense = L.Dense(
                 self._interface_vector_size, name='controller_to_interface')
-            self._memory = Memory(memory_size, word_size, num_read_heads)
             self._final_output_dense = L.Dense(self._output_size)
+        self._memory = Memory(memory_size, word_size, num_read_heads)
 
     def _parse_interface_vector(self, interface_vector):
         r, w = self.num_read_heads, self.word_size
@@ -145,7 +145,7 @@ class DNC_Cell(L.Layer):
     def state_size(self):
         return nest.flatten(self.state_size_nested)
 
-    def get_initial_state(self, inputs=None, batch_size=1, dtype=DTYPE):
+    def get_initial_state(self, inputs=None, batch_size=3, dtype=DTYPE):
         del inputs
         initial_state_nested = DNC_Cell.state(
             memory_state=self._memory.get_initial_state(batch_size, dtype=dtype),
