@@ -183,3 +183,25 @@ class Agent:
             maybe_choice_or_choices = maybe_choice_or_choices[0]
         self.parameters[pkey] = maybe_choice_or_choices
         return maybe_choice_or_choices
+
+    def pull_tensor(self, pkey, shape, method=tf.random.normal,
+                    dtype=tf.float32):
+        """
+        WARNING!: IF KEY EXISTS, RETURNS CURRENT VALUE, NOT A NEW ONE!
+
+        Pull a tensor from the agent.
+        Random normal sampled float32 unless method and dtype are specified
+
+        Args:
+            pkey: unique key to share / not share values
+            shape: desired tensor shape
+            method: the function to call (default tf.random.normal)
+
+        Returns:
+            sampled_tensor: tensor of shape
+        """
+        if pkey in self.parameters.keys():
+            return self.parameters[pkey]
+        sampled_tensor = method(shape, dtype=dtype)
+        self.parameters[pkey] = sampled_tensor
+        return sampled_tensor
