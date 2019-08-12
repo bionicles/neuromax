@@ -18,11 +18,12 @@ K = tf.keras
 L = K.layers
 
 # bricks
-BRICK_OPTIONS = ["conv1d", "kernel", "k_conv", "dnc"]
+BRICK_OPTIONS = ["conv1d", "kernel", "k_conv"]
 # these should get pulled by bricks
 MIN_FILTERS, MAX_FILTERS = 4, 32
 ACTIVATION_OPTIONS = ["tanh"]
 BATCH_SIZE = 8
+
 
 class GraphModel:
     """
@@ -72,7 +73,7 @@ class GraphModel:
                 else:
                     brick = self.build_brick(id, inputs)
                     log(f"got brick", brick)
-                    output = brick(inputs, initial_state=self.G.node[id]['initial_state']) if "cell" in brick.__init__.__code__.co_varnames else brick(inputs)
+                    output = brick(inputs)
                     if "output_shape" not in keys and "gives_feedback" not in keys:
                         try:
                             output = L.Add()([inputs, output])
