@@ -72,7 +72,7 @@ class GraphModel:
                 else:
                     brick = self.build_brick(id, inputs)
                     log(f"got brick", brick)
-                    output = brick(inputs, self.G.node[id]['initial_state']) if "dnc_cell" in brick.__init__.__code__.co_varnames else brick(inputs)
+                    output = brick(inputs, initial_state=self.G.node[id]['initial_state']) if "cell" in brick.__init__.__code__.co_varnames else brick(inputs)
                     if "output_shape" not in keys and "gives_feedback" not in keys:
                         try:
                             output = L.Add()([inputs, output])
@@ -119,7 +119,7 @@ class GraphModel:
             dnc_cell = DNC_Cell(self.agent, id, d_out)
             initial_state = dnc_cell.get_initial_state(batch_size=BATCH_SIZE)
             self.G.node[id]['initial_state'] = initial_state
-            brick = L.RNN(dnc_cell)
+            brick = L.RNN(dnc_cell, return_sequences=True)
         self.G.node[id]['brick_type'] = brick_type
         self.G.node[id]['brick'] = brick
         log("built a", brick_type)
