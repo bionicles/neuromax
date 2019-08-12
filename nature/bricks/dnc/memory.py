@@ -32,7 +32,8 @@ class ContentAddressing:
         Returns:
             Tensor [B, N, R]: lookup weightings for each key
         """
-        memory_normalised, keys_normalised = [tf.math.l2_normalize(element, axis, epsilon=EPSILON) for element, axis in [(memory_matrix, 2), (keys, 1)]]
+        memory_normalised, keys_normalised = [tf.math.l2_normalize(element, axis, epsilon=EPSILON)
+                                              for element, axis in [(memory_matrix, 2), (keys, 1)]]
         similiarity = tf.matmul(memory_normalised, keys_normalised)
         strengths = tf.expand_dims(sharpness_op(strengths), 1)
         return tf.math.softmax(similiarity * strengths, 1)

@@ -1,14 +1,10 @@
 from attrdict import AttrDict
 import tensorflow as tf
 
-from tools.compute_surprise import compute_surprise
-from tools.sum_entropy import sum_entropy
-from tools.compute_kl import compute_kl
 from tools.get_spec import get_spec
 
 
 def run_env_task(agent, task_key, task_dict):
-    prior_state_predictions = None
     model = agent.models[task_key]
     total_free_energy = 0.
     env = task_dict.env
@@ -18,27 +14,35 @@ def run_env_task(agent, task_key, task_dict):
         done = False
         while not done:
             with tf.GradientTape() as tape:
-                normies, codes, reconstructions, state_predictions, \
-                    loss_prediction, actions = model(inputs)
-                action = actions.sample()
-                new_observation, reward, done, _ = env.step(action)
+                normies, codes, reconstructions, actions = model(inputs)
+                action_samples = [action.sample() for action in actions]
+                rescale_boxes(action_samples, task_dict)
+                action_samples = action_samples[0] if len(task_dict.outputs) is 1 else action_samples
+                new_observation, reward, done, _ = env.step(action_samples)
                 loss = reward * -1
-                reconstruction_surprise = compute_surprise(
-                    reconstructions, normies)
-                if prior_state_predictions:
-                    state_surprise = compute_kl(prior_state_predictions, codes)
-                else:
-                    state_surprise = 0.
-                prior_state_predictions = state_predictions
-                loss_surprise = compute_surprise([loss_prediction], [loss])
-                surprise = reconstruction_surprise + state_surprise + loss_surprise
-                freedom = sum_entropy(actions)
-                free_energy = loss + surprise - freedom
+                free_energy = agent.compute_free_energy(
+                    loss=loss, prior_loss_prediction=prior_loss_prediction,
+                    normies=normies, reconstructions=reconstructions,
+                    code=code, prior_code_prediction=prior_code_prediction,
+                    actions=actions
+                )
             gradients = tape.gradient([free_energy, model.losses], model.trainable_variables)
             agent.optimizer.apply_gradients(zip(gradients, model.trainable_variables))
             inputs = [new_observation]
             total_free_energy = total_free_energy + free_energy
     return total_free_energy
+
+
+def rescale_boxes(action_samples, task_dict):
+    rescaled_action_samples = []
+    for action_sample, out_spec in zip(action_samples, task_dict.outputs):
+        out_keys = task_dict.outputs[0].format.keys()
+        if "low" in out_keys and "high" in out_keys:
+            action_sample = action_sample * out_spec.high - out_spec.low
+        else:
+            action_sample = action_sample
+        rescaled_action_samples.append(action_sample)
+    return rescaled_action_samples
 
 
 def space2spec(space):

@@ -6,6 +6,7 @@ import random
 
 from tools.map_enumerate import map_enumerate
 from tools.map_attrdict import map_attrdict
+from tools.sum_entropy import sum_entropy
 from tools.get_onehot import get_onehot
 from tools.get_size import get_size
 from tools.get_spec import get_spec
@@ -29,18 +30,19 @@ class Agent:
     def __init__(self, tasks):
         self.tasks = tasks
         self.parameters = AttrDict({})
-        code_atoms = self.pull_numbers("code_atoms",
-                                       MIN_CODE_ATOMS, MAX_CODE_ATOMS)
-        code_channels = self.pull_numbers("code_channels",
-                                          MIN_CODE_CHANNELS, MAX_CODE_CHANNELS)
-        self.code_spec = get_spec(shape=(code_atoms, code_channels),
+        self.code_atoms = self.pull_numbers(
+            "code_atoms", MIN_CODE_ATOMS, MAX_CODE_ATOMS)
+        self.code_channels = self.pull_numbers(
+            "code_channels", MIN_CODE_CHANNELS, MAX_CODE_CHANNELS)
+        self.code_spec = get_spec(shape=(self.code_atoms, self.code_channels),
                                   format="code")
         self.code_spec.size = get_size(self.code_spec.shape)
+        self.loss_spec = get_spec(format="float", shape=tuple(1))
         # we add a sensor for task id
         n_tasks = len(self.tasks.keys())
-        task_id_spec = get_spec(shape=n_tasks, format="onehot")
+        self.task_id_spec = get_spec(shape=n_tasks, format="onehot")
         self.task_sensor = Interface(self, "task_key",
-                                     task_id_spec, self.code_spec)
+                                     self.task_id_spec, self.code_spec)
         # we add a sensor for images
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image",
                                    add_coords=True)
@@ -55,14 +57,16 @@ class Agent:
         self.replay = []
 
     def decide_n_in_n_out(self):
-        self.n_in = max([len(task_dict.inputs)
-                         for task_id, task_dict in self.tasks.items()])
-        self.n_out = max([len(task_dict.outputs)
-                          for task_id, task_dict in self.tasks.items()])
+        self.max_in = max([len(task_dict.inputs)
+                           for task_id, task_dict in self.tasks.items()])
+        self.max_out = max([len(task_dict.outputs)
+                            for task_id, task_dict in self.tasks.items()])
 
     def add_sensors_and_actuators(self, task_key, task_dict):
         """Add interfaces to a task_dict"""
         sensors, actuators = [], []
+        task_dict.loss_sensor = Interface(self, task_key + "loss_sensor",
+                                          self.loss_spec, self.code_spec)
         for input_number, in_spec in enumerate(task_dict.inputs):
             if in_spec.format is "image":
                 self.image_sensor.add_channel_changer(in_spec.shape[-1])
@@ -103,12 +107,13 @@ class Agent:
         Returns: tuple of tensors
             normies, codes, reconstructions, predictions, actions
         """
+        if "model" not in task_dict.keys():
+            self.make_task_model(task_id)
         for output_number, output in enumerate(task_dict.outputs):
             if "variables" in output.keys():
                 for var_id, var_position in output.variables:
                     value = inputs[output_number][var_position]
                     self.parameters[var_id] = value
-        self.current_task_dict = task_dict
         task_input = get_onehot(task_id, self.tasks.keys())
         task_code = self.task_sensor(task_input)
         codes = map_enumerate(task_dict.sensors, inputs)
@@ -117,6 +122,77 @@ class Agent:
         world_model = tf.concat([*codes, *judgments], 0)
         actions = map_enumerate(task_dict.actuators, world_model, task_dict)
         return codes, judgments, actions
+
+    def make_task_model(self, task_id, task_dict):
+        # we make an input for the task_id and encode it
+        task_id_input = K.Input(self.task_id_spec.shape)
+        task_code = self.task_sensor(task_id_input)
+        # likewise for loss float value
+        loss_input = K.Input((1))
+        loss_code = self.loss_sensor(loss_input)
+        # we track lists of all the things
+        inputs = [task_id_input, loss_input]
+        codes = [task_code, loss_code]
+        normies = []
+        # now we'll encode the inputs
+        for i in range(len(task_dict.inputs)):
+            # we make an input
+            input = K.Input(task_dict.inputs[i].shape)
+            # we use it on the sensors to get normies and codes
+            normie, input_code = task_dict.sensors[i](input)
+            inputs = inputs + [input]
+            normies = normies + [normie]
+            codes = codes + [input_code]
+        # the full code is task_code, loss_code, input_codes
+        code = tf.concat(codes, 0)
+        # we pass the codes to the shared model to get judgments
+        judgment = self.shared_model(code)
+        world_model = tf.concat([code, judgment], 0)
+        # we predict next code
+        code_prediction = self.code_predictor(world_model)
+        world_model = tf.concat([world_model, code_prediction], 0)
+        loss_prediction = self.loss_predictor(world_model)
+        actions = [code_prediction, loss_prediction]
+        # we pass codes and judgments to actuators to get actions
+        for o in range(len(task_dict.outputs)):
+            action = task_dict.actuators[o](judgments[o])
+            actions = actions + [action]
+        # we build a model
+        outputs = normies + code + judgment + actions
+        task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
+        self.tasks[task_id].model = task_model
+
+    def compute_code_shape(self, task_dict):
+        n_in = len(task_dict.inputs)
+        n_out = len(task_dict.outputs)
+        # task_code, loss_code, input_codes (n_in), prior_output_codes (n_out)
+        return (self.code_atoms * (2 + n_in + n_out), self.code_channels)
+
+    def unpack_actions(task_dict, actions):
+        code_prediction = actions[0]
+        loss_prediction = actions[1]
+        n_in = len(task_dict.inputs)
+        reconstructions = actions[2:2 + n_in]
+        outputs = actions[3 + n_in:]
+        if len(outputs) == 1:
+            outputs = outputs[0]
+        return code_prediction, loss_prediction, reconstructions, outputs
+
+    def compute_free_energy(
+        loss=None, prior_loss_prediction=None,
+        normies=None, reconstructions=None,
+        code=None, prior_code_prediction=None,
+        actions=None
+    ):
+        loss_surprise = -1 * prior_loss_prediction.log_prob(loss)
+        code_surprise = -1 * prior_code_prediction.log_prob(code)
+        reconstruction_errors = [
+            tf.keras.losses.MSE(normie, reconstruction)
+            for normie, reconstruction in zip(normies, reconstructions)]
+        reconstruction_error = tf.math.reduce_sum(reconstruction_errors)
+        freedom = sum_entropy(actions)
+        free_energy = loss_surprise + code_surprise + reconstruction_error - freedom
+        return free_energy
 
     def pull_numbers(self, pkey, a, b, step=1, n=1):
         """

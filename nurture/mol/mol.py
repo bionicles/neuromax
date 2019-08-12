@@ -12,60 +12,65 @@ import os
 from nurture.mol.make_dataset import load, load_proteins
 from nurture.gym.spaces.ragged import Ragged
 
-from tools.sum_entropy import sum_entropy
+from tools.get_onehot import get_onehot
 
 K = tf.keras
 B, L = K.backend, K.layers
 
 CSV_FILE_NAME = 'sorted-less-than-256.csv'
 TEMP_PATH = "archive/temp"
-stddev = 273 * 0.001
+STDDEV = 273 * 0.001
 DTYPE = tf.float32
+MAX_STEPS = 420
 
 
 def run_mol_task(agent, task_key, task_dict):
-    prior_state_predictions = None
     dataset = task_dict.dataset.shuffle(10000)
     model = agent.models[task_key]
     total_free_energy = 0.
+    onehot_task_key = get_onehot(task_key, agent.tasks.keys())
     for id_string, n_atoms, target, positions, features, masses in dataset.take(task_dict.examples_per_episode):
-        inputs = [tf.concat([positions, features], -1)]
-        with tf.GradientTape() as tape:
-            normies, codes, reconstructions, state_predictions, loss_prediction, actions = \
-                model(inputs)
-            # compute free energy: loss + surprise + complexity - freedom
-            # loss term
-            one_hot_action = actions[0]
-            loss = get_loss(target_distances, current)
-            # surprise on state predictions
-            if prior_state_predictions:
-                state_surprise = tf.math.sum([
-                    -1 * belief.log_prob(truth)
-                    for belief, truth in zip(prior_state_predictions, codes)])
-            else:
-                state_surprise = 0.
-            prior_state_predictions = state_predictions
-            # surprise on current model
-            reconstruction_surprise = tf.math.sum([
-                -1 * belief.log_prob(truth)
-                for belief, truth in zip(reconstructions, normies)])
-            # surprise on loss prediction
-            loss_surprise = -1 * loss_prediction.log_prob(loss)
-            # total_surprise
-            surprise = reconstruction_surprise + state_surprise + loss_surprise
-            # how do you measure complexity?
-            # maybe L1/L2 reg or entropy/KL
-            # complexity = tf.math.log(model.count_params())
-            # complexity = 0.
-            # MaxEnt actions ...
-            # need empowerment / curiousity / optionality type loss over diversity of results (TODO!)
-            freedom = sum_entropy(actions)
-            free_energy = loss + surprise - freedom
-        gradients = tape.gradient([free_energy, model.losses],
-                                  model.trainable_variables)
-        agent.optimizer.apply_gradients(
-            zip(gradients, model.trainable_variables))
-        total_free_energy += free_energy
+        current = tf.concat([positions, features], -1)
+        target_distances = get_distances(target, target)
+        initial_loss = get_loss(target_distances, current)
+        prior_loss_prediction = 0.
+        prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
+        velocities = tf.zeros_like(positions)
+        forces = tf.zeros_like(positions)
+        initial_loss = 0.
+        loss = 0.
+        stop = 0.
+        for step in range(MAX_STEPS):
+            with tf.GradientTape() as tape:
+                inputs = [onehot_task_key, initial_loss, current]
+                normies, code, actions = model(inputs)
+                code_prediction, loss_prediction, reconstructions, forces = agent.unpack_actions(task_key)
+                velocities = velocities + forces
+                noise = tf.random.truncated_normal(
+                    tf.shape(positions), stddev=STDDEV)
+                positions = positions + velocities + noise
+                loss = get_loss(target_distances, current)
+                free_energy = agent.compute_free_energy(
+                    loss=loss, prior_loss_prediction=prior_loss_prediction,
+                    normies=normies, reconstructions=reconstructions,
+                    code=code, prior_code_prediction=prior_code_prediction,
+                    actions=actions)
+            gradients = tape.gradient([free_energy, model.losses],
+                                      model.trainable_variables)
+            agent.optimizer.apply_gradients(
+                zip(gradients, model.trainable_variables))
+            total_free_energy += free_energy
+            prior_code_prediction = code_prediction
+            prior_loss_prediction = loss_prediction
+            loss = tf.reduce_sum(loss)
+            new_stop = loss * 1.2
+            if step < 1:
+                initial_loss = loss
+                stop = new_stop
+            if new_stop < stop:
+                stop = new_stop
+            elif step > 0 and (loss > stop or loss != loss):
+                break
     return total_free_energy
 
 
@@ -296,10 +301,9 @@ def prepare_pymol():
     cmd.unpick()
     util.cbc()
 
-
-@tf.function
-def get_distances(a, b):  # L2
-    return B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)
+# @tf.function
+# def get_distances(a, b):  # L2
+#     return B.sum(B.square(tf.expand_dims(a, 0) - tf.expand_dims(b, 1)), axis=-1)
 
     # @tf.function
     # def get_distances(a, b):  # L1

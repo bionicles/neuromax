@@ -26,8 +26,6 @@ class Graph:
         self.pull_choices = agent.pull_choices
         self.brick_id = brick_id + "_graph"
         self.code_spec = agent.code_spec
-        self.n_out = agent.n_out
-        self.n_in = agent.n_in
         self.agent = agent
         self.get_graph()
         screenshot_graph(self.G, ".", "G")

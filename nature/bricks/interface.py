@@ -5,6 +5,7 @@ import tensorflow as tf
 from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
 from nature.bricks.dense import get_dense_out
 from nature.bricks.k_conv import KConvSet1D
+from nature.bricks.normal import get_normal
 
 from tools.concat_2D_coords import concat_2D_coords
 from tools.normalize import normalize
@@ -28,6 +29,8 @@ CODE_INTERFACE_ACTIVATION_OPTIONS = ["tanh"]
 ONEHOT_ACTUATOR_ACTIVATION_OPTIONS = ["sigmoid"]
 RAGGED_ACTUATOR_ACTIVATION_OPTIONS = ["tanh"]
 BOX_ACTUATOR_LAST_ACTIVATION_OPTIONS = ["linear"]
+NORMAL_DISTRIBUTION_OPTIONS = [
+    tfpl.MixtureNormal, tfpl.IndependentNormal, tfpl.MultivariateNormalTriL]
 
 
 class Interface:
@@ -48,6 +51,7 @@ class Interface:
         ragged -> code (NLP + atoms)
         onehot -> code (task number)
         box -> code (bounded arrays)
+        float -> code (loss values)
 
     MESSAGES:
         code -> code (internal message passing)
@@ -100,6 +104,12 @@ class Interface:
         print(f"{model_type} interface input layer", self.input)
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
+        if self.out_spec.format is "onehot":
+            self.output = tfpl.OneHotCategorical(
+                self.out_spec.size)(self.output)
+        else:
+            self.output = get_normal(
+                self.agent, self.brick_id, self.out_spec)(self.output)
         if "sensor" in model_type:
             self.output = [self.normie, self.output]
         self.model = K.Model(self.input, self.output)
@@ -147,11 +157,12 @@ class Interface:
 
     def get_box_actuator_output(self):
         self.flatten_resize_reshape()
-        out_keys = self.out_spec.keys()
-        if "low" in out_keys and "high" in out_keys:
-            self.output = self.output * self.out_spec.high - self.out_spec.low
-        else:
-            self.output = self.output
+
+    def get_float_sensor_output(self):
+        self.flatten_resize_reshape()
+
+    def get_float_actuator_output(self):
+        self.flatten_resize_reshape()
 
     def get_code_interface_output(self):
         self.flatten_resize_reshape()

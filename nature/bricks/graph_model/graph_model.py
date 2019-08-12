@@ -95,7 +95,7 @@ class GraphModel:
         node = self.G.node[id]
         log('build brick for', node)
         if node["node_type"] == "input":
-            brick = L.Input(self.agent.code_spec.shape)
+            brick = L.Input((None, self.agent.code_channels))
             brick_type = "input"
         else:
             d_in = d_out = inputs.shape[-1]

@@ -38,21 +38,18 @@ def run_clevr_task(agent, task_key, task_dict):
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
         inputs = [image_tensor, embedded_question]
         with tf.GradientTape() as tape:
-            normies, codes, reconstructions, state_predictions, loss_prediction, actions = \
+            normies, code, reconstructions, actions = \
                 agent(task_key, task_dict, inputs)
             # compute free energy: loss + surprise + complexity - freedom
             one_hot_action = actions[0]
             loss = tf.keras.losses.categorical_crossentropy(
                 one_hot_answer, one_hot_action)
-            reconstruction_surprise = tf.math.sum([
-                -1 * belief.log_prob(truth)
-                for belief, truth in zip(reconstructions, normies)])
-            loss_surprise = -1 * loss_prediction.log_prob(loss)
-            surprise = reconstruction_surprise + loss_surprise
-            # how do you measure complexity?
-            # maybe L1/L2 reg or entropy/KL
-            freedom = actions[0].entropy()
-            free_energy = loss + surprise - freedom
+            free_energy = agent.compute_free_energy(
+                loss=loss, prior_loss_prediction=prior_loss_prediction,
+                normies=normies, reconstructions=reconstructions,
+                code=code, prior_code_prediction=prior_code_prediction,
+                actions=actions
+            )
         gradients = tape.gradient([free_energy, model.losses],
                                   model.trainable_variables)
         agent.optimizer.apply_gradients(zip(gradients,
