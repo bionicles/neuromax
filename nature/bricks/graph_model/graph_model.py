@@ -5,7 +5,6 @@ import tensorflow as tf
 # TODO: fix attention and DNC memory bricks
 # from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.graph_model.graph import Graph
-from nature.bricks.dnc.rnn import DNC_RNN
 from nature.bricks.dnc.cell import DNC_Cell
 from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.kernel import get_kernel
