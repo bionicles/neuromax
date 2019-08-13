@@ -36,7 +36,7 @@ class Agent:
         self.code_spec = get_spec(shape=(self.code_atoms, self.code_channels),
                                   format="code")
         self.code_spec.size = get_size(self.code_spec.shape)
-        self.loss_spec = get_spec(format="float", shape=tuple(1))
+        self.loss_spec = get_spec(format="float", shape=(1,))
         # we add a sensor for task id
         n_tasks = len(self.tasks.keys())
         self.task_id_spec = get_spec(shape=n_tasks, format="onehot")
@@ -103,7 +103,7 @@ class Agent:
         task_id_input = K.Input(self.task_id_spec.shape)
         task_code = self.task_sensor(task_id_input)
         # likewise for loss float value
-        loss_input = K.Input((1))
+        loss_input = K.Input((1,))
         loss_code = self.loss_sensor(loss_input)
         # we track lists of all the things
         inputs = [task_id_input, loss_input]

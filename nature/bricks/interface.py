@@ -105,11 +105,16 @@ class Interface:
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
         if self.out_spec.format is "onehot":
+            self.output = L.Dense(
+                tfpl.OneHotCategorical.params_size(out_spec.size)
+                )(self.output)
             self.output = tfpl.OneHotCategorical(
                 self.out_spec.size)(self.output)
         else:
-            self.output = get_normal(
-                self.agent, self.brick_id, self.out_spec)(self.output)
+            self.output = L.Dense(
+                tfpl.IndependentNormal.params_size(out_spec.shape)
+                )(self.output)
+            self.output = tfpl.IndependentNormal(out_spec.shape)(self.output)
         if "sensor" in model_type:
             self.output = [self.normie, self.output]
         self.model = K.Model(self.input, self.output)

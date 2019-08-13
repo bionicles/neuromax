@@ -1,58 +1,57 @@
 import tensorflow_probability as tfp
 import tensorflow as tf
-import random
 
 K = tf.keras
 L = K.layers
 tfpl = tfp.layers
 
-INPUT_SHAPES = [(1, 1), (1, 3), (1, 420, 300), (1, 128, 128, 6)]
-CODE_SHAPE = (42, 16)
-MIN_MIXTURE_COMPONENTS, MAX_MIXTURE_COMPONENTS = 2, 4
-DISTRIBUTIONS = ["IndependentNormal"]
+IN_SHAPES = [(128, 128, 4), (256, 8), (100,)]
+OUT_SHAPES = [(32, 16), (2, ), (4, 8, 16)]
+SAMPLE_SHAPES = [1, (1, 1), (1, 2, 3)]
+BATCH_SIZES = [1, 2, 4, 8]
 
 
-def get_normal(distribution_name, size, shape):
-    print(f"{distribution_name} distribution")
-    if distribution_name is "IndependentNormal":
-        cls = tfpl.IndependentNormal
-        params_size = cls.params_size(shape)
-        instance = cls(shape)
-    elif distribution_name is "MultivariateNormalTriL":
-        cls = tfpl.MultivariateNormalTriL
-        params_size = cls.params_size(size)
-        instance = cls(size)
-    elif distribution_name is "MixtureNormal":
-        cls = tfpl.MixtureNormal
-        n_components = random.randint(MIN_MIXTURE_COMPONENTS, MAX_MIXTURE_COMPONENTS)
-        print(f"{n_components} components")
-        params_size = cls.params_size(n_components, shape)
-        instance = cls(n_components, shape)
-    return cls, params_size, instance
+def main(append=True):
+    for BATCH_SIZE in BATCH_SIZES:
+        for IN_SHAPE in IN_SHAPES:
+            if append:
+                IN_SHAPE = (1,) + IN_SHAPE
+            for OUT_SHAPE in OUT_SHAPES:
+                print(f"\nBATCH_SIZE {BATCH_SIZE}")
+                print(f"IN_SHAPE {IN_SHAPE} ---> OUT_SHAPE {OUT_SHAPE}")
+                sensor = K.Sequential([
+                    K.Input(shape=IN_SHAPE, batch_size=BATCH_SIZE),
+                    L.Dense(tfpl.MixtureNormal.params_size(2, OUT_SHAPE)),
+                    tfpl.MixtureNormal(2, OUT_SHAPE)])
+                random_in = tf.random.normal(IN_SHAPE)
+                out = sensor(random_in)
+                print(f"requested out.shape: {OUT_SHAPE}")
+                print(f"got out.shape: {out.shape}")
+                print(f"got out.batch_shape: {out.batch_shape}")
+                print(f"got out.evemt_shape: {out.event_shape}")
+                for SAMPLE_SHAPE in SAMPLE_SHAPES:
+                    sample = out.sample(SAMPLE_SHAPE)
+                    sample = extract_event(sample, SAMPLE_SHAPE, out.batch_shape)
+                    print("sample.shape", sample.shape)
+                    print("sample.shape == OUT_SHAPE",
+                          sample.shape == OUT_SHAPE)
 
 
-def main():
-    for INPUT_SHAPE in INPUT_SHAPES:
-        code_size = CODE_SHAPE[0] * CODE_SHAPE[1]
-        codes, samples = [], []
-        for i in range(3):
-            cls, params_size, instance = get_normal("IndependentNormal", code_size, CODE_SHAPE)
-            sensor = K.Sequential([
-                K.Input(INPUT_SHAPE),
-                L.Flatten(),
-                L.Dense(params_size),
-                instance
-            ])
-            random_input = tf.random.normal(INPUT_SHAPE)
-            code = sensor(random_input)
-            codes.append(code)
-            print("params", params_size)
-            print("code shape", code.shape)
-            sample = code.sample()
-            print("sample shape", sample.shape)
-            samples.append(sample)
-        code = tf.concat(codes, 1)
-        print("concat codes", code.shape)
+def extract_event(sample, sample_shape, batch_shape):
+    len2discard = 1 if isinstance(sample_shape, int) else len(sample_shape)
+    if isinstance(batch_shape, int):
+        len2discard += 1
+    else:
+        len2discard += len(batch_shape)
+    for _ in range(len2discard):
+        sample = sample[0]
+    return sample
 
+
+# warmup to clear the wall of text
+x = 1234. * tf.ones((10, 10))
+tf.print(x)
+del x
 
 main()
+main(append=False)

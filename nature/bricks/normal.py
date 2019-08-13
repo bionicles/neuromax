@@ -3,8 +3,7 @@ import tensorflow_probability as tfp
 tfpl = tfp.layers
 
 MIN_MIXTURE_COMPONENTS, MAX_MIXTURE_COMPONENTS = 2, 4
-DISTRIBUTIONS = [
-    "IndependentNormal", "MultivariateNormalTriL", "MixtureNormal"]
+DISTRIBUTIONS = ["IndependentNormal"]
 
 
 def get_normal(agent, brick_id, out_spec, distribution_name=None):
