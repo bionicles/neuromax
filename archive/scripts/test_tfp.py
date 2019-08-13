@@ -30,22 +30,30 @@ def main(append=True):
                 print(f"got out.batch_shape: {out.batch_shape}")
                 print(f"got out.evemt_shape: {out.event_shape}")
                 for SAMPLE_SHAPE in SAMPLE_SHAPES:
-                    sample = out.sample(SAMPLE_SHAPE)
-                    sample = extract_event(sample, SAMPLE_SHAPE, out.batch_shape)
+                    sample = extract_event(out, OUT_SHAPE)
                     print("sample.shape", sample.shape)
                     print("sample.shape == OUT_SHAPE",
                           sample.shape == OUT_SHAPE)
+                    sample = extract_event(out.sample(), OUT_SHAPE)
 
 
-def extract_event(sample, sample_shape, batch_shape):
-    len2discard = 1 if isinstance(sample_shape, int) else len(sample_shape)
-    if isinstance(batch_shape, int):
-        len2discard += 1
+def extract_event(maybe_sample_or_distribution, event_shape=None):
+    """return 1 event from a tfp distribution
+    Args:
+        maybe_sample_or_distribution: either a tensor or a distribution
+        event_shape: tuple, the shape to extract
+    """
+    if hasattr(maybe_sample_or_distribution, "entropy"):
+        event_shape = maybe_sample_or_distribution.event_shape
+        sample = maybe_sample_or_distribution.sample()
     else:
-        len2discard += len(batch_shape)
-    for _ in range(len2discard):
+        assert event_shape is not None, "need event shape to extract it"
+        event_shape = 1 if isinstance(event_shape, int) else event_shape
+        sample = maybe_sample_or_distribution
+    while len(sample.shape) > len(event_shape):
         sample = sample[0]
-    return sample
+    event = sample
+    return event
 
 
 # warmup to clear the wall of text
