@@ -5,8 +5,8 @@ from nature.bricks.dense import get_dense_out
 
 L, B = tf.keras.layers, tf.keras.backend
 
-N_CONV_LAYERS = 4
-MIN_DECONV_LAYERS, MAX_DECONV_LAYERS = 4, 8
+N_CONV_LAYERS = 2
+N_DECONV_LAYERS = 2
 LAST_DECODER_ACTIVATION = "sigmoid"
 
 
@@ -44,9 +44,7 @@ def get_image_decoder_output(agent, brick_id, input, out_spec):
     brick_id = f"{brick_id}_image_decoder"
     resized_code = get_dense_out(agent, brick_id, input, units=out_spec.size)
     reshaped_code = L.Reshape(out_spec.shape)(resized_code)
-    n_deconv_layers = agent.pull_numbers(f"{brick_id}_num_deconv_layers",
-                                         MIN_DECONV_LAYERS, MAX_DECONV_LAYERS)
-    for layer_number in range(n_deconv_layers):
+    for layer_number in range(N_DECONV_LAYERS):
         reshaped_code = get_deconv_2D_out(
             agent, f"{brick_id}_deconv_{layer_number}", reshaped_code)
     image_output = get_deconv_2D_out(

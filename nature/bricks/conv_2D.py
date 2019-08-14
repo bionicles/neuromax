@@ -7,12 +7,12 @@ InstanceNormalization = tfa.layers.InstanceNormalization
 L = tf.keras.layers
 tfpl = tfp.layers
 
-TFP_LAYER = None
+TFP_LAYER = tfpl.Convolution2DReparameterization
 ACTIVATION = "relu"
 NORM = "instance"
 PADDING = "valid"
-KERNEL_SIZE = 3
-FILTERS = 16
+KERNEL_SIZE = 4
+FILTERS = 4
 
 
 # TODO: add "rank" so we can reuse this for 1D conv

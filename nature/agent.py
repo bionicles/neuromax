@@ -97,10 +97,9 @@ class Agent:
                                      input_number=input_number)
             sensors.append(sensor)
             actuators.append(actuator)
-            # we make an input
-            input = K.Input(task_dict.inputs[i].shape)
-            # we use it on the sensors to get normies and codes
-            normie, input_code = task_dict.sensors[i](input)
+            # we make an input and use it on the sensor to get normies & codes
+            input = K.Input(task_dict.inputs[input_number].shape)
+            normie, input_code = sensor(input)
             inputs = inputs + [input]
             normies = normies + [normie]
             codes = codes + [input_code]

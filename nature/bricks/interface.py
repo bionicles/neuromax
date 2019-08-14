@@ -92,7 +92,6 @@ class Interface(L.Layer):
         super(Interface, self).__init__()
         self.build()
 
-
     def build(self):
         if self.built:
             return
@@ -150,7 +149,7 @@ class Interface(L.Layer):
 
     def call_image_sensor(self, input):
         image = tf.image.resize(input, self.size_to_resize_to)
-        channels_in = tf.shape(image)[-1]
+        channels_in = int(image.shape[-1])
         if channels_in is not self.channels_before_concat_coords:
             image = self.channel_changers[channels_in](image)
         image = concat_2D_coords(image)
