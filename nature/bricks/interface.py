@@ -85,7 +85,7 @@ class Interface:
         self.build_model()
 
     def build_model(self):
-        log("done building the model")
+        log("done building the model", color="green")
         if self.in_spec.format == "image":
             self.channels_before_concat_coords = self.in_spec.shape[-1]
             self.size_to_resize_to = self.get_hw(self.in_spec.shape)

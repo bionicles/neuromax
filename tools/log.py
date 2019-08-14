@@ -5,10 +5,9 @@ from blessings import Terminal
 T = Terminal()
 
 DEBUG = True
-color = "red"
 
 
-def log(*args, debug=DEBUG):
+def log(*args, color="red", debug=DEBUG):
     args = str(args)
     for char in ["(", ")", ",", "'"]:
         args = args.replace(char, '')
