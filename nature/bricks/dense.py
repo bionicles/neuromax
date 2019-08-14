@@ -10,7 +10,7 @@ B, L = K.backend, K.layers
 
 FN_OPTIONS = ["tanh", "linear", "swish", "lisht"]
 MIN_UNITS, MAX_UNITS = 32, 512
-LAYER_OPTIONS = [tfpl.DenseFlipout, tfpl.DenseReparameterization]
+LAYER_OPTIONS = [tfpl.DenseReparameterization]
 
 
 def get_dense_out(agent, brick_id, input, layer=None, units=None, fn=None,

@@ -105,13 +105,13 @@ class Interface:
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
         if self.out_spec.format is "onehot":
-            self.output = tfpl.DenseFlipout(
+            self.output = tfpl.DenseReparameterization(
                 tfpl.OneHotCategorical.params_size(out_spec.size)
                 )(self.output)
             self.output = tfpl.OneHotCategorical(
                 self.out_spec.size)(self.output)
         elif self.out_spec.format not in ["onehot", "ragged"]:
-            self.output = tfpl.DenseFlipout(
+            self.output = tfpl.DenseReparameterization(
                 tfpl.IndependentNormal.params_size(out_spec.shape)
                 )(self.output)
             self.output = tfpl.IndependentNormal(out_spec.shape)(self.output)
@@ -179,8 +179,7 @@ class Interface:
         doubled_out_shape = self.out_spec.shape
         doubled_out_shape *= 2
         doubled_out_spec = get_spec(shape=doubled_out_shape,
-                                    format="ragged",
-                                    size=self.out_spec.size * 2)
+                                    format="ragged")
         self.output = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, doubled_out_spec,
             "all_for_one")([self.normalized_output_coords, self.output])
