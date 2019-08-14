@@ -34,7 +34,7 @@ NORMAL_DISTRIBUTION_OPTIONS = [
     tfpl.MixtureNormal, tfpl.IndependentNormal, tfpl.MultivariateNormalTriL]
 
 
-class Interface:
+class Interface(L.Layer):
     """
     Interface resizes + reshapes + reformats in_spec into out_spec
     because inputs have different sizes and shapes
@@ -79,21 +79,22 @@ class Interface:
         print(f"Interface.__init__ -- {self.brick_id}")
         print("in_spec", in_spec)
         print("out_spec", out_spec)
-        self.input_number = input_number
+        self.input_layer_number = input_number
         self.shape_variable_key = None
         self.reshape = L.Reshape(self.out_spec.shape)
-        self.build_model()
-
-    def build_model(self):
         if self.in_spec.format == "image":
             self.channels_before_concat_coords = self.in_spec.shape[-1]
             self.size_to_resize_to = self.get_hw(self.in_spec.shape)
             self.in_spec.shape = self.add_coords_to_shape(self.in_spec.shape)
             self.channels_after_concat_coords = self.in_spec.shape[-1]
             self.channel_changers = {}
-        self.input = K.Input(self.in_spec.shape)
-        self.normie = InstanceNormalization()(self.input)
-        self.output = self.normie
+        super(Interface, self).__init__()
+
+
+    def build(self):
+        self.input_layer = K.Input(self.in_spec.shape)
+        self.normie = InstanceNormalization()(self.input_layer)
+        self.out = self.normie
         self.call = self.call_model  # might be overridden in builder fn
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
@@ -102,12 +103,12 @@ class Interface:
             model_type = f"code_interface"
         if in_spec.format is "code" and out_spec.format is not "code":
             model_type = f"{out_spec.format}_actuator"
-        print(f"{model_type} interface input layer", self.input)
+        print(f"{model_type} interface input layer", self.input_layer)
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
         if "sensor" in model_type:
-            self.output = [self.normie, self.output]
-        self.model = K.Model(self.input, self.output)
+            self.out = [self.normie, self.out]
+        self.model = K.Model(self.input_layer, self.out)
 
     @staticmethod
     def get_hw(shape):
@@ -123,13 +124,13 @@ class Interface:
 
     def get_image_sensor_output(self):
         self.call = self.call_image_sensor
-        self.output = get_image_encoder_output(
-            self.agent, self.brick_id, self.output, self.out_spec)
+        self.out = get_image_encoder_output(
+            self.agent, self.brick_id, self.out, self.out_spec)
         self.make_normal()
 
     def get_image_actuator_output(self):
-        self.output = get_image_decoder_output(
-            self.agent, self.brick_id, self.output, self.out_spec)
+        self.out = get_image_decoder_output(
+            self.agent, self.brick_id, self.out, self.out_spec)
         self.make_normal()
 
     def add_channel_changer(self, channels_in):
@@ -138,7 +139,7 @@ class Interface:
             if channels_in not in self.channel_changers.keys():
                 input_shape = tuple(*self.size_to_resize_to,  channels_in)
                 channel_changer = K.Sequential([
-                    L.Conv2D(self.channels_before_concat_coords,
+                    L.Conv2D(self.channels_before_concat_coords, 1,
                              input_shape=input_shape)])
                 self.channel_changers[channels_in] = channel_changer
 
@@ -152,12 +153,12 @@ class Interface:
 
     def get_ragged_sensor_output(self):
         """each input element innervates all output elements (one for all)"""
-        self.output_placeholder_input = K.Input(self.out_spec.shape)
-        self.input = [self.input, self.output_placeholder_input]
+        self.out_placeholder_input = K.Input(self.out_spec.shape)
+        self.input_layer = [self.input_layer, self.out_placeholder_input]
         self.call = self.call_ragged_sensor
-        self.output = KConvSet1D(
+        self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
-            "one_for_all")([self.output, self.output_placeholder_input])
+            "one_for_all")([self.out, self.out_placeholder_input])
         self.make_normal()
 
     def call_ragged_sensor(self, input):
@@ -168,15 +169,15 @@ class Interface:
         """all input elements innervate each output element (all for one)"""
         self.shape_var_key = self.out_spec.variables[0][0]
         self.normalized_output_coords = K.Input((None, 1))
-        self.input = [self.normalized_output_coords, self.input]
+        self.input_layer = [self.normalized_output_coords, self.input_layer]
         self.call = self.call_ragged_actuator
         doubled_out_shape = self.out_spec.shape
         doubled_out_shape *= 2
         doubled_out_spec = get_spec(shape=doubled_out_shape,
                                     format="ragged")
-        self.output = KConvSet1D(
+        self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, doubled_out_spec,
-            "all_for_one")([self.normalized_output_coords, self.output])
+            "all_for_one")([self.normalized_output_coords, self.out])
 
     def call_ragged_actuator(self, input):
         ragged_dimension = self.agent.parameters[self.shape_var_key]
@@ -218,23 +219,23 @@ class Interface:
         self.make_categorical()
 
     def flatten_resize_reshape(self):
-        if len(self.output.shape) > 2:
-            self.output = L.Flatten()(self.output)
-        out = get_dense_out(self.agent, self.brick_id, self.output,
+        if len(self.out.shape) > 2:
+            self.out = L.Flatten()(self.out)
+        out = get_dense_out(self.agent, self.brick_id, self.out,
                             units=self.out_spec.size)
-        self.output = self.reshape(out)
+        self.out = self.reshape(out)
 
     def make_categorical(self):
-        self.output = tfpl.DenseReparameterization(
+        self.out = tfpl.DenseReparameterization(
             tfpl.OneHotCategorical.params_size(self.out_spec.size)
-            )(self.output)
-        self.output = tfpl.OneHotCategorical(self.out_spec.size)(self.output)
+            )(self.out)
+        self.out = tfpl.OneHotCategorical(self.out_spec.size)(self.out)
 
     def make_normal(self):
-        self.output = tfpl.DenseReparameterization(
+        self.out = tfpl.DenseReparameterization(
             tfpl.IndependentNormal.params_size(self.out_spec.shape)
-            )(self.output)
-        self.output = tfpl.IndependentNormal(self.out_spec.shape)(self.output)
+            )(self.out)
+        self.out = tfpl.IndependentNormal(self.out_spec.shape)(self.out)
 
     def call_model(self, input):
         return self.model(input)

@@ -49,6 +49,7 @@ class Agent:
                                       self.image_spec, self.code_spec)
         self.image_actuator = Interface(self, "image_actuator",
                                         self.code_spec, self.image_spec)
+        # we add a sensor for loss
         # we add task-specific sensors and actuators
         self.tasks = map_attrdict(self.add_sensors_and_actuators, self.tasks)
         # we build the shared GraphModel
@@ -66,8 +67,7 @@ class Agent:
     def add_sensors_and_actuators(self, task_key, task_dict):
         """Add interfaces to a task_dict"""
         sensors, actuators = [], []
-        task_dict.loss_sensor = Interface(self, task_key + "loss_sensor",
-                                          self.loss_spec, self.code_spec)
+
         for input_number, in_spec in enumerate(task_dict.inputs):
             if in_spec.format is "image":
                 self.image_sensor.add_channel_changer(in_spec.shape[-1])
@@ -104,7 +104,9 @@ class Agent:
         task_code = self.task_sensor(task_id_input)
         # likewise for loss float value
         loss_input = K.Input((1,))
-        loss_code = self.loss_sensor(loss_input)
+        task_dict.loss_sensor = Interface(self, task_key + "loss_sensor",
+                                          self.loss_spec, self.code_spec)
+        loss_code = task_dict.loss_sensor(loss_input)
         # we track lists of all the things
         inputs = [task_id_input, loss_input]
         codes = [task_code, loss_code]
