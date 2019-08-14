@@ -105,13 +105,13 @@ class Interface:
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
         if self.out_spec.format is "onehot":
-            self.output = L.DenseFlipout(
+            self.output = tfpl.DenseFlipout(
                 tfpl.OneHotCategorical.params_size(out_spec.size)
                 )(self.output)
             self.output = tfpl.OneHotCategorical(
                 self.out_spec.size)(self.output)
         elif self.out_spec.format not in ["onehot", "ragged"]:
-            self.output = L.DenseFlipout(
+            self.output = tfpl.DenseFlipout(
                 tfpl.IndependentNormal.params_size(out_spec.shape)
                 )(self.output)
             self.output = tfpl.IndependentNormal(out_spec.shape)(self.output)
