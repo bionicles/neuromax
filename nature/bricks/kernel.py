@@ -12,9 +12,10 @@ MIN_LAYERS, MAX_LAYERS = 1, 4
 
 
 def get_kernel(agent, brick_id, d_in, d_out, set_size,
-               name=None, input_shape=None):
+               name=None, input_shape=None, d_in2=None):
     """get a deep or wide/deep dense set kernel"""
     log("get_kernel", brick_id, d_in, d_out, set_size)
+    log("agent code spec", agent.code_spec)
     assert set_size in SET_OPTIONS, f"{set_size} not in {SET_OPTIONS}"
     name = get_unique_id(f"{brick_id}_mlp") if name is None else name
     n_layers = agent.pull_numbers(f"{name}-n_layers", MIN_LAYERS, MAX_LAYERS)
@@ -40,8 +41,7 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         d12 = L.Subtract()([atom1, atom2])
         d13 = L.Subtract()([atom1, atom3])
         concat = L.Concatenate(-1)([d12, d13, atom1, atom2, atom3])
-    elif set_size in ["all_for_one", "one_for_all"]:
-        d_in2 = agent.code_spec.size
+    elif set_size in ["one_for_all", "all_for_one"]:
         code = K.Input((d_in2,))
         inputs = [atom1, code]
         concat = L.Concatenate(-1)([atom1, code])

@@ -157,16 +157,17 @@ class Interface(L.Layer):
 
     def get_ragged_sensor_output(self):
         """each input element innervates all output elements (one for all)"""
-        self.out_placeholder_input = K.Input(self.out_spec.shape)
+        self.out_placeholder_input = K.Input(self.out_spec.size)
         self.input_layer = [self.input_layer, self.out_placeholder_input]
         self.call = self.call_ragged_sensor
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "one_for_all")([self.out, self.out_placeholder_input])
+        self.flatten_resize_reshape()
         self.make_normal()
 
     def call_ragged_sensor(self, input):
-        code_placeholder = tf.random.normal(self.out_spec.shape)
+        code_placeholder = tf.random.normal((self.out_spec.size,))
         return self.model([input, code_placeholder])
 
     def get_ragged_actuator_output(self):

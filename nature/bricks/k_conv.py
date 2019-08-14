@@ -18,6 +18,7 @@ class KConvSet1D(L.Layer):
         self.in_spec = in_spec
         d_out = out_spec if isinstance(out_spec, int) else out_spec.shape[-1]
         d_in = in_spec if isinstance(in_spec, int) else in_spec.shape[-1]
+        d_in2 = None
         if set_size is None:
             set_size = agent.pull_choices(f"{brick_id}_KConvSet_set_size",
                                           SET_OPTIONS)
@@ -29,18 +30,44 @@ class KConvSet1D(L.Layer):
             self.call = self.call_for_two
         elif set_size is 3:
             self.call = self.call_for_three
-        elif set_size is "all_for_one":  # ragged actuators
-            self.call = self.call_all_for_one
-            self.flatten = L.Flatten()
-            d_in = 1
         elif set_size is "one_for_all":  # ragged sensors
+            # d_in is size of 1 element of shape
+            # d_out is code_spec.size
+            # d_in2 is code_spec.size
+            d_out = d_in2 = out_spec.size
             self.reshape = L.Reshape(out_spec.shape)
             self.call = self.call_one_for_all
             self.flatten = L.Flatten()
-            d_out = out_spec.size
-        self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size)
+        elif set_size is "all_for_one":  # ragged actuators
+            # d_in is code_spec.size
+            d_in = in_spec.size
+            # d_out is size of 1 element of the output shape
+            # d_in2 is 1 (placeholder range)
+            d_in2 = 1
+            self.call = self.call_all_for_one
+            self.flatten = L.Flatten()
+        self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size,
+                                 d_in2=d_in2)
         self.layer_id = f"{brick_id}_KConvSet_{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
+
+    def call_one_for_all(self, inputs):  # input unknown needs ragged sensor
+        """Each input element innervates all output elements"""
+        input, output_placehodl = inputs
+        output_placehodl = self.flatten(output_placehodl)
+        output = tf.map_fn(lambda input_item: self.kernel([
+            input_item, output_placehodl]), input)
+        output = tf.math.reduce_sum(output, axis=0)
+        return output
+
+    def call_all_for_one(self, inputs):  # output unknown needs ragged actuator
+        """All input elements innervate each output element"""
+        normalized_output_coords, code = inputs
+        flat_code = self.flatten(code)
+        return tf.map_fn(lambda normalized_output_coord:
+                         self.kernel([
+                             normalized_output_coord, flat_code
+                             ]), normalized_output_coords)
 
     # TODO: find a nice recursive approach to N-ary set convolutions
     def call_for_one(self, atoms):
@@ -52,24 +79,7 @@ class KConvSet1D(L.Layer):
     def call_for_three(self, atoms):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.reduce_sum(tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), axis=0), atoms), axis=0), atoms)
 
-    def call_one_for_all(self, inputs):  # input unknown needs ragged sensor
-        """Each input element innervates all output elements"""
-        input, output_placehodl = inputs
-        output_placehodl = self.flatten(output_placehodl)
-        output = tf.map_fn(lambda input_item: self.kernel([
-            input_item, output_placehodl]), input)
-        output = tf.math.reduce_sum(output, axis=0)
-        reshaped = self.reshape(output)
-        return reshaped
 
-    def call_all_for_one(self, inputs):  # output unknown needs ragged actuator
-        """Each output element recieves all input elements"""
-        normalized_output_coords, code = inputs
-        flat_code = self.flatten(code)
-        return tf.map_fn(lambda normalized_output_coord:
-                         self.kernel([
-                             normalized_output_coord, flat_code
-                             ]), normalized_output_coords)
 
     # TOO COMPLICATED:
     # def call_autoregressive(self, code, coords):
