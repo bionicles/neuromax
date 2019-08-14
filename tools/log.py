@@ -7,7 +7,7 @@ T = Terminal()
 DEBUG = True
 
 
-def log(*args, color="red", debug=DEBUG):
+def log(*args, color="white", debug=DEBUG):
     args = str(args)
     for char in ["(", ")", ",", "'"]:
         args = args.replace(char, '')
