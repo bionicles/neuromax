@@ -3,7 +3,6 @@ import tensorflow as tf
 from . import normalize
 
 
-@tf.function
 def get_2D_coords(a, b, should_normalize=False):
     a = tf.range(a)
     a = tf.cast(a, tf.float32)
@@ -15,9 +14,8 @@ def get_2D_coords(a, b, should_normalize=False):
     return tf.reshape(tf.stack(tf.meshgrid(a, b, indexing='ij'), axis=-1), (-1, 2))
 
 
-@tf.function
 def concat_2D_coords(tensor):
     """ (H, W, C) ---> (H, W, C+2) with i,j coordinates"""
-    in_shape = tf.shape(tensor)
-    coords = get_2D_coords(*in_shape, normalize=True)
+    in_shape = tensor.shape
+    coords = get_2D_coords(*in_shape, should_normalize=True)
     return tf.concat([tensor, coords], -1)

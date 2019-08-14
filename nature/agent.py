@@ -40,7 +40,7 @@ class Agent:
         # we add a sensor for task id
         n_tasks = len(self.tasks.keys())
         self.task_id_spec = get_spec(shape=n_tasks, format="onehot")
-        self.task_sensor = Interface(self, "task_key",
+        self.task_sensor = Interface(self, "task_id",
                                      self.task_id_spec, self.code_spec)
         # we add a sensor for images
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image",
@@ -91,9 +91,9 @@ class Agent:
                 sensor = self.image_sensor
                 actuator = self.image_actuator
             else:
-                sensor = Interface(self, task_key, in_spec, self.code_spec,
+                sensor = Interface(self, task_id, in_spec, self.code_spec,
                                    input_number=input_number)
-                actuator = Interface(self, task_key, self.code_spec, in_spec,
+                actuator = Interface(self, task_id, self.code_spec, in_spec,
                                      input_number=input_number)
             sensors.append(sensor)
             actuators.append(actuator)
@@ -118,7 +118,7 @@ class Agent:
             if out_spec.format is "image":
                 actuator = self.image_actuator
             else:
-                actuator = Interface(self, task_key, self.code_spec, out_spec)
+                actuator = Interface(self, task_id, self.code_spec, out_spec)
             actuators.append(actuator)
             action = task_dict.actuators[o](world_model)
             actions = actions + [action]
