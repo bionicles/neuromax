@@ -10,6 +10,7 @@ from tools.concat_2D_coords import concat_2D_coords
 from tools.normalize import normalize
 from tools.get_spec import get_spec
 from tools.get_size import get_size
+from tools.log import log
 
 InstanceNormalization = tfa.layers.InstanceNormalization
 
