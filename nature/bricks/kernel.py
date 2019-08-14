@@ -8,7 +8,7 @@ L = K.layers
 
 SET_OPTIONS = [-1, 1, 2, 3, "all_for_one", "one_for_all"]
 MODEL_OPTIONS = ["deep", "wide_deep"]
-MIN_LAYERS, MAX_LAYERS = 1, 4
+MIN_LAYERS, MAX_LAYERS = 1, 2
 
 
 def get_kernel(agent, brick_id, d_in, d_out, set_size,

@@ -95,7 +95,8 @@ class Interface(L.Layer):
     def build(self):
         if self.built:
             return
-        self.input_layer = K.Input(self.in_spec.shape)
+        self.input_layer = K.Input(self.in_spec.shape,
+                                   batch_size=self.agent.batch_size)
         self.normie = InstanceNormalization()(self.input_layer)
         self.out = self.normie
         self.call = self.call_model  # might be overridden in builder fn
@@ -109,7 +110,7 @@ class Interface(L.Layer):
         print(f"{model_type} interface input layer", self.input_layer)
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
-        if "sensor" in model_type:
+        if ("sensor" in model_type and "loss" not in self.brick_id and "task" not in self.brick_id):
             self.out = [self.normie, self.out]
         self.model = K.Model(self.input_layer, self.out)
         self.built = True
@@ -132,28 +133,32 @@ class Interface(L.Layer):
             self.agent, self.brick_id, self.out, self.out_spec)
         self.make_normal()
 
-    def get_image_actuator_output(self):
-        self.out = get_image_decoder_output(
-            self.agent, self.brick_id, self.out, self.out_spec)
-        self.make_normal()
+    def call_image_sensor(self, input):
+        # log("call_image_sensor input", input, color="red")
+        image = tf.image.resize(input, self.size_to_resize_to)
+        # log("resized image", image, color="red")
+        channels_in = int(image.shape[-1])
+        if channels_in is not self.channels_before_concat_coords:
+            log("change channels", color="yellow")
+            image = self.channel_changers[channels_in](image)
+        image = concat_2D_coords(image)
+        log("concatted 2d coords", image, color="red")
+        return self.model(image)
 
     def add_channel_changer(self, channels_in):
         """add a model to change the last dimension of the image"""
         if channels_in != self.channels_before_concat_coords:
             if channels_in not in self.channel_changers.keys():
-                input_shape = tuple(*self.size_to_resize_to,  channels_in)
+                input_shape = tuple(*self.size_to_resize_to, channels_in)
                 channel_changer = K.Sequential([
                     L.Conv2D(self.channels_before_concat_coords, 1,
                              input_shape=input_shape)])
                 self.channel_changers[channels_in] = channel_changer
 
-    def call_image_sensor(self, input):
-        image = tf.image.resize(input, self.size_to_resize_to)
-        channels_in = int(image.shape[-1])
-        if channels_in is not self.channels_before_concat_coords:
-            image = self.channel_changers[channels_in](image)
-        image = concat_2D_coords(image)
-        return self.model(image)
+    def get_image_actuator_output(self):
+        self.out = get_image_decoder_output(
+            self.agent, self.brick_id, self.out, self.out_spec)
+        self.make_normal()
 
     def get_ragged_sensor_output(self):
         """each input element innervates all output elements (one for all)"""
@@ -166,7 +171,8 @@ class Interface(L.Layer):
     def get_ragged_actuator_output(self):
         """all input elements innervate each output element (all for one)"""
         self.shape_var_key = self.out_spec.variables[0][0]
-        self.normalized_output_coords = K.Input((None, 1))
+        self.normalized_output_coords = K.Input((None, 1),
+                                                batch_size=self.agent.batch_size)
         self.input_layer = [self.normalized_output_coords, self.input_layer]
         self.call = self.call_ragged_actuator
         doubled_out_shape = self.out_spec.shape

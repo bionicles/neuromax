@@ -1,4 +1,5 @@
 # agent.py - handle multitask AI
+import tensorflow_probability as tfp
 from attrdict import AttrDict
 import tensorflow as tf
 import numpy as np
@@ -9,11 +10,12 @@ from tools.sum_entropy import sum_entropy
 from tools.show_model import show_model
 from tools.get_size import get_size
 from tools.get_spec import get_spec
+from tools.log import log
 
 from nature.bricks.graph_model.graph_model import GraphModel
 from nature.bricks.interface import Interface
 
-
+tfd = tfp.distributions
 K = tf.keras
 L = K.layers
 
@@ -21,12 +23,14 @@ MIN_CODE_CHANNELS, MAX_CODE_CHANNELS = 8, 32
 MIN_CODE_ATOMS, MAX_CODE_ATOMS = 8, 32
 EPISODES_PER_PRACTICE_SESSION = 5
 IMAGE_SHAPE = (128, 128, 4)
+BATCH_SIZE = 1
 
 
 class Agent:
     """Entity which learns to solve tasks using bricks"""
 
     def __init__(self, tasks):
+        self.batch_size = BATCH_SIZE
         self.tasks = tasks
         self.parameters = AttrDict({})
         self.code_atoms = self.pull_numbers(
@@ -70,20 +74,19 @@ class Agent:
             for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
 
     def make_task_model(self, task_id, task_dict):
-        # we make sensor and actuator lists
-        sensors, actuators = [], []
+        # we track lists of all the things
+        sensors, actuators, normies, codes = [], [], [], []
         # we make an input for the task_id and encode it
-        task_id_input = K.Input(self.task_id_spec.shape)
+        task_id_input = K.Input(self.task_id_spec.shape, batch_size=BATCH_SIZE)
         task_code = self.task_sensor(task_id_input)
+        codes.append(task_code)
         # likewise for loss float value
-        loss_input = K.Input((1,))
+        loss_input = K.Input((1,), batch_size=BATCH_SIZE)
         task_dict.loss_sensor = Interface(self, task_id + "loss_sensor",
                                           self.loss_spec, self.code_spec)
         loss_code = task_dict.loss_sensor(loss_input)
-        # we track lists of all the things
+        codes.append(loss_code)
         inputs = [task_id_input, loss_input]
-        codes = [task_code, loss_code]
-        normies = []
         # now we'll encode the inputs
         for input_number, in_spec in enumerate(task_dict.inputs):
             if in_spec.format is "image":
@@ -98,13 +101,19 @@ class Agent:
             sensors.append(sensor)
             actuators.append(actuator)
             # we make an input and use it on the sensor to get normies & codes
-            input = K.Input(task_dict.inputs[input_number].shape)
+            input = K.Input(task_dict.inputs[input_number].shape,
+                            batch_size=BATCH_SIZE)
             normie, input_code = sensor(input)
-            inputs = inputs + [input]
-            normies = normies + [normie]
-            codes = codes + [input_code]
+            inputs.append(input)
+            normies.append(normie)
+            codes.append(input_code)
         # the full code is task_code, loss_code, input_codes
-        code = tf.concat(codes, 0)
+        for i, c in enumerate(codes):
+            log(inputs[i], color="green")
+            log(c, color="blue")
+        reshaped_codes = [tfd.BatchReshape(c, batch_shape=(1,)) for c in codes]
+        code = tfd.Blockwise(reshaped_codes)
+        # code = tf.concat(codes, -1)
         # we pass the codes to the shared model to get judgments
         judgment = self.shared_model(code)
         world_model = tf.concat([code, judgment], 0)
@@ -119,9 +128,9 @@ class Agent:
                 actuator = self.image_actuator
             else:
                 actuator = Interface(self, task_id, self.code_spec, out_spec)
-            actuators.append(actuator)
-            action = task_dict.actuators[o](world_model)
+            action = actuator(world_model)
             actions = actions + [action]
+            actuators.append(actuator)
         task_dict.actuators = list(actuators)
         task_dict.sensor = list(sensors)
         # we build a model
