@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-from . import normalize
+from .get_image_hw import get_image_hw
+from .normalize import normalize
 
 
 def get_2D_coords(a, b, should_normalize=False):
@@ -15,7 +16,10 @@ def get_2D_coords(a, b, should_normalize=False):
 
 
 def concat_2D_coords(tensor):
-    """ (H, W, C) ---> (H, W, C+2) with i,j coordinates"""
-    in_shape = tensor.shape
-    coords = get_2D_coords(*in_shape, should_normalize=True)
+    """
+    (B, H, W, C) ---> (B, H, W, C+2) with i,j coordinates
+    (H, W, C) ---> (H, W, C+2) with i,j coordinates
+    """
+    h, w = get_image_hw(tensor)
+    coords = get_2D_coords(h, w, should_normalize=True)
     return tf.concat([tensor, coords], -1)
