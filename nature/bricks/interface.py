@@ -5,10 +5,10 @@ import tensorflow as tf
 from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
 from nature.bricks.dense import get_dense_out
 from nature.bricks.k_conv import KConvSet1D
-from nature.bricks.normal import get_normal
 
 from tools.concat_2D_coords import concat_2D_coords
 from tools.normalize import normalize
+from tools.get_spec import get_spec
 from tools.get_size import get_size
 
 InstanceNormalization = tfa.layers.InstanceNormalization
@@ -105,13 +105,13 @@ class Interface:
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
         if self.out_spec.format is "onehot":
-            self.output = L.Dense(
+            self.output = L.DenseFlipout(
                 tfpl.OneHotCategorical.params_size(out_spec.size)
                 )(self.output)
             self.output = tfpl.OneHotCategorical(
                 self.out_spec.size)(self.output)
-        else:
-            self.output = L.Dense(
+        elif self.out_spec.format not in ["onehot", "ragged"]:
+            self.output = L.DenseFlipout(
                 tfpl.IndependentNormal.params_size(out_spec.shape)
                 )(self.output)
             self.output = tfpl.IndependentNormal(out_spec.shape)(self.output)
@@ -157,6 +157,41 @@ class Interface:
         image = concat_2D_coords(image)
         return self.model(image)
 
+    def get_ragged_sensor_output(self):
+        """each input element innervates all output elements (one for all)"""
+        self.output_placeholder_input = K.Input(self.out_spec.shape)
+        self.input = [self.input, self.output_placeholder_input]
+        self.call = self.call_ragged_sensor
+        self.output = KConvSet1D(
+            self.agent, self.brick_id, self.in_spec, self.out_spec,
+            "one_for_all")([self.output, self.output_placeholder_input])
+
+    def call_ragged_sensor(self, input):
+        code_placeholder = tf.random.normal(self.out_spec.shape)
+        return self.model([input, code_placeholder])
+
+    def get_ragged_actuator_output(self):
+        """all input elements innervate each output element (all for one)"""
+        self.shape_var_key = self.out_spec.variables[0][0]
+        self.normalized_output_coords = K.Input((None, 1))
+        self.input = [self.normalized_output_coords, self.input]
+        self.call = self.call_ragged_actuator
+        doubled_out_shape = self.out_spec.shape
+        doubled_out_shape *= 2
+        doubled_out_spec = get_spec(shape=doubled_out_shape,
+                                    format="ragged",
+                                    size=self.out_spec.size * 2)
+        self.output = KConvSet1D(
+            self.agent, self.brick_id, self.in_spec, doubled_out_spec,
+            "all_for_one")([self.normalized_output_coords, self.output])
+
+    def call_ragged_actuator(self, input):
+        ragged_dimension = self.agent.parameters[self.shape_var_key]
+        normalized_output_coords = normalize(tf.range(ragged_dimension))
+        output = self.model([normalized_output_coords, input])
+        loc, scale = tf.split(output, 2, axis=-1)
+        return tfp.distributions.Normal(loc, tf.math.abs(scale))
+
     def get_box_sensor_output(self):
         self.flatten_resize_reshape()
 
@@ -192,31 +227,3 @@ class Interface:
 
     def call_model(self, input):
         return self.model(input)
-
-    def get_ragged_sensor_output(self):
-        """each input element innervates all output elements (one for all)"""
-        self.output_placeholder_input = K.Input(self.out_spec.shape)
-        self.input = [self.input, self.output_placeholder_input]
-        self.call = self.call_ragged_sensor
-        self.output = KConvSet1D(
-            self.agent, self.brick_id, self.in_spec, self.out_spec,
-            "one_for_all")([self.output, self.output_placeholder_input])
-
-    def call_ragged_sensor(self, input):
-        code_placeholder = tf.random.normal(self.out_spec.shape)
-        return self.model([input, code_placeholder])
-
-    def get_ragged_actuator_output(self):
-        """all input elements innervate each output element (all for one)"""
-        self.shape_var_key = self.out_spec.variables[0][0]
-        self.normalized_output_coords = K.Input((None, 1))
-        self.input = [self.normalized_output_coords, self.input]
-        self.call = self.call_ragged_actuator
-        self.output = KConvSet1D(
-            self.agent, self.brick_id, self.in_spec, self.out_spec,
-            "all_for_one")([self.normalized_output_coords, self.output])
-
-    def call_ragged_actuator(self, input):
-        ragged_dimension = self.agent.parameters[self.shape_var_key]
-        normalized_output_coords = normalize(tf.range(ragged_dimension))
-        return self.model([normalized_output_coords, input])
