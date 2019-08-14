@@ -31,6 +31,7 @@ class Graph:
         screenshot_graph(self.G, ".", "G")
 
     def get_graph(self):
+        self.n_in = 1
         self.min_p_insert = self.pull_numbers(
             "min_p_insert", MIN_MIN_P_INSERT, MAX_MIN_P_INSERT)
         self.max_p_insert = self.pull_numbers(
