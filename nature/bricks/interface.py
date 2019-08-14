@@ -48,7 +48,7 @@ class Interface(L.Layer):
         specs hold info like (shape, n, format, high, low, dtype)
 
     SENSORS:
-        image -> code (eyeball)
+        image -> code (eyeball / encoder)
         ragged -> code (NLP + atoms)
         onehot -> code (task number)
         box -> code (bounded arrays)
@@ -66,6 +66,7 @@ class Interface(L.Layer):
     """
 
     def __init__(self, agent, task_id, in_spec, out_spec, input_number=None):
+        super(Interface, self).__init__()
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
         self.agent = agent
@@ -89,9 +90,12 @@ class Interface(L.Layer):
             self.channels_after_concat_coords = self.in_spec.shape[-1]
             self.channel_changers = {}
         super(Interface, self).__init__()
+        self.build()
 
 
     def build(self):
+        if self.built:
+            return
         self.input_layer = K.Input(self.in_spec.shape)
         self.normie = InstanceNormalization()(self.input_layer)
         self.out = self.normie
@@ -109,6 +113,7 @@ class Interface(L.Layer):
         if "sensor" in model_type:
             self.out = [self.normie, self.out]
         self.model = K.Model(self.input_layer, self.out)
+        self.built = True
 
     @staticmethod
     def get_hw(shape):
@@ -237,5 +242,5 @@ class Interface(L.Layer):
             )(self.out)
         self.out = tfpl.IndependentNormal(self.out_spec.shape)(self.out)
 
-    def call_model(self, input):
+    def __call__(self, input):
         return self.model(input)
