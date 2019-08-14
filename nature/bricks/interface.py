@@ -242,5 +242,5 @@ class Interface(L.Layer):
             )(self.out)
         self.out = tfpl.IndependentNormal(self.out_spec.shape)(self.out)
 
-    def __call__(self, input):
+    def call_model(self, input):
         return self.model(input)
