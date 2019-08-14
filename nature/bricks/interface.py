@@ -66,6 +66,7 @@ class Interface:
     """
 
     def __init__(self, agent, task_id, in_spec, out_spec, input_number=None):
+        super(Interface, self).__init__()
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
         self.agent = agent
@@ -81,10 +82,10 @@ class Interface:
         print("out_spec", out_spec)
         self.input_number = input_number
         self.shape_variable_key = None
-        self.reshape = L.Reshape(self.out_spec.shape)
-        self.build_model()
+        self.reshape = L.Reshape(self.out_spec.shape) 
+        self.build()
 
-    def build_model(self):
+    def build(self):
         if self.in_spec.format == "image":
             self.channels_before_concat_coords = self.in_spec.shape[-1]
             self.size_to_resize_to = self.get_hw(self.in_spec.shape)
@@ -94,7 +95,7 @@ class Interface:
         self.input = K.Input(self.in_spec.shape)
         self.normie = InstanceNormalization()(self.input)
         self.output = self.normie
-        self.call = self.call_model  # might be overridden in builder fn
+         # might be overridden in builder fn
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
             model_type = f"{in_spec.format}_sensor"
@@ -236,5 +237,5 @@ class Interface:
             )(self.output)
         self.output = tfpl.IndependentNormal(self.out_spec.shape)(self.output)
 
-    def call_model(self, input):
+    def __call__(self, input):
         return self.model(input)
