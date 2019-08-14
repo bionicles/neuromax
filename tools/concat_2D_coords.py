@@ -12,7 +12,7 @@ def get_2D_coords(a, b, should_normalize=False):
         a = normalize(a)
         b = normalize(b)
     b = tf.cast(b, tf.float32)
-    return tf.reshape(tf.stack(tf.meshgrid(a, b, indexing='ij'), axis=-1), (-1, 2))
+    return tf.stack(tf.meshgrid(a, b, indexing='ij'), axis=-1)
 
 
 def concat_2D_coords(tensor):
@@ -22,4 +22,6 @@ def concat_2D_coords(tensor):
     """
     h, w = get_image_hw(tensor)
     coords = get_2D_coords(h, w, should_normalize=True)
+    if len(tensor.shape) is 4:
+        coords = tf.expand_dims(coords, 0)
     return tf.concat([tensor, coords], -1)
