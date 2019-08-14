@@ -10,6 +10,7 @@ from tools.concat_2D_coords import concat_2D_coords
 from tools.normalize import normalize
 from tools.get_spec import get_spec
 from tools.get_size import get_size
+from tools.log import log
 
 InstanceNormalization = tfa.layers.InstanceNormalization
 
@@ -84,6 +85,7 @@ class Interface:
         self.build_model()
 
     def build_model(self):
+        log("done building the model")
         if self.in_spec.format == "image":
             self.channels_before_concat_coords = self.in_spec.shape[-1]
             self.size_to_resize_to = self.get_hw(self.in_spec.shape)
