@@ -49,9 +49,6 @@ class Agent:
                                       self.image_spec, self.code_spec)
         self.image_actuator = Interface(self, "image_actuator",
                                         self.code_spec, self.image_spec)
-        # we add a sensor for loss
-        # we add task-specific sensors and actuators
-        self.tasks = map_attrdict(self.add_sensors_and_actuators, self.tasks)
         # we build the shared GraphModel
         self.decide_n_in_n_out()
         self.shared_model = GraphModel(self)
@@ -64,10 +61,30 @@ class Agent:
         self.max_out = max([len(task_dict.outputs)
                             for task_id, task_dict in self.tasks.items()])
 
-    def add_sensors_and_actuators(self, task_key, task_dict):
-        """Add interfaces to a task_dict"""
-        sensors, actuators = [], []
+    def train(self):
+        """Run EPISODES_PER_PRACTICE_SESSION episodes
+        uses functions stored in self.tasks (indicated in neuromax.py tasks)
+        """
+        [[task_dict.run_agent_on_task(self, task_key, task_dict)
+          for task_key, task_dict in self.tasks.items()]
+            for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
 
+    def make_task_model(self, task_id, task_dict):
+        # we make sensor and actuator lists
+        sensors, actuators = [], []
+        # we make an input for the task_id and encode it
+        task_id_input = K.Input(self.task_id_spec.shape)
+        task_code = self.task_sensor(task_id_input)
+        # likewise for loss float value
+        loss_input = K.Input((1,))
+        task_dict.loss_sensor = Interface(self, task_id + "loss_sensor",
+                                          self.loss_spec, self.code_spec)
+        loss_code = task_dict.loss_sensor(loss_input)
+        # we track lists of all the things
+        inputs = [task_id_input, loss_input]
+        codes = [task_code, loss_code]
+        normies = []
+        # now we'll encode the inputs
         for input_number, in_spec in enumerate(task_dict.inputs):
             if in_spec.format is "image":
                 self.image_sensor.add_channel_changer(in_spec.shape[-1])
@@ -80,39 +97,6 @@ class Agent:
                                      input_number=input_number)
             sensors.append(sensor)
             actuators.append(actuator)
-        for output_number, out_spec in enumerate(task_dict.outputs):
-            if out_spec.format is "image":
-                actuator = self.image_actuator
-            else:
-                actuator = Interface(self, task_key, self.code_spec, out_spec)
-            actuators.append(actuator)
-        task_dict.actuators = list(actuators)
-        task_dict.sensor = list(sensors)
-        return task_key, task_dict
-
-    def train(self):
-        """Run EPISODES_PER_PRACTICE_SESSION episodes
-        uses functions stored in self.tasks (indicated in neuromax.py tasks)
-        """
-        [[task_dict.run_agent_on_task(self, task_key, task_dict)
-          for task_key, task_dict in self.tasks.items()]
-            for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
-
-    def make_task_model(self, task_id, task_dict):
-        # we make an input for the task_id and encode it
-        task_id_input = K.Input(self.task_id_spec.shape)
-        task_code = self.task_sensor(task_id_input)
-        # likewise for loss float value
-        loss_input = K.Input((1,))
-        task_dict.loss_sensor = Interface(self, task_key + "loss_sensor",
-                                          self.loss_spec, self.code_spec)
-        loss_code = task_dict.loss_sensor(loss_input)
-        # we track lists of all the things
-        inputs = [task_id_input, loss_input]
-        codes = [task_code, loss_code]
-        normies = []
-        # now we'll encode the inputs
-        for i in range(len(task_dict.inputs)):
             # we make an input
             input = K.Input(task_dict.inputs[i].shape)
             # we use it on the sensors to get normies and codes
@@ -131,9 +115,16 @@ class Agent:
         loss_prediction = self.loss_predictor(world_model)
         actions = [code_prediction, loss_prediction]
         # we pass codes and judgments to actuators to get actions
-        for o in range(len(task_dict.outputs)):
+        for output_number, out_spec in enumerate(task_dict.outputs):
+            if out_spec.format is "image":
+                actuator = self.image_actuator
+            else:
+                actuator = Interface(self, task_key, self.code_spec, out_spec)
+            actuators.append(actuator)
             action = task_dict.actuators[o](world_model)
             actions = actions + [action]
+        task_dict.actuators = list(actuators)
+        task_dict.sensor = list(sensors)
         # we build a model
         outputs = normies + code + judgment + actions
         task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
