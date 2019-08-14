@@ -48,8 +48,9 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
     output = get_dense_out(agent, f"{name}_0", concat)
     for i in range(n_layers - 1):
         output = get_dense_out(agent, f"{name}_{i}", output)
-    if model_type == "wide_deep":
+    if "wide" in model_type:
         stuff_to_concat = inputs + [output]
+        print("concat for wide", stuff_to_concat)
         output = L.Concatenate(-1)(stuff_to_concat)
     print("last layer...", output)
     output = get_dense_out(agent, f"{name}_dense_{n_layers}", output, units=d_out)

@@ -34,7 +34,8 @@ class KConvSet1D(L.Layer):
             # d_in is size of 1 element of shape
             # d_out is code_spec.size
             # d_in2 is code_spec.size
-            d_out = d_in2 = out_spec.size
+            d_out = out_spec.size
+            set_size = 1
             self.reshape = L.Reshape(out_spec.shape)
             self.call = self.call_one_for_all
             self.flatten = L.Flatten()
@@ -51,12 +52,9 @@ class KConvSet1D(L.Layer):
         self.layer_id = f"{brick_id}_KConvSet_{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
 
-    def call_one_for_all(self, inputs):  # input unknown needs ragged sensor
+    def call_one_for_all(self, input):  # input unknown needs ragged sensor
         """Each input element innervates all output elements"""
-        input, output_placehodl = inputs
-        output_placehodl = self.flatten(output_placehodl)
-        output = tf.map_fn(lambda input_item: self.kernel([
-            input_item, output_placehodl]), input)
+        output = tf.map_fn(lambda input_item: self.kernel(input_item), input)
         output = tf.math.reduce_sum(output, axis=0)
         return output
 
