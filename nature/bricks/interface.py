@@ -104,23 +104,13 @@ class Interface:
         print(f"{model_type} interface input layer", self.input)
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
-        if self.out_spec.format is "onehot":
-            self.output = tfpl.DenseReparameterization(
-                tfpl.OneHotCategorical.params_size(out_spec.size)
-                )(self.output)
-            self.output = tfpl.OneHotCategorical(
-                self.out_spec.size)(self.output)
-        elif self.out_spec.format not in ["onehot", "ragged"]:
-            self.output = tfpl.DenseReparameterization(
-                tfpl.IndependentNormal.params_size(out_spec.shape)
-                )(self.output)
-            self.output = tfpl.IndependentNormal(out_spec.shape)(self.output)
         if "sensor" in model_type:
             self.output = [self.normie, self.output]
         self.model = K.Model(self.input, self.output)
 
     @staticmethod
     def get_hw(shape):
+        """Returns height and width of image shape (no batch dim)"""
         return (shape[0], shape[1])
 
     @staticmethod
@@ -134,10 +124,12 @@ class Interface:
         self.call = self.call_image_sensor
         self.output = get_image_encoder_output(
             self.agent, self.brick_id, self.output, self.out_spec)
+        self.make_normal()
 
     def get_image_actuator_output(self):
         self.output = get_image_decoder_output(
             self.agent, self.brick_id, self.output, self.out_spec)
+        self.make_normal()
 
     def add_channel_changer(self, channels_in):
         """add a model to change the last dimension of the image"""
@@ -165,6 +157,7 @@ class Interface:
         self.output = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "one_for_all")([self.output, self.output_placeholder_input])
+        self.make_normal()
 
     def call_ragged_sensor(self, input):
         code_placeholder = tf.random.normal(self.out_spec.shape)
@@ -193,29 +186,35 @@ class Interface:
 
     def get_box_sensor_output(self):
         self.flatten_resize_reshape()
+        self.make_normal()
 
     def get_box_actuator_output(self):
         self.flatten_resize_reshape()
+        self.make_normal()
 
     def get_float_sensor_output(self):
         self.flatten_resize_reshape()
+        self.make_normal()
 
     def get_float_actuator_output(self):
         self.flatten_resize_reshape()
+        self.make_normal()
 
     def get_code_interface_output(self):
         self.flatten_resize_reshape()
+        self.make_normal()
 
     def get_onehot_sensor_output(self):
         self.flatten_resize_reshape()
+        self.make_normal()
 
     def get_onehot_actuator_output(self):
         self.flatten_resize_reshape()
-        self.output = L.Activation("softmax")(self.output)
+        self.make_categorical()
 
     def get_discrete_actuator_output(self):
-        self.get_onehot_actuator_output()
-        self.output = tf.argmax(self.output, axis=0)
+        self.flatten_resize_reshape()
+        self.make_categorical()
 
     def flatten_resize_reshape(self):
         if len(self.output.shape) > 2:
@@ -223,6 +222,18 @@ class Interface:
         out = get_dense_out(self.agent, self.brick_id, self.output,
                             units=self.out_spec.size)
         self.output = self.reshape(out)
+
+    def make_categorical(self):
+        self.output = tfpl.DenseReparameterization(
+            tfpl.OneHotCategorical.params_size(self.out_spec.size)
+            )(self.output)
+        self.output = tfpl.OneHotCategorical(self.out_spec.size)(self.output)
+
+    def make_normal(self):
+        self.output = tfpl.DenseReparameterization(
+            tfpl.IndependentNormal.params_size(self.out_spec.shape)
+            )(self.output)
+        self.output = tfpl.IndependentNormal(self.out_spec.shape)(self.output)
 
     def call_model(self, input):
         return self.model(input)
