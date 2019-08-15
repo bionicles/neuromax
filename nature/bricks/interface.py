@@ -158,7 +158,6 @@ class Interface(L.Layer):
         self.placeholder = K.Input(
             (None, 1), batch_size=self.agent.batch_size)
         self.input_layer = [self.placeholder, self.input_layer]
-        self.call = self.call_ragged_actuator
         doubled_out_shape = list(self.out_spec.shape)
         doubled_out_shape[-1] *= 2
         doubled_out_spec = get_spec(shape=doubled_out_shape, format="ragged")
@@ -167,10 +166,6 @@ class Interface(L.Layer):
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, doubled_out_spec,
             "all_for_one")([self.placeholder, self.out])
-
-    def call_ragged_actuator(self, inputs):
-        log("call_ragged_actuator", color="yellow")
-        return self.model(inputs)
 
     def get_box_sensor_output(self):
         self.flatten_resize_reshape()
@@ -222,8 +217,7 @@ class Interface(L.Layer):
         self.out = tfpl.DenseReparameterization(
             tfpl.IndependentNormal.params_size(self.out_spec.shape)
             )(self.out)
-        out_shape = self.out_spec.shape
-        self.out = tfpl.IndependentNormal(out_shape)(self.out)
+        self.out = tfpl.IndependentNormal(self.out_spec.shape)(self.out)
 
     def call_model(self, input):
         return self.model(input)

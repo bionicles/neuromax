@@ -155,10 +155,10 @@ class Agent:
         task_dict.actuators = list(actuators)
         task_dict.sensor = list(sensors)
         # we build a model
-        outputs = [*normies, code, world_model, *actions]
+        outputs = [*normies, code, *reconstructions, code_prediction, loss_prediction, *actions]
         task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
-        show_model(task_model, ".", task_id, "png")
         task_dict.model = task_model
+        show_model(task_model, ".", task_id, "png")
         return task_id, task_dict
 
     def compute_code_shape(self, task_dict):
@@ -166,15 +166,16 @@ class Agent:
         n_out = len(task_dict.outputs)
         return (self.code_atoms * (2 + n_in + n_out))
 
-    def unpack_actions(task_dict, actions):
-        code_prediction = actions[0]
-        loss_prediction = actions[1]
+    def unpack(outputs, task_dict):
         n_in = len(task_dict.inputs)
-        reconstructions = actions[2:2 + n_in]
-        outputs = actions[3 + n_in:]
-        if len(outputs) == 1:
-            outputs = outputs[0]
-        return code_prediction, loss_prediction, reconstructions, outputs
+        normies = outputs[:n_in]
+        reconstructions = outputs[n_in+1:2*n_in+1]
+        code = outputs[2*n_in + 2]
+        code_prediction = outputs[2*n_in + 3]
+        loss_prediction = outputs[2*n_in + 4]
+        actions = outputs[2*n_in+5:]
+        return (normies, reconstructions, code,
+                code_prediction, loss_prediction, actions)
 
     def compute_free_energy(
         loss=None, prior_loss_prediction=None,
