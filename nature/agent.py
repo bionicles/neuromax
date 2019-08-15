@@ -67,7 +67,7 @@ class Agent:
 
     def make_task_model(self, task_id, task_dict):
         # we track lists of all the things
-        sensors, actuators, normies, codes = [], [], [], []
+        sensors, actuators, normies, codes, reconstructions = [], [], [], [], []
         # we make an input for the task_id and encode it
         task_id_input = K.Input(self.task_id_spec.shape, batch_size=BATCH_SIZE)
         task_code = self.task_sensor(task_id_input)
@@ -95,9 +95,11 @@ class Agent:
             input = K.Input(task_dict.inputs[input_number].shape,
                             batch_size=BATCH_SIZE)
             normie, input_code = sensor(input)
-            inputs.append(input)
-            normies.append(normie)
+            reconstruction = actuator(input_code)
+            reconstructions.append(reconstruction)
             codes.append(input_code)
+            normies.append(normie)
+            inputs.append(input)
         # the full code is task_code, loss_code, input_codes
         samples = [c.sample(1) for c in codes]
         log("samples", samples, color="green")

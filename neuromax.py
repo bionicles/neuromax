@@ -17,7 +17,7 @@ tasks = AttrDict({
     "clevr": {
         "type": "dataset",
         "inputs": [get_spec(
-            shape=(480, 320, 4),
+            shape=(320, 480, 4),
             add_coords=True,
             format="image"
             ),

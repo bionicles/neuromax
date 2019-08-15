@@ -7,7 +7,6 @@ from nature.bricks.dense import get_dense_out
 from nature.bricks.k_conv import KConvSet1D
 
 from tools.concat_2D_coords import concat_2D_coords
-from tools.normalize import normalize
 from tools.get_spec import get_spec
 from tools.get_size import get_size
 from tools.log import log
@@ -18,20 +17,6 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 K = tf.keras
 L = K.layers
-
-# input2code
-RAGGED_SENSOR_LAST_ACTIVATION_OPTIONS = ["tanh"]
-ONEHOT_SENSOR_LAST_ACTIVATION_OPTIONS = ['sigmoid']
-BOX_SENSOR_LAST_ACTIVATION_OPTIONS = ["sigmoid"]
-# code2code
-CODE_INTERFACE_LAST_ACTIVATION_OPTIONS = ["tanh"]
-CODE_INTERFACE_ACTIVATION_OPTIONS = ["tanh"]
-# code2output
-ONEHOT_ACTUATOR_ACTIVATION_OPTIONS = ["sigmoid"]
-RAGGED_ACTUATOR_ACTIVATION_OPTIONS = ["tanh"]
-BOX_ACTUATOR_LAST_ACTIVATION_OPTIONS = ["linear"]
-NORMAL_DISTRIBUTION_OPTIONS = [
-    tfpl.MixtureNormal, tfpl.IndependentNormal, tfpl.MultivariateNormalTriL]
 
 
 class Interface(L.Layer):

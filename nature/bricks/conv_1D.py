@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-MIN_FILTERS, MAX_FILTERS = 4, 32
+MIN_FILTERS, MAX_FILTERS = 4, 16
 ACTIVATIONS = ["tanh"]
 
 L = tf.keras.layers

@@ -6,19 +6,17 @@ import json
 import os
 
 from tools.get_onehot import get_onehot
-from tools.log import log
 
-import time 
 
 DATASET = "val"
 
 task_path = os.path.join(".", "nurture", "clevr")
 images_path = os.path.join(task_path, "CLEVR_v1.0", "images")
 json_data_path = os.path.join(task_path, "CLEVR_v1.0", "questions",
-                         f"CLEVR_{DATASET}_questions.json")
+                              f"CLEVR_{DATASET}_questions.json")
 
 csv_data_path = os.path.join(task_path, "CLEVR_v1.0", "questions",
-                         f"CLEVR_{DATASET}_questions.csv")
+                             f"CLEVR_{DATASET}_questions.csv")
 
 answer_choices = [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
@@ -35,19 +33,18 @@ spacy.prefer_gpu()
 nlp = spacy.load("en_vectors_web_lg")
 
 
-def run_clevr_task(agent, task_key, task_dict):
-    onehot_task_key = get_onehot(task_key, list(agent.tasks.keys()))
+def run_clevr_task(agent, task_id, task_dict):
+    onehot_task_id = get_onehot(task_id, list(agent.tasks.keys()))
     dataset = task_dict.dataset.shuffle(10000)
     model = task_dict.model
     total_free_energy = 0.
     loss = 0.
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
-        inputs = [onehot_task_key, loss, image_tensor, embedded_question]
+        inputs = [onehot_task_id, loss, image_tensor, embedded_question]
         prior_loss_prediction = 0.
         prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
         with tf.GradientTape() as tape:
-            normies, code, reconstructions, actions = \
-                agent(task_key, task_dict, inputs)
+            normies, code, reconstructions, actions = model(inputs)
             # compute free energy: loss + surprise + complexity - freedom
             one_hot_action = actions[0]
             loss = tf.keras.losses.categorical_crossentropy(
@@ -59,7 +56,7 @@ def run_clevr_task(agent, task_key, task_dict):
                 actions=actions
             )
         gradients = tape.gradient([free_energy, model.losses],
-                                   model.trainable_variables)
+                                  model.trainable_variables)
         agent.optimizer.apply_gradients(zip(gradients,
                                             model.trainable_variables))
         total_free_energy += free_energy
@@ -91,10 +88,11 @@ def generate_clevr_item():
     global row_number, question_number
     image_data = clevr_data.loc[row_number]
     image_path = os.path.join(images_path, "val", image_data['image_filename'])
-    image_tensor = tf.convert_to_tensor(imread(image_path))
+    image_tensor = tf.convert_to_tensor(imread(image_path), dtype=tf.int32)
     questions = image_data['question'].split(",")
     question = questions[question_number]
-    embedded_question = tf.convert_to_tensor(nlp(question).vector, dtype=tf.float32)
+    embedded_question = tf.convert_to_tensor(nlp(question).vector,
+                                             dtype=tf.float32)
     answer = image_data['answer'].split(",")[question_number]
     one_hot_answer = get_onehot(answer, answer_choices)
     row_number += 1
@@ -103,7 +101,7 @@ def generate_clevr_item():
         question_number = 0
     print('image_tensor', 'embedded_question', 'one_hot_answer')
     print(image_tensor, embedded_question, one_hot_answer)
-    return image_tensor, embedded_question, one_hot_answer
+    yield (image_tensor, embedded_question, one_hot_answer)
 
 
 def read_clevr_dataset():
