@@ -6,6 +6,9 @@ import json
 import os
 
 from tools.get_onehot import get_onehot
+from tools.log import log
+
+import time 
 
 DATASET = "val"
 
@@ -91,7 +94,7 @@ def generate_clevr_item():
     image_tensor = tf.convert_to_tensor(imread(image_path))
     questions = image_data['question'].split(",")
     question = questions[question_number]
-    embedded_question = tf.convert_to_tensor(nlp(question), dtype=tf.float32)
+    embedded_question = tf.convert_to_tensor(nlp(question).vector, dtype=tf.float32)
     answer = image_data['answer'].split(",")[question_number]
     one_hot_answer = get_onehot(answer, answer_choices)
     row_number += 1
