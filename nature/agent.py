@@ -100,7 +100,9 @@ class Agent:
             codes.append(input_code)
         # the full code is task_code, loss_code, input_codes
         samples = [c.sample(1) for c in codes]
+        log("samples", samples, color="green")
         code = tf.concat(samples, -1)
+        log("concat code", code, color="green")
         code = tf.einsum('bij->bji', code)
         log("code", code, color="green")
         judgment = self.shared_model(code)
@@ -146,7 +148,7 @@ class Agent:
         # we build a model
         outputs = [*normies, code, world_model, *actions]
         task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
-        show_model(task_model, ".", task_id, ".png")
+        show_model(task_model, ".", task_id, "png")
         task_dict.model = task_model
         return task_id, task_dict
 

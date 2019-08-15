@@ -2,10 +2,7 @@
 # why?: learn to map N inputs to M outputs with graph GP
 import tensorflow_addons as tfa
 import tensorflow as tf
-# TODO: fix attention and DNC memory bricks
-# from nature.bricks.multi_head_attention import MultiHeadAttention
 from nature.bricks.graph_model.graph import Graph
-# from nature.bricks.dnc.rnn import DNC_RNN
 from nature.bricks.conv_1D import get_conv_1D
 from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.kernel import get_kernel
@@ -67,7 +64,7 @@ class GraphModel:
             if node_type is not "input":
                 inputs = [self.get_output(parent_id) for parent_id in parent_ids]
                 log("inputs:", inputs)
-                inputs = L.Concatenate()(inputs) if len(inputs) > 1 else inputs[0]
+                inputs = L.Concatenate(1)(inputs) if len(inputs) > 1 else inputs[0]
                 if node_type is "recurrent":
                     output = inputs
                 else:
