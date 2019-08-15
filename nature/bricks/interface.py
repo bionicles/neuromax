@@ -169,8 +169,8 @@ class Interface(L.Layer):
             "all_for_one")([self.placeholder, self.out])
 
     def call_ragged_actuator(self, inputs):
-        placeholder, world_model = inputs
-        return self.model([placeholder, world_model])
+        log("call_ragged_actuator", color="yellow")
+        return self.model(inputs)
         # loc, scale = tf.split(output, 2, axis=-1)
         # return tfp.distributions.Normal(loc, tf.math.abs(scale))
 

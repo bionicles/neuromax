@@ -97,7 +97,12 @@ class Agent:
             normie, input_code = sensor(input)
             log("input_code", input_code, color="red")
             log("self.code_spec", self.code_spec, color="red")
-            reconstruction = actuator(input_code)
+            if in_spec.format is "ragged":
+                placeholder = tf.ones_like(normie)
+                placeholder = tf.slice(placeholder, [0, 0, 0], [-1, -1, 1])
+                reconstruction = actuator([placeholder, input_code])
+            else:
+                reconstruction = actuator(input_code)
             log("reconstruction", reconstruction, color="green")
             reconstructions.append(reconstruction)
             codes.append(input_code)

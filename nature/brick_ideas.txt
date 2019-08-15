@@ -41,3 +41,5 @@ pixelSnail
 pixelCNN
 bilinear https://pytorch.org/docs/stable/nn.html#torch.nn.Bilinear
 spatial_transformer
+elemental operations
+shared layers in interfaces
