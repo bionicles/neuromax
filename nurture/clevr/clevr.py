@@ -72,12 +72,6 @@ def get_dataframe():
         print("done loading clevr JSON file")
         print("converting data to dataframe")
         clevr_data = pd.DataFrame(clevr_data["questions"])
-        clevr_data.set_index("image_filename", inplace=True)
-        question = clevr_data.groupby("image_filename")['question'].apply(
-            lambda x: ','.join(x.astype(str))).reset_index().drop("image_filename", axis=1)
-        answer = clevr_data.groupby("image_filename")['answer'].apply(
-            lambda x: ','.join(x.astype(str))).reset_index()
-        clevr_data = pd.concat([question, answer], axis=1)
         clevr_data.to_csv(csv_data_path)
     else:
         print("loading clevr csv file, please wait.")
@@ -86,27 +80,23 @@ def get_dataframe():
 
 
 def generate_clevr_item():
-    global row_number, question_number
+    global row_number
     image_data = clevr_data.loc[row_number]
     image_path = os.path.join(images_path, "val", image_data['image_filename'])
     image_tensor = tf.convert_to_tensor(imread(image_path), dtype=tf.int32)
     image_tensor = tf.einsum("WHC->HWC", image_tensor)
-    questions = image_data['question'].split(",")
-    question = questions[question_number]
+    question = image_data['question']
     embedded_question = tf.convert_to_tensor(nlp(question).vector,
                                              dtype=tf.float32)
-    answer = image_data['answer'].split(",")[question_number]
+    answer = image_data['answer']
     one_hot_answer = get_onehot(answer, answer_choices)
     row_number += 1
-    question_number += 1
-    if question_number == len(questions):
-        question_number = 0
     yield (image_tensor, embedded_question, one_hot_answer)
 
 
 def read_clevr_dataset():
-    global row_number, question_number
-    row_number, question_number = 0, 0
+    global row_number
+    row_number = 0
     get_dataframe()
     return tf.data.Dataset.from_generator(generate_clevr_item,
                                           (tf.int32, tf.float32, tf.int32))
