@@ -43,7 +43,6 @@ def run_clevr_task(agent, task_id, task_dict):
         inputs = [onehot_task_id, loss, image_tensor, embedded_question]
         inputs = [tf.cast(tf.expand_dims(input, axis=0), dtype=tf.float32)
                   for input in inputs]
-        [log(i, input, color="yellow") for i, input in enumerate(inputs)]
         prior_loss_prediction = 0.
         prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
         with tf.GradientTape() as tape:
@@ -74,12 +73,6 @@ def get_dataframe():
         print("done loading clevr JSON file")
         print("converting data to dataframe")
         clevr_data = pd.DataFrame(clevr_data["questions"])
-        clevr_data.set_index("image_filename", inplace=True)
-        question = clevr_data.groupby("image_filename")['question'].apply(
-            lambda x: ','.join(x.astype(str))).reset_index().drop("image_filename", axis=1)
-        answer = clevr_data.groupby("image_filename")['answer'].apply(
-            lambda x: ','.join(x.astype(str))).reset_index()
-        clevr_data = pd.concat([question, answer], axis=1)
         clevr_data.to_csv(csv_data_path)
     else:
         print("loading clevr csv file, please wait.")
@@ -88,35 +81,27 @@ def get_dataframe():
 
 
 def generate_clevr_item():
-    global row_number, question_number
+    global row_number
     image_data = clevr_data.loc[row_number]
     image_path = os.path.join(images_path, "val", image_data['image_filename'])
-    image_tensor = tf.convert_to_tensor(imread(image_path), dtype=tf.float32)
-    questions = image_data['question']
-    log("image_data['question']", image_data['question'], color="blue")
-    questions = questions.split(",")
-    log("questions.split(',')", questions, color="blue")
-    questions = questions[0]
-    log("questions[0]", questions, color="blue")
-    questions = questions.split("? ")
-    log("questions. split ?", questions, color="blue")
-    question = questions[question_number]
-    log(question_number, question, color="blue")
-    embedded_question = tf.convert_to_tensor(nlp(question).vector,
-                                             dtype=tf.float32)
-    log(question_number, embedded_question, color="blue")
-    answer = image_data['answer'].split(",")[question_number]
+    image_tensor = tf.convert_to_tensor(imread(image_path), dtype=tf.int32)
+    image_tensor = tf.einsum("WHC->HWC", image_tensor)
+    question = image_data['question']
+    question = nlp(question)
+    embedded_question = tf.convert_to_tensor(question.vector)
+    tensors = [tf.convert_to_tensor(word.vector) for word in question]
+    tensors.append(embedded_question)
+    tensors = [tf.expand_dims(tensor, 0) for tensor in tensors]
+    question_embedding = tf.concat(tensors, axis=0)
+    answer = image_data['answer']
     one_hot_answer = get_onehot(answer, answer_choices)
-    question_number += 1
-    if question_number == len(questions):
-        question_number = 0
-        row_number += 1
-    yield (image_tensor, embedded_question, one_hot_answer)
+    row_number += 1
+    yield (image_tensor, question_embedding, one_hot_answer)
 
 
 def read_clevr_dataset():
-    global row_number, question_number
-    row_number, question_number = 0, 0
+    global row_number
+    row_number = 0
     get_dataframe()
     return tf.data.Dataset.from_generator(generate_clevr_item,
                                           (tf.float32, tf.float32, tf.float32))
