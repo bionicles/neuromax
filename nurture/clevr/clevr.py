@@ -40,11 +40,13 @@ def run_clevr_task(agent, task_id, task_dict):
     total_free_energy = 0.
     loss = 0.
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
-        inputs = [onehot_task_id, loss, image_tensor, embedded_question]
+        expanded_loss = tf.expand_dims(loss, 0)
+        inputs = [onehot_task_id, expanded_loss, image_tensor, embedded_question]
         inputs = [tf.cast(tf.expand_dims(input, axis=0), dtype=tf.float32)
                   for input in inputs]
-        prior_loss_prediction = 0.
         prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
+        prior_loss_prediction = 0.
+        [log(input, color="blue") for input in inputs]
         with tf.GradientTape() as tape:
             normies, code, reconstructions, actions = model(inputs)
             # compute free energy: loss + surprise + complexity - freedom

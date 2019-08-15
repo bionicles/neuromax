@@ -111,7 +111,7 @@ class Agent:
         code = tf.concat(samples, -1)
         log("concat code", code, color="green")
         code = tf.einsum('bijk->bkij', code)
-        log("code b4 reshape", code, color="yellow")
+        log("code b4 reshape", code, color="green")
         code = tf.reshape(code, (1, -1, 1))
         log("code", code, color="green")
         judgment = self.shared_model(code)
