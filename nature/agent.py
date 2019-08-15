@@ -107,35 +107,23 @@ class Agent:
             inputs.append(input)
         # the full code is task_code, loss_code, input_codes
         samples = [c.sample(1) for c in codes]
-        log("samples", samples, color="green")
-        code = tf.concat(samples, -1)
-        log("concat code", code, color="green")
-        code = tf.einsum('bijk->bkij', code)
-        log("code b4 reshape", code, color="green")
+        code = tf.einsum('bijk->bkij', tf.concat(samples, -1))
         code = tf.reshape(code, (1, -1, 1))
-        log("code", code, color="green")
         judgment = self.shared_model(code)
-        log("judgment", judgment, color="green")
         world_model = tf.concat([code, judgment], 1)
-        log("world_model", world_model, color="green")
         # we predict next code
         task_dict.code_predictor = get_mlp(
-            world_model.shape, [(32, "tanh"), (32, "tanh"), (1, "tanh")])
+            world_model.shape, [(32, "tanh"), (1, "tanh")])
         code_prediction = task_dict.code_predictor(world_model)
-        log("code_prediction", code_prediction, color="green")
         world_model = tf.concat([world_model, code_prediction], 1)
-        log("world_model w/ code prediction", world_model, color="green")
         flat_world = tf.squeeze(world_model, -1)
         task_dict.loss_predictor = get_mlp(
-            flat_world.shape, [(32, "tanh"), (32, "tanh"), (1, "linear")])
+            flat_world.shape, [(32, "tanh"), (1, "linear")])
         loss_prediction = task_dict.loss_predictor(flat_world)
-        log("loss_prediction", loss_prediction, color="green")
         loss_prediction = tf.expand_dims(loss_prediction, -1)
         world_model = tf.concat([world_model, loss_prediction], 1)
-        log("world_model w/ loss prediction", world_model, color="green")
         actions = [code_prediction, loss_prediction]
         world_model_spec = get_spec(format="code", shape=world_model.shape[1:])
-        log("task world model spec", world_model_spec, color="red")
         # we pass codes and judgments to actuators to get actions
         for output_number, out_spec in enumerate(task_dict.outputs):
             if out_spec.format is "image":
@@ -149,7 +137,6 @@ class Agent:
                 action = actuator([placeholder, world_model])
             else:
                 action = actuator(world_model)
-            log("out_spec", output_number, out_spec, action, color="red")
             actuators.append(actuator)
             actions.append(action)
         task_dict.actuators = list(actuators)
@@ -166,6 +153,7 @@ class Agent:
         n_out = len(task_dict.outputs)
         return (self.code_atoms * (2 + n_in + n_out))
 
+    @staticmethod
     def unpack(outputs, task_dict):
         n_in = len(task_dict.inputs)
         normies = outputs[:n_in]

@@ -5,6 +5,9 @@ import tensorflow as tf
 
 from nature.bricks.kernel import get_kernel
 
+from tools.concat_1D_coords import concat_1D_coords
+from tools.log import log
+
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
 SET_OPTIONS = [-1, 1, 2, 3]  # todo ... fix one_for_all and all_for_one inside graph_model
@@ -41,10 +44,9 @@ class KConvSet1D(L.Layer):
             self.flatten = L.Flatten()
         elif set_size is "all_for_one":  # ragged actuators
             # d_in is code_spec.size
-            d_in = in_spec.size
+            d_in = in_spec.size + 1
             # d_out is size of 1 element of the output shape
             # d_in2 is 1 (placeholder range)
-            d_in2 = 1
             self.call = self.call_all_for_one
             self.flatten = L.Flatten()
         self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size,
@@ -60,12 +62,16 @@ class KConvSet1D(L.Layer):
 
     def call_all_for_one(self, inputs):  # output unknown needs ragged actuator
         """All input elements innervate each output element"""
-        normalized_output_coords, code = inputs
-        flat_code = self.flatten(code)
-        return tf.map_fn(lambda normalized_output_coord:
-                         self.kernel([
-                             normalized_output_coord, flat_code
-                             ]), normalized_output_coords)
+        placeholder, code = inputs
+        placeholder_with_coords = concat_1D_coords(placeholder)
+        placeholder_with_coords = tf.squeeze(placeholder_with_coords, 0)
+        coords = tf.slice(placeholder_with_coords, [0, 1], [-1, 1])
+        coords = tf.expand_dims(coords, -1)
+        code = tf.squeeze(code, 0)
+        return tf.map_fn(
+            lambda coord: self.kernel(
+                tf.concat([coord, code], 0)),
+            coords)
 
     # TODO: find a nice recursive approach to N-ary set convolutions
     def call_for_one(self, atoms):

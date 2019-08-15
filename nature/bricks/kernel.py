@@ -41,7 +41,11 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         d12 = L.Subtract()([atom1, atom2])
         d13 = L.Subtract()([atom1, atom3])
         concat = L.Concatenate(-1)([d12, d13, atom1, atom2, atom3])
-    elif set_size in ["one_for_all", "all_for_one"]:
+    elif set_size is "all_for_one":
+        atom1 = K.Input((d_in2, 1))
+        inputs = [atom1]
+        concat = atom1
+    elif set_size is "one_for_all":
         code = K.Input((d_in2,))
         inputs = [atom1, code]
         concat = L.Concatenate(-1)([atom1, code])

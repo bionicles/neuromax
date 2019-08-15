@@ -48,14 +48,14 @@ def run_clevr_task(agent, task_id, task_dict):
         prior_loss_prediction = 0.
         with tf.GradientTape() as tape:
             outputs = model(inputs)
-            [log(output, color="blue") for output in outputs]
-            normies, code, reconstructions, actions = agent.unpack(
-                outputs, task_dict)
-
+            [log(output.shape, color="blue") for output in outputs]
+            (normies, reconstructions, code, code_prediction,
+             loss_prediction, actions) = agent.unpack(outputs, task_dict)
             # compute free energy: loss + surprise + complexity - freedom
             one_hot_action = actions[0]
             loss = tf.keras.losses.categorical_crossentropy(
                 one_hot_answer, one_hot_action)
+            log("loss", loss, color="red")
             free_energy = agent.compute_free_energy(
                 loss=loss, prior_loss_prediction=prior_loss_prediction,
                 normies=normies, reconstructions=reconstructions,

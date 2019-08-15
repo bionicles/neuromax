@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-from tools.log import log
-
 K = tf.keras.backend
 
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
@@ -9,7 +7,6 @@ HARD_MIN, HARD_MAX = -1., 1.
 
 
 def clean_activation(activation):
-    log("clean_activation", activation)
     if activation == 'gaussian':
         return gaussian
     elif activation == 'swish':

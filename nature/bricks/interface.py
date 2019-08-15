@@ -146,7 +146,6 @@ class Interface(L.Layer):
         self.make_normal()
 
     def call_ragged_sensor(self, inputs):
-        print("call_ragged_sensor")
         if "variables" in self.in_spec.keys():
             for id, n, index in self.in_spec.variables:
                 self.agent.parameters[id] = inputs[n].shape[index]
@@ -161,8 +160,6 @@ class Interface(L.Layer):
         doubled_out_shape = list(self.out_spec.shape)
         doubled_out_shape[-1] *= 2
         doubled_out_spec = get_spec(shape=doubled_out_shape, format="ragged")
-        log("get_ragged_actuator_output", self.in_spec, doubled_out_spec,
-            color="red")
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, doubled_out_spec,
             "all_for_one")([self.placeholder, self.out])
