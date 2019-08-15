@@ -86,8 +86,8 @@ def get_dataframe():
 
 def generate_clevr_item():
     global row_number, question_number
-    image_data = clevr_data.loc(row_number)
-    image_path = os.path.join(images_path, "train", image_data['image_filename'])
+    image_data = clevr_data.loc[row_number]
+    image_path = os.path.join(images_path, "val", image_data['image_filename'])
     image_tensor = tf.convert_to_tensor(imread(image_path))
     questions = image_data['question'].split(",")
     question = questions[question_number]
