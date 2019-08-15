@@ -39,6 +39,9 @@ class GraphModel:
         self.make_model()
         show_model(self.model, ".", "M", "png")
 
+    def __call__(self, code):
+        return self.model(code)
+
     def make_model(self):
         """Build the keras model described by a graph."""
         self.outputs = [self.get_output(id)
@@ -77,7 +80,7 @@ class GraphModel:
                         except Exception as e:
                             log("error adding inputs to output", e)
                         try:
-                            output = L.Concatenate()([inputs, output])
+                            output = L.Concatenate(1)([inputs, output])
                         except Exception as e:
                             log("error concatenating inputs to output", e)
             else:
@@ -95,7 +98,7 @@ class GraphModel:
         node = self.G.node[id]
         log('build brick for', node)
         if node["node_type"] == "input":
-            brick = L.Input((None, self.agent.code_channels))
+            brick = L.Input((None, 1))
             brick_type = "input"
         else:
             d_in = d_out = inputs.shape[-1]

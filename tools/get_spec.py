@@ -2,15 +2,18 @@
 from attrdict import AttrDict
 import numpy as np
 
+from .get_size import get_size
 
-def get_spec(format=None, shape=None, n=None, variables=None, add_coords=None,
-             low=None, high=None):
+
+def get_spec(format=None, shape=None, size=None, n=None, variables=None,
+             add_coords=None, low=None, high=None):
     """
     Build an AttrDict for an input or output tensor
 
     Args:
         format: a string descriptor of the tensor's type ["onehot", "ragged"]
         shape: tensor shape
+        size: int dimensionality
         n: number of discrete values
         variables: list of (name, position) for shape variables in input
         add__coords: boolean to determine if we should concat coordinates
@@ -32,4 +35,11 @@ def get_spec(format=None, shape=None, n=None, variables=None, add_coords=None,
         spec["low"] = low
     if high is not None and high is not np.inf:
         spec["high"] = high
+    if size is not None:
+        spec["size"] = size
+    else:
+        try:
+            spec['size'] = get_size(shape)
+        except Exception as e:
+            print("get_spec failed to get size", e)
     return spec

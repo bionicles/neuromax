@@ -24,5 +24,6 @@ def get_dense_out(agent, brick_id, input, layer=None, units=None, fn=None,
             fn = agent.pull_choices(f"{brick_id}-fn", FN_OPTIONS)
         else:
             fn = agent.pull_choices(f"{brick_id}-fn", fn_options)
+    print(brick_id, input, units, fn)
     fn = clean_activation(fn)
     return layer(units, activation=fn)(input)

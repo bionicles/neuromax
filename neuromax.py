@@ -25,7 +25,7 @@ tasks = AttrDict({
             shape=(None, WORD_VECTOR_SIZE),
             add_coords=True,
             format="ragged",
-            variables=[("n_words", -2)]
+            variables=[("n_words", 0, -2)]
             )],
         "outputs": [get_spec(shape=(28, ), format="onehot")],
         "dataset": read_clevr_dataset(),
@@ -39,10 +39,10 @@ tasks = AttrDict({
         "inputs": [get_spec(shape=(None, 10),
                             add_coords=True,
                             format="ragged",
-                            variables=[("n_atoms", -2)])],
+                            variables=[("n_atoms", 0, -2)])],
         "outputs": [get_spec(shape=(None, 3),
                              format="ragged",
-                             variables=[("n_atoms", -2)])],
+                             variables=[("n_atoms", 0, -2)])],
         "dataset": read_mol_dataset(),
         "run_agent_on_task": run_mol_task}
                  })

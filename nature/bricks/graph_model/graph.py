@@ -64,22 +64,20 @@ class Graph:
             self.G.add_node(box_number, label=box_number,
                             style=STYLE, color="black", shape="square",
                             node_type="brick", output=None)
-        for input_number in range(self.n_in):
-            input_key = f"input_{input_number}"
-            self.G.add_node(input_key, label=input_key,
-                            style=STYLE, color="blue", shape="circle",
-                            node_type="input", output=None)
-            self.G.add_edge("source", input_key)
-            [self.G.add_edge(input_key, box_number)
-             for box_number in range(n_initial_boxes)]
-        for output_number in range(self.n_in):
-            output_key = f"output_{output_number}"
-            self.G.add_node(output_key, label=output_key,
-                            style=STYLE, color="red", shape="triangle",
-                            node_type="output", output=None)
-            self.G.add_edge(output_key, "sink")
-            [self.G.add_edge(box_number, output_key)
-             for box_number in range(n_initial_boxes)]
+        input_key = f"input_code"
+        self.G.add_node(input_key, label=input_key,
+                        style=STYLE, color="blue", shape="circle",
+                        node_type="input", output=None)
+        self.G.add_edge("source", input_key)
+        [self.G.add_edge(input_key, box_number)
+         for box_number in range(n_initial_boxes)]
+        output_key = f"output_judgment"
+        self.G.add_node(output_key, label=output_key,
+                        style=STYLE, color="red", shape="triangle",
+                        node_type="output", output=None)
+        self.G.add_edge(output_key, "sink")
+        [self.G.add_edge(box_number, output_key)
+         for box_number in range(n_initial_boxes)]
 
     def evolve_initial_graph(self):
         self.n_mutations = self.pull_numbers("n_mutations",

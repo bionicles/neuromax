@@ -55,7 +55,7 @@ class KConvSet1D(L.Layer):
     def call_one_for_all(self, input):  # input unknown needs ragged sensor
         """Each input element innervates all output elements"""
         output = tf.map_fn(lambda input_item: self.kernel(input_item), input)
-        output = tf.math.reduce_sum(output, axis=0)
+        output = tf.math.reduce_sum(output, axis=1)
         return output
 
     def call_all_for_one(self, inputs):  # output unknown needs ragged actuator

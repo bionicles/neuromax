@@ -8,21 +8,22 @@ import random
 from tools.map_attrdict import map_attrdict
 from tools.sum_entropy import sum_entropy
 from tools.show_model import show_model
-from tools.get_size import get_size
+from tools.normalize import normalize
 from tools.get_spec import get_spec
+from tools.get_size import get_size
 from tools.log import log
 
 from nature.bricks.graph_model.graph_model import GraphModel
 from nature.bricks.interface import Interface
+from nature.bricks.get_mlp import get_mlp
 
 tfd = tfp.distributions
 K = tf.keras
 L = K.layers
 
-MIN_CODE_CHANNELS, MAX_CODE_CHANNELS = 8, 32
 MIN_CODE_ATOMS, MAX_CODE_ATOMS = 8, 32
 EPISODES_PER_PRACTICE_SESSION = 5
-IMAGE_SHAPE = (128, 128, 4)
+IMAGE_SHAPE = (64, 64, 4)
 BATCH_SIZE = 1
 
 
@@ -35,11 +36,8 @@ class Agent:
         self.parameters = AttrDict({})
         self.code_atoms = self.pull_numbers(
             "code_atoms", MIN_CODE_ATOMS, MAX_CODE_ATOMS)
-        self.code_channels = self.pull_numbers(
-            "code_channels", MIN_CODE_CHANNELS, MAX_CODE_CHANNELS)
-        self.code_spec = get_spec(shape=(self.code_atoms, self.code_channels),
-                                  format="code")
-        self.code_spec.size = get_size(self.code_spec.shape)
+        self.code_spec = get_spec(shape=(self.code_atoms, 1), format="code")
+        self.code_spec.size = self.code_atoms
         self.loss_spec = get_spec(format="float", shape=(1,))
         # we add a sensor for task id
         n_tasks = len(self.tasks.keys())
@@ -90,7 +88,6 @@ class Agent:
         # now we'll encode the inputs
         for input_number, in_spec in enumerate(task_dict.inputs):
             if in_spec.format is "image":
-                self.image_sensor.add_channel_changer(in_spec.shape[-1])
                 sensor = self.image_sensor
                 actuator = self.image_actuator
             else:
@@ -108,42 +105,61 @@ class Agent:
             normies.append(normie)
             codes.append(input_code)
         # the full code is task_code, loss_code, input_codes
-        for i, c in enumerate(codes):
-            log(inputs[i], color="green")
-            log(c, color="blue")
-        reshaped_codes = [tfd.BatchReshape(c, batch_shape=(1,)) for c in codes]
-        code = tfd.Blockwise(reshaped_codes)
-        # code = tf.concat(codes, -1)
-        # we pass the codes to the shared model to get judgments
+        samples = [c.sample(1) for c in codes]
+        code = tf.concat(samples, -1)
+        code = tf.einsum('bij->bji', code)
+        log("code", code, color="green")
         judgment = self.shared_model(code)
-        world_model = tf.concat([code, judgment], 0)
+        log("judgment", judgment, color="green")
+        world_model = tf.concat([code, judgment], 1)
+        log("world_model", world_model, color="green")
         # we predict next code
-        code_prediction = self.code_predictor(world_model)
-        world_model = tf.concat([world_model, code_prediction], 0)
-        loss_prediction = self.loss_predictor(world_model)
+        task_dict.code_predictor = get_mlp(
+            world_model.shape, [(32, "tanh"), (32, "tanh"), (1, "tanh")])
+        code_prediction = task_dict.code_predictor(world_model)
+        log("code_prediction", code_prediction, color="green")
+        world_model = tf.concat([world_model, code_prediction], 1)
+        log("world_model w/ code prediction", world_model, color="green")
+        flat_world = tf.squeeze(world_model, -1)
+        task_dict.loss_predictor = get_mlp(
+            flat_world.shape, [(32, "tanh"), (32, "tanh"), (1, "linear")])
+        loss_prediction = task_dict.loss_predictor(flat_world)
+        log("loss_prediction", loss_prediction, color="green")
+        loss_prediction = tf.expand_dims(loss_prediction, -1)
+        world_model = tf.concat([world_model, loss_prediction], 1)
+        log("world_model w/ loss prediction", world_model, color="green")
         actions = [code_prediction, loss_prediction]
+        world_model_spec = get_spec(format="code", shape=world_model.shape[1:])
+        log("task world model spec", world_model_spec, color="red")
         # we pass codes and judgments to actuators to get actions
         for output_number, out_spec in enumerate(task_dict.outputs):
             if out_spec.format is "image":
                 actuator = self.image_actuator
             else:
-                actuator = Interface(self, task_id, self.code_spec, out_spec)
-            action = actuator(world_model)
-            actions = actions + [action]
+                actuator = Interface(self, task_id, world_model_spec, out_spec)
+            if out_spec.format is "ragged":
+                id, n, index = out_spec.variables[0]
+                placeholder = tf.ones_like(inputs[n + 2])
+                placeholder = tf.slice(placeholder, [0, 0, 0], [-1, -1, 1])
+                action = actuator([placeholder, world_model])
+            else:
+                action = actuator(world_model)
+            log("out_spec", output_number, out_spec, action, color="red")
             actuators.append(actuator)
+            actions.append(action)
         task_dict.actuators = list(actuators)
         task_dict.sensor = list(sensors)
         # we build a model
-        outputs = normies + code + judgment + actions
+        outputs = [*normies, code, world_model, *actions]
         task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
         show_model(task_model, ".", task_id, ".png")
         task_dict.model = task_model
+        return task_id, task_dict
 
     def compute_code_shape(self, task_dict):
         n_in = len(task_dict.inputs)
         n_out = len(task_dict.outputs)
-        # task_code, loss_code, input_codes (n_in), prior_output_codes (n_out)
-        return (self.code_atoms * (2 + n_in + n_out), self.code_channels)
+        return (self.code_atoms * (2 + n_in + n_out))
 
     def unpack_actions(task_dict, actions):
         code_prediction = actions[0]
