@@ -6,6 +6,7 @@ import json
 import os
 
 from tools.get_onehot import get_onehot
+from tools.log import log
 
 DATASET = "val"
 
@@ -40,6 +41,9 @@ def run_clevr_task(agent, task_id, task_dict):
     loss = 0.
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
         inputs = [onehot_task_id, loss, image_tensor, embedded_question]
+        inputs = [tf.cast(tf.expand_dims(input, axis=0), dtype=tf.float32)
+                  for input in inputs]
+        [log(i, input, color="yellow") for i, input in enumerate(inputs)]
         prior_loss_prediction = 0.
         prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
         with tf.GradientTape() as tape:
@@ -87,17 +91,26 @@ def generate_clevr_item():
     global row_number, question_number
     image_data = clevr_data.loc[row_number]
     image_path = os.path.join(images_path, "val", image_data['image_filename'])
-    image_tensor = tf.convert_to_tensor(imread(image_path), dtype=tf.int32)
-    questions = image_data['question'].split(",")
+    image_tensor = tf.convert_to_tensor(imread(image_path), dtype=tf.float32)
+    questions = image_data['question']
+    log("image_data['question']", image_data['question'], color="blue")
+    questions = questions.split(",")
+    log("questions.split(',')", questions, color="blue")
+    questions = questions[0]
+    log("questions[0]", questions, color="blue")
+    questions = questions.split("? ")
+    log("questions. split ?", questions, color="blue")
     question = questions[question_number]
+    log(question_number, question, color="blue")
     embedded_question = tf.convert_to_tensor(nlp(question).vector,
                                              dtype=tf.float32)
+    log(question_number, embedded_question, color="blue")
     answer = image_data['answer'].split(",")[question_number]
     one_hot_answer = get_onehot(answer, answer_choices)
-    row_number += 1
     question_number += 1
     if question_number == len(questions):
         question_number = 0
+        row_number += 1
     yield (image_tensor, embedded_question, one_hot_answer)
 
 
@@ -106,4 +119,4 @@ def read_clevr_dataset():
     row_number, question_number = 0, 0
     get_dataframe()
     return tf.data.Dataset.from_generator(generate_clevr_item,
-                                          (tf.int32, tf.float32, tf.int32))
+                                          (tf.float32, tf.float32, tf.float32))

@@ -9,7 +9,7 @@ K = tf.keras
 B, L = K.backend, K.layers
 
 FN_OPTIONS = ["tanh", "linear", "swish", "lisht"]
-MIN_UNITS, MAX_UNITS = 8, 32
+MIN_UNITS, MAX_UNITS = 8, 16
 LAYER_OPTIONS = [tfpl.DenseReparameterization]
 
 

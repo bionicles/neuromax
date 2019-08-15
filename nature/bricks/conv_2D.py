@@ -12,7 +12,7 @@ ACTIVATION = "relu"
 NORM = "instance"
 PADDING = "valid"
 KERNEL_SIZE = 4
-FILTERS = 2
+FILTERS = 1
 
 
 # TODO: add "rank" so we can reuse this for 1D conv

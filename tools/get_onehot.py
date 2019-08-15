@@ -10,4 +10,4 @@ def get_onehot(item, list):
     Returns: a tensor of 0s except for a 1 in the position of item in list
     """
     return tf.convert_to_tensor([0 if x != list.index(item) else 1
-                                 for x in range(len(list))])
+                                 for x in range(len(list))], dtype=tf.float32)
