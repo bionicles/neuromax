@@ -224,10 +224,7 @@ class Interface(L.Layer):
         self.out = tfpl.DenseReparameterization(
             tfpl.IndependentNormal.params_size(self.out_spec.shape)
             )(self.out)
-        if self.out_spec.format is "code":
-            out_shape = self.agent.code_atoms
-        else:
-            out_shape = self.out_spec.shape
+        out_shape = self.out_spec.shape
         self.out = tfpl.IndependentNormal(out_shape)(self.out)
 
     def call_model(self, input):

@@ -95,7 +95,10 @@ class Agent:
             input = K.Input(task_dict.inputs[input_number].shape,
                             batch_size=BATCH_SIZE)
             normie, input_code = sensor(input)
+            log("input_code", input_code, color="red")
+            log("self.code_spec", self.code_spec, color="red")
             reconstruction = actuator(input_code)
+            log("reconstruction", reconstruction, color="green")
             reconstructions.append(reconstruction)
             codes.append(input_code)
             normies.append(normie)
