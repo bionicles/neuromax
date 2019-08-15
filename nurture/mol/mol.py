@@ -28,7 +28,7 @@ def run_mol_task(agent, task_key, task_dict):
     dataset = task_dict.dataset.shuffle(10000)
     model = task_dict.model
     total_free_energy = 0.
-    onehot_task_key = get_onehot(task_key, agent.tasks.keys())
+    onehot_task_key = get_onehot(task_key, list(agent.tasks.keys()))
     for id_string, n_atoms, target, positions, features, masses in dataset.take(task_dict.examples_per_episode):
         prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
         target_distances = get_distances(target, target)

@@ -57,12 +57,6 @@ class Agent:
         # we build a keras model for each task
         self.tasks = map_attrdict(self.make_task_model, self.tasks)
 
-    def decide_n_in_n_out(self):
-        self.max_in = max([len(task_dict.inputs)
-                           for task_id, task_dict in self.tasks.items()])
-        self.max_out = max([len(task_dict.outputs)
-                            for task_id, task_dict in self.tasks.items()])
-
     def train(self):
         """Run EPISODES_PER_PRACTICE_SESSION episodes
         uses functions stored in self.tasks (indicated in neuromax.py tasks)
@@ -186,6 +180,12 @@ class Agent:
         freedom = sum_entropy(actions)
         free_energy = loss_surprise + code_surprise + reconstruction_error - freedom
         return free_energy
+
+    def decide_n_in_n_out(self):
+        self.max_in = max([len(task_dict.inputs)
+                           for task_id, task_dict in self.tasks.items()])
+        self.max_out = max([len(task_dict.outputs)
+                            for task_id, task_dict in self.tasks.items()])
 
     def pull_numbers(self, pkey, a, b, step=1, n=1):
         """

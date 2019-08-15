@@ -29,11 +29,13 @@ tasks = AttrDict({
             )],
         "outputs": [get_spec(shape=(28, ), format="onehot")],
         "dataset": read_clevr_dataset(),
-        "run_agent_on_task": run_clevr_task},
+        "run_agent_on_task": run_clevr_task,
+        "examples_per_episode": 10},
     "MountainCar-v0": {
         "type": "env",
         "env": gym.make("MountainCar-v0"),
-        "run_agent_on_task": run_env_task},
+        "run_agent_on_task": run_env_task,
+        "examples_per_episode": 10},
     "mol": {
         "type": "dataset",
         "inputs": [get_spec(shape=(None, 10),
@@ -44,7 +46,8 @@ tasks = AttrDict({
                              format="ragged",
                              variables=[("n_atoms", 0, -2)])],
         "dataset": read_mol_dataset(),
-        "run_agent_on_task": run_mol_task}
+        "run_agent_on_task": run_mol_task,
+        "examples_per_episode": 10}
                  })
 
 # we build env I/O specs for gym tasks:

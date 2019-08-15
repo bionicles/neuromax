@@ -33,7 +33,7 @@ nlp = spacy.load("en_vectors_web_lg")
 
 
 def run_clevr_task(agent, task_key, task_dict):
-    onehot_task_key = get_onehot(task_key, agent.tasks.keys())
+    onehot_task_key = get_onehot(task_key, list(agent.tasks.keys()))
     dataset = task_dict.dataset.shuffle(10000)
     model = task_dict.model
     total_free_energy = 0.

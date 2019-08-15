@@ -9,7 +9,7 @@ def run_env_task(agent, task_key, task_dict):
     model = task_dict.model
     total_free_energy = 0.
     env = task_dict.env
-    onehot_task_key = get_onehot(task_key, agent.tasks.keys())
+    onehot_task_key = get_onehot(task_key, list(agent.tasks.keys()))
     for _ in range(task_dict.episodes_per_session):
         prior_loss_prediction = 0.
         prior_code_prediction = tf.zeros(
