@@ -4,7 +4,7 @@ import pandas as pd
 import spacy
 import json
 import os
-
+import time
 from tools.get_onehot import get_onehot
 
 DATASET = "val"
@@ -40,6 +40,8 @@ def run_clevr_task(agent, task_id, task_dict):
     loss = 0.
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
         inputs = [onehot_task_id, loss, image_tensor, embedded_question]
+        inputs = [tf.cast(tf.expand_dims(input, axis=0), dtype=tf.float32)
+                        for input in inputs]
         prior_loss_prediction = 0.
         prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
         with tf.GradientTape() as tape:
@@ -88,6 +90,7 @@ def generate_clevr_item():
     image_data = clevr_data.loc[row_number]
     image_path = os.path.join(images_path, "val", image_data['image_filename'])
     image_tensor = tf.convert_to_tensor(imread(image_path), dtype=tf.int32)
+    image_tensor = tf.einsum("WHC->HWC", image_tensor)
     questions = image_data['question'].split(",")
     question = questions[question_number]
     embedded_question = tf.convert_to_tensor(nlp(question).vector,
