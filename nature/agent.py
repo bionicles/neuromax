@@ -95,15 +95,12 @@ class Agent:
             input = K.Input(task_dict.inputs[input_number].shape,
                             batch_size=BATCH_SIZE)
             normie, input_code = sensor(input)
-            log("input_code", input_code, color="red")
-            log("self.code_spec", self.code_spec, color="red")
             if in_spec.format is "ragged":
                 placeholder = tf.ones_like(normie)
                 placeholder = tf.slice(placeholder, [0, 0, 0], [-1, -1, 1])
                 reconstruction = actuator([placeholder, input_code])
             else:
                 reconstruction = actuator(input_code)
-            log("reconstruction", reconstruction, color="green")
             reconstructions.append(reconstruction)
             codes.append(input_code)
             normies.append(normie)
@@ -113,7 +110,9 @@ class Agent:
         log("samples", samples, color="green")
         code = tf.concat(samples, -1)
         log("concat code", code, color="green")
-        code = tf.einsum('bij->bji', code)
+        code = tf.einsum('bijk->bkij', code)
+        log("code b4 reshape", code, color="yellow")
+        code = tf.reshape(code, (1, -1, 1))
         log("code", code, color="green")
         judgment = self.shared_model(code)
         log("judgment", judgment, color="green")
