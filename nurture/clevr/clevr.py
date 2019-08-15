@@ -7,7 +7,6 @@ import os
 
 from tools.get_onehot import get_onehot
 
-
 DATASET = "val"
 
 task_path = os.path.join(".", "nurture", "clevr")
@@ -99,8 +98,6 @@ def generate_clevr_item():
     question_number += 1
     if question_number == len(questions):
         question_number = 0
-    print('image_tensor', 'embedded_question', 'one_hot_answer')
-    print(image_tensor, embedded_question, one_hot_answer)
     yield (image_tensor, embedded_question, one_hot_answer)
 
 
