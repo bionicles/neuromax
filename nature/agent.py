@@ -136,6 +136,7 @@ class Agent:
             code_prediction_sample = tf.squeeze(code_prediction_sample, axis=axis)
         world_model = tf.squeeze(world_model, axis=0)
         world_model = tf.concat([world_model, code_prediction_sample], -1)
+        world_model = tf.expand_dims(world_model, axis=0)
         log("world_model", world_model, color="yellow")
         # flat_world = tf.squeeze(world_model, -1)
         loss_predictor = K.Sequential([
