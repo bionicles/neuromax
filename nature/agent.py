@@ -195,7 +195,7 @@ class Agent:
     def unpack(output_roles, outputs):
         normies, reconstructions, actions = [], [], []
         for role, output in zip(output_roles, outputs):
-            log("unpack", role, output, color="blue")
+            log("unpack", role, output.shape, color="blue")
             if role == "normie":  # tensor
                 normies.append(output)
             elif role == "reconstruction":  # tensor

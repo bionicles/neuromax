@@ -35,7 +35,6 @@ class KConvSet1D(L.Layer):
             self.call = self.call_for_three
         elif set_size is "one_for_all":  # ragged sensors
             # d_in is size of 1 element of shape
-            # d_out is code_spec.size
             # d_in2 is code_spec.size
             d_out = out_spec.size
             set_size = 1
@@ -43,12 +42,10 @@ class KConvSet1D(L.Layer):
             self.call = self.call_one_for_all
             self.flatten = L.Flatten()
         elif set_size is "all_for_one":  # ragged actuators
-            # d_in is code_spec.size
             d_in = in_spec.size
-            # d_out is size of 1 element of the output shape
             # d_in2 is 1 (placeholder range)
+            # d_out is size of 1 element of the output shape
             self.call = self.call_all_for_one
-            self.flatten = L.Flatten()
         self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size,
                                  d_in2=d_in2)
         self.layer_id = f"{brick_id}_KConvSet_{set_size}-{generate()}"
@@ -82,8 +79,6 @@ class KConvSet1D(L.Layer):
 
     def call_for_three(self, atoms):
         return tf.map_fn(lambda a1: tf.reduce_sum(tf.map_fn(lambda a2: tf.reduce_sum(tf.map_fn(lambda a3: self.kernel([a1, a2, a3]), atoms), axis=0), atoms), axis=0), atoms)
-
-
 
     # TOO COMPLICATED:
     # def call_autoregressive(self, code, coords):
