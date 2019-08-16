@@ -18,6 +18,7 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 K = tf.keras
 L = K.layers
+B = tf.keras.backend
 
 PREDICTOR_UNITS, PREDICTOR_ACTIVATION = 32, "tanh"
 MIN_CODE_ATOMS, MAX_CODE_ATOMS = 8, 32
@@ -132,11 +133,9 @@ class Agent:
         output_roles.append("code_prediction")
         # now we add the code prediction to the world model and predict loss
         code_prediction_sample = code_prediction.sample()
-        for axis in [2, -1, 0]:
+        for axis in [2, -1]:
             code_prediction_sample = tf.squeeze(code_prediction_sample, axis=axis)
-        world_model = tf.squeeze(world_model, axis=0)
-        world_model = tf.concat([world_model, code_prediction_sample], -1)
-        world_model = tf.expand_dims(world_model, axis=0)
+        world_model = B.concatenate([world_model, code_prediction_sample], -1)
         log("world_model", world_model, color="yellow")
         # flat_world = tf.squeeze(world_model, -1)
         loss_predictor = K.Sequential([
@@ -153,7 +152,7 @@ class Agent:
         outputs.append(loss_prediction)
         output_roles.append("loss_prediction")
         # loss_prediction = tf.expand_dims(loss_prediction, -1)
-        world_model = tf.concat([world_model, loss_prediction], 1)
+        world_model = B.concatenate([world_model, loss_prediction], -1)
         world_model_spec = get_spec(format="code", shape=world_model.shape[1:])
         # we pass codes and judgments to actuators to get actions
         for output_number, out_spec in enumerate(task_dict.outputs):
