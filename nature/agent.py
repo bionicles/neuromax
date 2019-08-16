@@ -129,15 +129,15 @@ class Agent:
         output_roles.append("code_prediction")
         # now we add the code prediction to the world model and predict loss
         code_prediction_sample = code_prediction.sample()
-        log("code_prediction_sample", code_prediction_sample.shape, color="red_on_white")
-        world_model = B.concatenate([world_model, code_prediction_sample], -1)
-        log("world_model", world_model, color="yellow")
+        log("code_prediction_sample.shape", code_prediction_sample.shape, color="yellow")
+        log("world_model.shape", world_model.shape, color="yellow")
+        world_model = B.concatenate([world_model, code_prediction_sample], 1)
         loss_predictor = self.pull_distribution(
             world_model.shape, self.loss_spec.shape)
         loss_prediction = loss_predictor(world_model)
         outputs.append(loss_prediction)
         output_roles.append("loss_prediction")
-        world_model = B.concatenate([world_model, loss_prediction], -1)
+        world_model = B.concatenate([world_model, loss_prediction], 1)
         world_model_spec = get_spec(format="code", shape=world_model.shape[1:])
         # we pass codes and judgments to actuators to get actions
         for output_number, out_spec in enumerate(task_dict.outputs):
@@ -181,29 +181,26 @@ class Agent:
         in_shape = list(in_shape)[1:]
         shapes = tfd.Normal.param_shapes(desired_shape)
         loc, scale = tf.zeros(shapes["loc"]), tf.ones(shapes["scale"])
-        prior_tensor = tf.concat([loc, scale], -1)
-        prior_tensor = tf.expand_dims(prior_tensor, -1)
-        last_layer_units = get_size(prior_tensor.shape)
+        last_layer_units = int(get_size(shapes["loc"]))
         prior = tfd.Normal(loc, scale)
-        log(f"pull_distribution {in_shape} --> {desired_shape}", color="red")
-        log(f"pull_distribution prior_tensor.shape {prior_tensor.shape}", color="red")
-        log(f"pull_distribution prior {prior}", color="red")
-        log(f"pull_distribution prior_sample {prior.sample().shape}", color="red")
-        return K.Sequential([
-            K.Input(in_shape, batch_size=batch_size),
-            L.Flatten(),
-            tfpl.DenseReparameterization(units, fn),
-            tfpl.DenseReparameterization(units, fn),
-            tfpl.DenseReparameterization(last_layer_units),
-            L.Reshape(prior_tensor.shape),
-            tfpl.DistributionLambda(
+        input = K.Input(in_shape, batch_size=batch_size)
+        out = L.Flatten()(input)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        loc_layer = tfpl.DenseReparameterization(last_layer_units)
+        scale_layer = tfpl.DenseReparameterization(last_layer_units)
+        loc, scale = loc_layer(out), scale_layer(out)
+        expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
+        loc, scale = expand(loc), expand(scale)
+        distribution = tfpl.DistributionLambda(
                 make_distribution_fn=lambda x: tfd.Normal(
-                    loc=x[..., 0, :], scale=tf.math.abs(x[..., 1, :])
+                    x[0], tf.math.abs(x[1])
                 ),
                 convert_to_tensor_fn=lambda s: s.sample(),
                 activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
-            )
-        ])
+            )([loc, scale])
+        model = K.Model(input, distribution)
+        return model
 
     @staticmethod
     def unpack(output_roles, outputs):
