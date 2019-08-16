@@ -42,7 +42,7 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         d13 = L.Subtract()([atom1, atom3])
         concat = L.Concatenate(-1)([d12, d13, atom1, atom2, atom3])
     elif set_size is "all_for_one":
-        atom1 = K.Input((d_in2, 1))
+        atom1 = K.Input((d_in + 1, 1))
         inputs = [atom1]
         concat = atom1
     elif set_size is "one_for_all":
@@ -54,7 +54,7 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         output = get_dense_out(agent, f"{name}_{i}", output)
     if "wide" in model_type:
         stuff_to_concat = inputs + [output]
-        print("concat for wide", stuff_to_concat)
+        log("stuff_to_concat", stuff_to_concat, color="white")
         output = L.Concatenate(-1)(stuff_to_concat)
     print("last layer...", output)
     output = get_dense_out(agent, f"{name}_dense_{n_layers}", output, units=d_out)

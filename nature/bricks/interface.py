@@ -156,13 +156,13 @@ class Interface(L.Layer):
         self.shape_var_id = self.out_spec.variables[0][0]
         self.placeholder = K.Input(
             (None, 1), batch_size=self.agent.batch_size)
-        self.input_layer = [self.placeholder, self.input_layer]
+        self.input_layer = [self.input_layer, self.placeholder]
         doubled_out_shape = list(self.out_spec.shape)
         doubled_out_shape[-1] *= 2
         doubled_out_spec = get_spec(shape=doubled_out_shape, format="ragged")
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, doubled_out_spec,
-            "all_for_one")([self.placeholder, self.out])
+            "all_for_one")([self.out, self.placeholder])
 
     def get_box_sensor_output(self):
         self.flatten_resize_reshape()

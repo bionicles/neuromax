@@ -1,3 +1,4 @@
+import tensorflow_probability as tfp
 from imageio import imread
 import tensorflow as tf
 import pandas as pd
@@ -7,6 +8,8 @@ import os
 
 from tools.get_onehot import get_onehot
 from tools.log import log
+
+tfd = tfp.distributions
 
 DATASET = "val"
 
@@ -39,34 +42,33 @@ def run_clevr_task(agent, task_id, task_dict):
     model = task_dict.model
     total_free_energy = 0.
     loss = 0.
+    code_shape = agent.compute_code_shape(task_dict)
     for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
         expanded_loss = tf.expand_dims(loss, 0)
         inputs = [onehot_task_id, expanded_loss, image_tensor, embedded_question]
         inputs = [tf.cast(tf.expand_dims(input, axis=0), dtype=tf.float32)
                   for input in inputs]
-        prior_code_prediction = tf.zeros(agent.compute_code_shape(task_dict))
-        prior_loss_prediction = 0.
+        prior_code_prediction = tfd.Normal(
+            loc=tf.zeros(code_shape), scale=tf.ones(code_shape))
+        prior_loss_prediction = tfd.Normal(loc=0., scale=1.)
         with tf.GradientTape() as tape:
             outputs = model(inputs)
-            [log(output.shape, color="blue") for output in outputs]
-            (normies, reconstructions, code, code_prediction,
-             loss_prediction, actions) = agent.unpack(outputs, task_dict)
             # compute free energy: loss + surprise + complexity - freedom
-            one_hot_action = actions[0]
+            one_hot_action = outputs[-1].sample()
             loss = tf.keras.losses.categorical_crossentropy(
                 one_hot_answer, one_hot_action)
-            log("loss", loss, color="red")
-            free_energy = agent.compute_free_energy(
-                loss=loss, prior_loss_prediction=prior_loss_prediction,
-                normies=normies, reconstructions=reconstructions,
-                code=code, prior_code_prediction=prior_code_prediction,
-                actions=actions
-            )
+            log("clevr loss", loss.numpy().item(0), color="red")
+            free_energy, code_prediction, loss_prediction = agent.compute_free_energy(
+                loss, outputs, task_dict,
+                prior_code_prediction, prior_loss_prediction)
+            log("free energy", free_energy, color="green")
         gradients = tape.gradient([free_energy, model.losses],
                                   model.trainable_variables)
         agent.optimizer.apply_gradients(zip(gradients,
                                             model.trainable_variables))
-        total_free_energy += free_energy
+        prior_code_prediction = code_prediction
+        prior_loss_prediction = loss_prediction
+        total_free_energy = total_free_energy + free_energy
     return total_free_energy
 
 
