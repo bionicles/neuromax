@@ -131,7 +131,7 @@ class Agent:
         outputs.append(code_prediction)
         output_roles.append("code_prediction")
         # now we add the code prediction to the world model and predict loss
-        code_prediction_sample = code_prediction.sample().sample()
+        code_prediction_sample = code_prediction.sample()
         log("code_prediction_sample", code_prediction_sample, color="yellow")
         world_model = tf.concat([world_model, code_prediction_sample], 1)
         log("world_model", world_model, color="yellow")
