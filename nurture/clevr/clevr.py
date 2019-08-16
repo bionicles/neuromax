@@ -37,6 +37,7 @@ nlp = spacy.load("en_vectors_web_lg")
 
 
 def run_clevr_task(agent, task_id, task_dict):
+    log("\n\nRUN_CLEVR_TASK", color="black_on_white")
     onehot_task_id = get_onehot(task_id, list(agent.tasks.keys()))
     dataset = task_dict.dataset.shuffle(10000)
     model = task_dict.model

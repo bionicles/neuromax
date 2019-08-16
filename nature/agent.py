@@ -20,7 +20,7 @@ K = tf.keras
 L = K.layers
 B = tf.keras.backend
 
-PREDICTOR_UNITS, PREDICTOR_ACTIVATION = 32, "tanh"
+UNITS, FN = 32, "tanh"
 MIN_CODE_ATOMS, MAX_CODE_ATOMS = 8, 32
 EPISODES_PER_PRACTICE_SESSION = 5
 IMAGE_SHAPE = (64, 64, 4)
@@ -66,6 +66,8 @@ class Agent:
             for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
 
     def make_task_model(self, task_id, task_dict):
+        log("\n\nMAKE_TASK_MODEL FOR {task_id}",
+            color="black_on_white")
         # we track lists of all the things
         codes, outputs, output_roles = [], [], []
         # we make an input for the task_id and encode it
@@ -117,17 +119,7 @@ class Agent:
         judgment = self.shared_model(code)
         world_model = tf.concat([code, judgment], 1)
         # we predict next code
-        # flat_world = tf.squeeze(world_model, -1)
-        code_predictor = K.Sequential([
-            K.Input(world_model.shape),
-            tfpl.DenseReparameterization(
-                PREDICTOR_UNITS, PREDICTOR_ACTIVATION),
-            tfpl.DenseReparameterization(
-                PREDICTOR_UNITS, PREDICTOR_ACTIVATION),
-            tfpl.DenseReparameterization(
-                tfpl.IndependentNormal.params_size(code.shape)
-            ),
-            tfpl.IndependentNormal(code.shape)])
+        code_predictor = self.pull_distribution(world_model.shape, code.shape)
         code_prediction = code_predictor(world_model)
         outputs.append(code_prediction)
         output_roles.append("code_prediction")
@@ -137,21 +129,11 @@ class Agent:
             code_prediction_sample = tf.squeeze(code_prediction_sample, axis=axis)
         world_model = B.concatenate([world_model, code_prediction_sample], -1)
         log("world_model", world_model, color="yellow")
-        # flat_world = tf.squeeze(world_model, -1)
-        loss_predictor = K.Sequential([
-            K.Input(world_model.shape),
-            tfpl.DenseReparameterization(
-                PREDICTOR_UNITS, PREDICTOR_ACTIVATION),
-            tfpl.DenseReparameterization(
-                PREDICTOR_UNITS, PREDICTOR_ACTIVATION),
-            tfpl.DenseReparameterization(
-                tfpl.IndependentNormal.params_size(self.loss_spec.shape)
-            ),
-            tfpl.IndependentNormal(self.loss_spec.shape)])
+        loss_predictor = self.pull_distribution(
+            world_model.shape, self.loss_spec.shape)
         loss_prediction = loss_predictor(world_model)
         outputs.append(loss_prediction)
         output_roles.append("loss_prediction")
-        # loss_prediction = tf.expand_dims(loss_prediction, -1)
         world_model = B.concatenate([world_model, loss_prediction], -1)
         world_model_spec = get_spec(format="code", shape=world_model.shape[1:])
         # we pass codes and judgments to actuators to get actions
@@ -190,6 +172,29 @@ class Agent:
             loc, scale = tf.split(output, 2, axis=-1)
             return tfd.Normal(loc=loc, scale=scale)
         return output
+
+    def pull_distribution(self, in_shape, desired_shape, batch_size=1,
+                          units=UNITS, fn=FN):
+        shapes = tfd.Normal.param_shapes(desired_shape)
+        loc, scale = tf.zeros(shapes["loc"]), tf.ones(shapes["scale"])
+        prior_tensor = tf.concat([loc, scale], -1)
+        last_layer_units = prior_tensor.size
+        prior = tfd.Normal(loc, scale)
+        return K.Sequential([
+            K.Input(in_shape, batch_size=batch_size),
+            L.Flatten(),
+            tfpl.DenseReparameterization(units, fn),
+            tfpl.DenseReparameterization(units, fn),
+            tfpl.DenseReparameterization(last_layer_units),
+            L.Reshape(prior_tensor.shape),
+            tfpl.DistributionLambda(
+                make_distribution_fn=lambda x: tfd.Normal(
+                    loc=x[..., 0], scale=tf.math.abs(x[..., 1])
+                ),
+                convert_to_tensor_fn=lambda s: s.sample(),
+                activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+            )
+        ])
 
     @staticmethod
     def unpack(output_roles, outputs):
@@ -292,7 +297,8 @@ class Agent:
         if distribution is None:
             maybe_choice_or_choices = random.sample(options, int(n))
         else:
-            maybe_choice_or_choices = np.random.choice(options, n, p=distribution).tolist()
+            maybe_choice_or_choices = np.random.choice(
+                options, n, p=distribution).tolist()
         if n is 1:
             maybe_choice_or_choices = maybe_choice_or_choices[0]
         self.parameters[pkey] = maybe_choice_or_choices

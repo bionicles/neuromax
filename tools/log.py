@@ -6,6 +6,16 @@ T = Terminal()
 
 DEBUG = True
 
+# color
+# black
+# red
+# green
+# yellow
+# blue
+# magenta
+# cyan
+# white
+
 
 def log(*args, color="white", debug=DEBUG):
     args = str(args)
