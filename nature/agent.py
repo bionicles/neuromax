@@ -130,7 +130,12 @@ class Agent:
         # now we add the code prediction to the world model and predict loss
         code_prediction_sample = code_prediction.sample()
         log("code_prediction_sample", code_prediction_sample.shape, color="red_on_white")
-        world_model = B.concatenate([world_model, code_prediction_sample], -1)
+        try:
+            world_model = B.concatenate([world_model, code_prediction_sample], -1)
+        except Exception as e:
+            log(e, color="white_on_red")
+            world_model, code_prediction_sample = self.fix_shapes(world_model), self.fix_shapes(code_prediction_sample)
+            world_model = B.concatenate([world_model, code_prediction_sample], -1)
         log("world_model", world_model, color="yellow")
         loss_predictor = self.pull_distribution(
             world_model.shape, self.loss_spec.shape)
@@ -334,3 +339,12 @@ class Agent:
         sampled_tensor = method(shape, dtype=dtype)
         self.parameters[pkey] = sampled_tensor
         return sampled_tensor
+
+    def fix_shapes(self, tensor):
+        axis = 0
+        for axis_shape in tensor.shape[1:]:
+            axis += 1
+            if axis_shape == 1:
+                tensor = tf.squeeze(tensor, axis=axis)
+                axis -= 1
+        return tensor
