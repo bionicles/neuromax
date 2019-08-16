@@ -68,6 +68,7 @@ class KConvSet1D(L.Layer):
         coords = tf.slice(placeholder_with_coords, [0, 1], [-1, 1])
         coords = tf.expand_dims(coords, -1)
         code = tf.squeeze(code, 0)
+        code = tf.reshape(code, (-1, 1))
         return tf.map_fn(
             lambda coord: self.kernel(tf.concat([code, coord], 0)),
             coords)
