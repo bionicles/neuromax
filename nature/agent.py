@@ -9,6 +9,7 @@ from tools.map_attrdict import map_attrdict
 from tools.sum_entropy import sum_entropy
 from tools.show_model import show_model
 from tools.get_spec import get_spec
+from tools.get_size import get_size
 from tools.log import log
 
 from nature.bricks.graph_model.graph_model import GraphModel
@@ -21,7 +22,7 @@ L = K.layers
 B = tf.keras.backend
 
 UNITS, FN = 32, "tanh"
-MIN_CODE_ATOMS, MAX_CODE_ATOMS = 8, 32
+MIN_CODE_ATOMS, MAX_CODE_ATOMS = 4, 16
 EPISODES_PER_PRACTICE_SESSION = 5
 IMAGE_SHAPE = (64, 64, 4)
 BATCH_SIZE = 1
@@ -119,14 +120,16 @@ class Agent:
         judgment = self.shared_model(code)
         world_model = tf.concat([code, judgment], 1)
         # we predict next code
+        # squeezed_model = tf.squeeze(world_model, 0)
+        # log("squeezed_model", squeezed_model, color="red")
         code_predictor = self.pull_distribution(world_model.shape, code.shape)
         code_prediction = code_predictor(world_model)
+        log("code_prediction", code_prediction, color="red_on_white")
         outputs.append(code_prediction)
         output_roles.append("code_prediction")
         # now we add the code prediction to the world model and predict loss
         code_prediction_sample = code_prediction.sample()
-        for axis in [2, -1]:
-            code_prediction_sample = tf.squeeze(code_prediction_sample, axis=axis)
+        log("code_prediction_sample", code_prediction_sample.shape, color="red_on_white")
         world_model = B.concatenate([world_model, code_prediction_sample], -1)
         log("world_model", world_model, color="yellow")
         loss_predictor = self.pull_distribution(
@@ -175,11 +178,17 @@ class Agent:
 
     def pull_distribution(self, in_shape, desired_shape, batch_size=1,
                           units=UNITS, fn=FN):
+        in_shape = list(in_shape)[1:]
         shapes = tfd.Normal.param_shapes(desired_shape)
         loc, scale = tf.zeros(shapes["loc"]), tf.ones(shapes["scale"])
         prior_tensor = tf.concat([loc, scale], -1)
-        last_layer_units = prior_tensor.size
+        prior_tensor = tf.expand_dims(prior_tensor, -1)
+        last_layer_units = get_size(prior_tensor.shape)
         prior = tfd.Normal(loc, scale)
+        log(f"pull_distribution {in_shape} --> {desired_shape}", color="red")
+        log(f"pull_distribution prior_tensor.shape {prior_tensor.shape}", color="red")
+        log(f"pull_distribution prior {prior}", color="red")
+        log(f"pull_distribution prior_sample {prior.sample().shape}", color="red")
         return K.Sequential([
             K.Input(in_shape, batch_size=batch_size),
             L.Flatten(),
@@ -189,7 +198,7 @@ class Agent:
             L.Reshape(prior_tensor.shape),
             tfpl.DistributionLambda(
                 make_distribution_fn=lambda x: tfd.Normal(
-                    loc=x[..., 0], scale=tf.math.abs(x[..., 1])
+                    loc=x[..., 0, :], scale=tf.math.abs(x[..., 1, :])
                 ),
                 convert_to_tensor_fn=lambda s: s.sample(),
                 activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
