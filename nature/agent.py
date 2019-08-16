@@ -124,7 +124,7 @@ class Agent:
             tfpl.DenseReparameterization(
                 PREDICTOR_UNITS, PREDICTOR_ACTIVATION),
             tfpl.DenseReparameterization(
-                tfpl.IndependentNormal.param_shapes(code.shape)
+                tfpl.IndependentNormal.params_size(code.shape)
             ),
             tfpl.IndependentNormal(code.shape)])
         code_prediction = code_predictor(world_model)
@@ -143,7 +143,7 @@ class Agent:
             tfpl.DenseReparameterization(
                 PREDICTOR_UNITS, PREDICTOR_ACTIVATION),
             tfpl.DenseReparameterization(
-                tfpl.IndependentNormal.param_shapes(self.loss_spec.shape)
+                tfpl.IndependentNormal.params_size(self.loss_spec.shape)
             ),
             tfpl.IndependentNormal(self.loss_spec.shape)])
         loss_prediction = loss_predictor(world_model)
