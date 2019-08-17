@@ -104,8 +104,11 @@ class Interface(L.Layer):
             if "image" in model_type:
                 self.normie = tf.slice(self.normie,
                                        [0, 0, 0, 0], [-1, -1, -1, 4])
-            self.out = [self.normie, self.out]
-        self.model = K.Model(self.input_layer, self.out)
+            outputs = [self.normie, self.out]
+        else:
+            outputs = self.out
+        log("outputs", outputs, color="yellow")
+        self.model = K.Model(self.input_layer, outputs)
         self.built = True
 
     @staticmethod
@@ -200,9 +203,10 @@ class Interface(L.Layer):
         p = tfpl.DenseReparameterization(n)(out)
         distribution = tfd.OneHotCategorical if one_hot else tfd.Categorical
         self.out = tfpl.DistributionLambda(
-            make_distribution_fn=lambda p: distribution(probs=p),
-            convert_to_tensor_fn=lambda d: d.sample(),
-            activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+            make_distribution_fn=lambda p: distribution(
+                probs=p, name=f"{prior_type}_{self.brick_id}"),
+            # convert_to_tensor_fn=lambda d: d.sample(),
+            # activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
         )(p)
 
     def make_normal(self, units=UNITS, fn=FN):
@@ -224,10 +228,11 @@ class Interface(L.Layer):
             loc, scale = reshape(loc), reshape(scale)
         self.out = tfpl.DistributionLambda(
                 make_distribution_fn=lambda x: tfd.Normal(
-                    x[0], tf.math.abs(x[1])
+                    loc=x[0], scale=tf.math.abs(x[1]),
+                    name=f"N_{self.brick_id}"
                 ),
-                convert_to_tensor_fn=lambda d: d.sample(),
-                activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+                # convert_to_tensor_fn=lambda d: d.sample(),
+                # activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
             )([loc, scale])
 
     def call_model(self, input):

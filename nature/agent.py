@@ -130,7 +130,7 @@ class Agent:
                             batch_size=BATCH_SIZE)
             normie, input_code = sensor(input)
             outputs.append(normie)
-            output_roles.append("normie")
+            output_roles.append(f"normie-{input_number}")
             outputs.append(input_code)
             output_roles.append(f"code-{input_number}")
             codes.append(input_code)
@@ -147,18 +147,24 @@ class Agent:
         # graph_model always expects the max number of codes
         # so we make placeholders
         n_placeholders = self.n_in - (2 + len(task_dict.inputs))
-        [codes.append(get_prior(self.code_spec.shape)) for _ in range(n_placeholders)]
-        judgments = self.graph_model(codes)
+        for _ in range(n_placeholders):
+            prior, _ = get_prior(self.code_spec.shape)
+            codes.append(prior)
+        samples = [c.sample() for c in codes]
+        samples = [tf.expand_dims(s, 0) if len(s.shape) < 3 else s
+                   for s in samples]
+        judgments = self.graph_model(samples)
         # we save the predictions
         for judgment_number, judgment in enumerate(judgments):
             if judgment_number < (self.n_in - n_placeholders):
                 output_roles.append(f"prediction-{judgment_number}")
                 outputs.append(judgment)
-        judgment = tf.concat([j.sample() for j in judgments], 1)
+        # we concatenate the jusgments for the actuators
+        j_samples = [j.sample() for j in judgments]
+        j_samples = [tf.expand_dims(js, 0) if len(js.shape) < 3 else js
+                     for js in j_samples]
         log("judgment", judgment.shape, color="yellow")
-        code = tf.concat([j.sample() for j in codes], 1)
-        log("code", code.shape, color="yellow")
-        world_model = tf.concat([judgment, code], 1)
+        world_model = tf.concat([*samples, *j_samples], 1)
         world_model_spec = get_spec(format="code", shape=world_model.shape)
         log("world_model", world_model, color="green")
         log("world_model_spec", world_model_spec, color="green")
@@ -177,7 +183,11 @@ class Agent:
                 action = actuator(world_model)
             outputs.append(action)
             output_roles.append(f"action-{output_number}")
-        # we build a model
+        log("")
+        log("we build a model", color="blue")
+        [log("input", n, i, color="yellow") for n, i in enumerate(inputs)]
+        [log("output", n, o, "hasattr op?", hasattr(o, "op"), color="yellow")
+         for n, o in enumerate(outputs)]
         task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
         task_dict.output_roles = output_roles
         task_dict.model = task_model
@@ -192,23 +202,20 @@ class Agent:
 
     @staticmethod
     def unpack(output_roles, outputs):
-        normies, reconstructions, actions = [], [], []
+        normies, codes, reconstructions, predictions, actions = [], [], [], [], []
         for role, output in zip(output_roles, outputs):
             log("unpack", role, output.shape, color="blue")
-            if role == "normie":  # tensor
+            if "normie" in role:  # tensor
                 normies.append(output)
-            elif role == "reconstruction":  # tensor
+            elif "code" in role:  # tensor
+                codes.append(output)
+            elif "reconstruction" in role:  # tensor
                 reconstructions.append(output)
-            elif role == "code_prediction":  # distribution
-                code_prediction = output
-            elif role == "loss_prediction":  # distribution
-                loss_prediction = output
-            elif role == "code":  # tensor
-                code = output
+            elif "prediction" in role:  # distribution
+                predictions.append(output)
             elif "action" in role:  # distribution
                 actions.append(output)
-        return (normies, reconstructions, code, code_prediction,
-                loss_prediction, actions)
+        return (normies, reconstructions, codes, predictions, actions)
 
     def pull_numbers(self, pkey, a, b, step=1, n=1):
         """

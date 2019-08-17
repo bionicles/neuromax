@@ -1,5 +1,6 @@
 # graph_model.py - bion
 # why?: learn to map N inputs to M outputs with graph GP
+import tensorflow_probability as tfp
 import tensorflow_addons as tfa
 import tensorflow as tf
 from nature.bricks.graph_model.graph import Graph
@@ -14,7 +15,8 @@ from tools.show_model import show_model
 from tools.get_spec import get_spec
 from tools.log import log
 
-InstanceNormalization = tfa.layers.InstanceNormalization
+# InstanceNormalization = tfa.layers.InstanceNormalization
+tfpl = tfp.layers
 K = tf.keras
 L = K.layers
 
@@ -59,7 +61,7 @@ class GraphModel:
                       self.agent.code_spec)(out)
             for out in self.outputs]
         self.model = K.Model(self.inputs, self.outputs)
-        self.__call__ = self.model.__call__
+        # self.__call__ = self.model.__call__
 
     def get_output(self, id):
         """
@@ -76,10 +78,6 @@ class GraphModel:
             parent_ids = list(self.G.predecessors(id))
             if node_type is not "input":
                 inputs = [self.get_output(parent_id) for parent_id in parent_ids]
-                log("inputs:", inputs)
-                inputs = [L.DenseReparameterization(self.agent.code_spec.size, "tanh")(input)
-                          if hasattr(input, "entropy") else input
-                          for input in inputs]
                 inputs = L.Concatenate(1)(inputs) if len(inputs) > 1 else inputs[0]
                 if node_type is "recurrent":
                     output = inputs
@@ -98,11 +96,11 @@ class GraphModel:
                             log("error concatenating inputs to output", e, color="red")
             else:
                 output = self.build_brick(id)
-            if node_type is not "input":
-                try:
-                    output = InstanceNormalization()(output)
-                except Exception as e:
-                    log(f"can't use instance norm\n", e)
+            # if node_type is not "input":
+            #     try:
+            #         output = InstanceNormalization()(output)
+            #     except Exception as e:
+            #         log(f"can't use instance norm\n", e)
             self.G.node[id]["output"] = output
             log(f"got {node_type} node output", output)
             return output
