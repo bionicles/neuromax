@@ -53,12 +53,16 @@ def run_clevr_task(agent, task_id, task_dict):
                   for input in inputs]
         with tf.GradientTape() as tape:
             outputs = model(inputs)
-            log("clevr model outputs:", color="red")
-            [log(r, o.shape, color="red")
+            log("clevr model outputs:", color="blue")
+            [log(f"{r}: [{list(o.shape)}]", color="yellow")
              for r, o in zip(task_dict.output_roles, outputs)]
+            one_hot_distribution = outputs[-1]
+            log("one_hot_answer", one_hot_answer, color="white")
+            log("one_hot_distribution", one_hot_distribution, color="white")
             one_hot_action = outputs[-1].sample()
+            log("one_hot_action", one_hot_action, color="white")
             loss = tf.keras.losses.categorical_crossentropy(
-                one_hot_answer, one_hot_action)
+                one_hot_answer, tf.cast(one_hot_action, tf.float32))
             log("clevr loss", loss.numpy().item(0), color="red")
             free_energy, predictions = agent.compute_free_energy(
                 loss, outputs, prior_predictions, task_dict)
