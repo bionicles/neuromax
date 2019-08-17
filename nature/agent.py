@@ -6,10 +6,9 @@ import numpy as np
 import random
 
 from tools.map_attrdict import map_attrdict
-from tools.sum_entropy import sum_entropy
 from tools.show_model import show_model
+from tools.get_prior import get_prior
 from tools.get_spec import get_spec
-from tools.get_size import get_size
 from tools.log import log
 
 from nature.bricks.graph_model.graph_model import GraphModel
@@ -21,7 +20,6 @@ K = tf.keras
 L = K.layers
 B = tf.keras.backend
 
-UNITS, FN = 32, "tanh"
 MIN_CODE_ATOMS, MAX_CODE_ATOMS = 4, 16
 EPISODES_PER_PRACTICE_SESSION = 5
 IMAGE_SHAPE = (64, 64, 4)
@@ -54,9 +52,9 @@ class Agent:
                                         self.code_spec, self.image_spec)
         # we build the shared GraphModel
         self.decide_n_in_n_out()
-        self.shared_model = GraphModel(self)
+        self.graph_model = GraphModel(self)
         # we build a keras model for each task
-        self.tasks = map_attrdict(self.make_task_model, self.tasks)
+        self.tasks = map_attrdict(self.pull_model, self.tasks)
 
     def train(self):
         """Run EPISODES_PER_PRACTICE_SESSION episodes
@@ -66,8 +64,40 @@ class Agent:
           for task_key, task_dict in self.tasks.items()]
             for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
 
-    def make_task_model(self, task_id, task_dict):
-        log("\n\nMAKE_TASK_MODEL FOR {task_id}",
+    def compute_free_energy(
+        self, loss, outputs, task_dict, prior_predictions
+    ):
+        normies, reconstructions, codes, predictions, actions = self.unpack(
+            task_dict.output_roles, outputs)
+        surprise = tf.math.reduce_sum([
+            -1 * prediction.log_prob(code)
+            for prediction, code in zip(prior_predictions, codes)])
+        reconstruction_error = 0.
+        for normie, reconstruction in zip(normies, reconstructions):
+            if hasattr(reconstruction, "entropy"):
+                error = -1 * reconstruction.log_prob(normie)
+                error = error - reconstruction.entropy()
+            else:
+                error = tf.keras.losses.MSE(normie, reconstruction)
+            reconstruction_error = reconstruction_error + error
+        freedom = tf.math.reduce_sum([action.entropy() for action in actions])
+        free_energy = loss + reconstruction_error + surprise - freedom
+        return free_energy, predictions
+
+    def decide_n_in_n_out(self):
+        """
+        Decide how many inputs and outputs are needed for the graph_model
+        n_in = task_code + loss_code + max(len(task_dict.inputs))
+        n_out = n_in predictions + max(len(task_dict.outputs))
+        """
+        self.n_in = 2 + max([len(task_dict.inputs)
+                             for _, task_dict in self.tasks.items()])
+        self.n_out = self.n_in + max([len(task_dict.outputs)
+                                      for _, task_dict in self.tasks.items()])
+
+    def pull_model(self, task_id, task_dict):
+        print("")
+        log("MAKE_TASK_MODEL FOR {task_id}",
             color="black_on_white")
         # we track lists of all the things
         codes, outputs, output_roles = [], [], []
@@ -89,9 +119,11 @@ class Agent:
                 sensor = self.image_sensor
                 actuator = self.image_actuator
             else:
-                sensor = Interface(self, task_id, in_spec, self.code_spec,
+                sensor = Interface(self, f"{task_id}_sensor",
+                                   in_spec, self.code_spec,
                                    input_number=input_number)
-                actuator = Interface(self, task_id, self.code_spec, in_spec,
+                actuator = Interface(self, f"{task_id}_actuator",
+                                     self.code_spec, in_spec,
                                      input_number=input_number)
             # we make an input and use it on the sensor to get normies & codes
             input = K.Input(task_dict.inputs[input_number].shape,
@@ -99,8 +131,11 @@ class Agent:
             normie, input_code = sensor(input)
             outputs.append(normie)
             output_roles.append("normie")
+            outputs.append(input_code)
+            output_roles.append(f"code-{input_number}")
             codes.append(input_code)
             inputs.append(input)
+            # now we reconstruct the normie
             if in_spec.format is "ragged":
                 placeholder = tf.ones_like(normie)
                 placeholder = tf.slice(placeholder, [0, 0, 0], [-1, -1, 1])
@@ -108,37 +143,25 @@ class Agent:
             else:
                 reconstruction = actuator(input_code)
             outputs.append(reconstruction)
-            output_roles.append("reconstruction")
-        # the full code is task_code, loss_code, input_codes
-        samples = [c.sample() for c in codes]
-        [log(sample.shape, color="yellow") for sample in samples]
-        code = tf.einsum('ijk->kij', tf.concat(samples, -1))
-        code = tf.reshape(code, (1, -1, 1))
-        log("code", code, color="yellow")
-        outputs.append(code)
-        output_roles.append("code")
-        judgment = self.shared_model(code)
-        world_model = tf.concat([code, judgment], 1)
-        # we predict next code
-        # squeezed_model = tf.squeeze(world_model, 0)
-        # log("squeezed_model", squeezed_model, color="red")
-        code_predictor = self.pull_distribution(world_model.shape, code.shape)
-        code_prediction = code_predictor(world_model)
-        log("code_prediction", code_prediction, color="red_on_white")
-        outputs.append(code_prediction)
-        output_roles.append("code_prediction")
-        # now we add the code prediction to the world model and predict loss
-        code_prediction_sample = code_prediction.sample()
-        log("code_prediction_sample.shape", code_prediction_sample.shape, color="yellow")
-        log("world_model.shape", world_model.shape, color="yellow")
-        world_model = B.concatenate([world_model, code_prediction_sample], 1)
-        loss_predictor = self.pull_distribution(
-            world_model.shape, self.loss_spec.shape)
-        loss_prediction = loss_predictor(world_model)
-        outputs.append(loss_prediction)
-        output_roles.append("loss_prediction")
-        world_model = B.concatenate([world_model, loss_prediction], 1)
-        world_model_spec = get_spec(format="code", shape=world_model.shape[1:])
+            output_roles.append(f"reconstruction-{input_number}")
+        # graph_model always expects the max number of codes
+        # so we make placeholders
+        n_placeholders = self.n_in - (2 + len(task_dict.inputs))
+        [codes.append(get_prior(self.code_spec.shape)) for _ in range(n_placeholders)]
+        judgments = self.graph_model(codes)
+        # we save the predictions
+        for judgment_number, judgment in enumerate(judgments):
+            if judgment_number < (self.n_in - n_placeholders):
+                output_roles.append(f"prediction-{judgment_number}")
+                outputs.append(judgment)
+        judgment = tf.concat([j.sample() for j in judgments], 1)
+        log("judgment", judgment.shape, color="yellow")
+        code = tf.concat([j.sample() for j in codes], 1)
+        log("code", code.shape, color="yellow")
+        world_model = tf.concat([judgment, code], 1)
+        world_model_spec = get_spec(format="code", shape=world_model.shape)
+        log("world_model", world_model, color="green")
+        log("world_model_spec", world_model_spec, color="green")
         # we pass codes and judgments to actuators to get actions
         for output_number, out_spec in enumerate(task_dict.outputs):
             if out_spec.format is "image":
@@ -167,41 +190,6 @@ class Agent:
         n_out = len(task_dict.outputs)
         return (self.code_atoms * (2 + n_in + n_out))
 
-    def make_normal(self, output, role):
-        should_be_distribution = "prediction" in role or "action" in role
-        not_a_distribution = not hasattr(output, "entropy")
-        if should_be_distribution and not_a_distribution:
-            log("make a distribution for", role)
-            loc, scale = tf.split(output, 2, axis=-1)
-            return tfd.Normal(loc=loc, scale=scale)
-        return output
-
-    def pull_distribution(self, in_shape, desired_shape, batch_size=1,
-                          units=UNITS, fn=FN):
-        in_shape = list(in_shape)[1:]
-        shapes = tfd.Normal.param_shapes(desired_shape)
-        loc, scale = tf.zeros(shapes["loc"]), tf.ones(shapes["scale"])
-        last_layer_units = int(get_size(shapes["loc"]))
-        prior = tfd.Normal(loc, scale)
-        input = K.Input(in_shape, batch_size=batch_size)
-        out = L.Flatten()(input)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        loc_layer = tfpl.DenseReparameterization(last_layer_units)
-        scale_layer = tfpl.DenseReparameterization(last_layer_units)
-        loc, scale = loc_layer(out), scale_layer(out)
-        expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
-        loc, scale = expand(loc), expand(scale)
-        distribution = tfpl.DistributionLambda(
-                make_distribution_fn=lambda x: tfd.Normal(
-                    x[0], tf.math.abs(x[1])
-                ),
-                convert_to_tensor_fn=lambda s: s.sample(),
-                activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
-            )([loc, scale])
-        model = K.Model(input, distribution)
-        return model
-
     @staticmethod
     def unpack(output_roles, outputs):
         normies, reconstructions, actions = [], [], []
@@ -221,27 +209,6 @@ class Agent:
                 actions.append(output)
         return (normies, reconstructions, code, code_prediction,
                 loss_prediction, actions)
-
-    def compute_free_energy(
-        self, loss, outputs, task_dict,
-        prior_code_prediction, prior_loss_prediction
-    ):
-        normies, reconstructions, code, code_prediction, loss_prediction, actions = self.unpack(task_dict.output_roles, outputs)
-        loss_surprise = -1 * prior_loss_prediction.log_prob(loss)
-        code_surprise = -1 * prior_code_prediction.log_prob(code)
-        reconstruction_errors = [
-            tf.keras.losses.MSE(normie, reconstruction)
-            for normie, reconstruction in zip(normies, reconstructions)]
-        reconstruction_error = tf.math.reduce_sum(reconstruction_errors)
-        freedom = sum_entropy(actions)
-        free_energy = loss + loss_surprise + code_surprise + reconstruction_error - freedom
-        return free_energy, code_prediction, loss_prediction
-
-    def decide_n_in_n_out(self):
-        self.max_in = max([len(task_dict.inputs)
-                           for task_id, task_dict in self.tasks.items()])
-        self.max_out = max([len(task_dict.outputs)
-                            for task_id, task_dict in self.tasks.items()])
 
     def pull_numbers(self, pkey, a, b, step=1, n=1):
         """

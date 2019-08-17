@@ -6,9 +6,9 @@ from tools.log import log
 K = tf.keras
 L = K.layers
 
-SET_OPTIONS = [-1, 1, 2, 3, "all_for_one", "one_for_all"]
 MODEL_OPTIONS = ["deep", "wide_deep"]
 MIN_LAYERS, MAX_LAYERS = 1, 2
+SET_OPTIONS = [-1, 1]
 
 
 def get_kernel(agent, brick_id, d_in, d_out, set_size,
@@ -16,10 +16,11 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
     """get a deep or wide/deep dense set kernel"""
     log("get_kernel", brick_id, d_in, d_out, set_size)
     log("agent code spec", agent.code_spec)
-    assert set_size in SET_OPTIONS, f"{set_size} not in {SET_OPTIONS}"
     name = get_unique_id(f"{brick_id}_mlp") if name is None else name
     n_layers = agent.pull_numbers(f"{name}-n_layers", MIN_LAYERS, MAX_LAYERS)
     model_type = agent.pull_choices(f"{name}-model_type", MODEL_OPTIONS)
+    if set_size is None:
+        set_size = agent.pull_choices(f"{name}-set_size", SET_OPTIONS)
     atom1 = K.Input((d_in, ))
     if set_size is -1:
         if input_shape is None:

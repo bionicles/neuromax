@@ -3,10 +3,10 @@ import tensorflow_addons as tfa
 import tensorflow as tf
 
 from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
-from nature.bricks.dense import get_dense_out
 from nature.bricks.k_conv import KConvSet1D
 
 from tools.concat_2D_coords import concat_2D_coords
+from tools.get_prior import get_prior
 from tools.get_spec import get_spec
 from tools.get_size import get_size
 from tools.log import log
@@ -17,6 +17,8 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 K = tf.keras
 L = K.layers
+
+UNITS, FN = 32, "tanh"
 
 
 class Interface(L.Layer):
@@ -56,7 +58,7 @@ class Interface(L.Layer):
         self.pull_choices = agent.pull_choices
         self.agent = agent
         self.task_id, self.in_spec, self.out_spec = task_id, in_spec, out_spec
-        self.brick_id = f"{task_id}_interface_{input_number}_{in_spec.format}_to_{out_spec.format}"
+        self.brick_id = f"{task_id}{'_'+str(input_number) if input_number else ''}_{in_spec.format}_to_{out_spec.format}"
         print("")
         print(f"Interface.__init__ -- {self.brick_id}")
         print("in_spec", in_spec)
@@ -79,8 +81,15 @@ class Interface(L.Layer):
             return
         self.input_layer = K.Input(self.in_spec.shape,
                                    batch_size=self.agent.batch_size)
-        self.normie = InstanceNormalization()(self.input_layer)
-        self.out = self.normie
+        log(f"input layer", self.input_layer)
+        if self.in_spec.format is not "code":
+            try:
+                self.normie = InstanceNormalization()(self.input_layer)
+                self.out = self.normie
+            except Exception as e:
+                log("instance norm failed", e, color="red")
+        else:
+            self.out = self.input_layer
         self.call = self.call_model  # might be overridden in builder fn
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
@@ -89,7 +98,6 @@ class Interface(L.Layer):
             model_type = f"code_interface"
         if in_spec.format is "code" and out_spec.format is not "code":
             model_type = f"{out_spec.format}_actuator"
-        print(f"{model_type} interface input layer", self.input_layer)
         builder_fn = f"self.get_{model_type}_output()"
         eval(builder_fn)
         if ("sensor" in model_type and "loss" not in self.brick_id and "task" not in self.brick_id):
@@ -116,7 +124,6 @@ class Interface(L.Layer):
         self.call = self.call_image_sensor
         self.out = get_image_encoder_output(
             self.agent, self.brick_id, self.out, self.out_spec)
-        self.flatten_resize_reshape()
         self.make_normal()
 
     def call_image_sensor(self, input):
@@ -142,7 +149,6 @@ class Interface(L.Layer):
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "one_for_all")(self.out)
-        self.flatten_resize_reshape()
         self.make_normal()
 
     def call_ragged_sensor(self, inputs):
@@ -157,64 +163,77 @@ class Interface(L.Layer):
         self.placeholder = K.Input(
             (None, 1), batch_size=self.agent.batch_size)
         self.input_layer = [self.input_layer, self.placeholder]
-        doubled_out_shape = list(self.out_spec.shape)
-        doubled_out_shape[-1] *= 2
-        doubled_out_spec = get_spec(shape=doubled_out_shape, format="ragged")
         self.out = KConvSet1D(
-            self.agent, self.brick_id, self.in_spec, doubled_out_spec,
+            self.agent, self.brick_id, self.in_spec, self.out_spec,
             "all_for_one")([self.out, self.placeholder])
 
     def get_box_sensor_output(self):
-        self.flatten_resize_reshape()
         self.make_normal()
 
     def get_box_actuator_output(self):
-        self.flatten_resize_reshape()
         self.make_normal()
 
     def get_float_sensor_output(self):
-        self.flatten_resize_reshape()
         self.make_normal()
 
     def get_float_actuator_output(self):
-        self.flatten_resize_reshape()
         self.make_normal()
 
     def get_code_interface_output(self):
-        self.flatten_resize_reshape()
         self.make_normal()
 
     def get_onehot_sensor_output(self):
-        self.flatten_resize_reshape()
         self.make_normal()
 
     def get_onehot_actuator_output(self):
-        self.flatten_resize_reshape()
-        self.make_categorical()
+        self.make_categorical(one_hot=True)
 
     def get_discrete_actuator_output(self):
-        self.flatten_resize_reshape()
         self.make_categorical()
 
-    def flatten_resize_reshape(self):
-        if len(self.out.shape) > 2:
-            self.out = L.Flatten()(self.out)
-        out = get_dense_out(self.agent, self.brick_id, self.out,
-                            units=self.out_spec.size)
-        if self.out_spec.format is not "code":
-            self.out = self.reshape(out)
+    def make_categorical(self, units=UNITS, fn=FN, one_hot=False):
+        prior_type = "one_hot_categorical" if one_hot else "categorical"
+        prior, n = get_prior(self.out_spec.shape, prior_type=prior_type)
+        out = L.Flatten()(self.out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        p = tfpl.DenseReparameterization(n)(out)
+        distribution = tfd.OneHotCategorical if one_hot else tfd.Categorical
+        self.out = tfpl.DistributionLambda(
+            make_distribution_fn=lambda p: distribution(probs=p),
+            convert_to_tensor_fn=lambda d: d.sample(),
+            activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+        )(p)
 
-    def make_categorical(self):
-        self.out = tfpl.DenseReparameterization(
-            tfpl.OneHotCategorical.params_size(self.out_spec.size)
-            )(self.out)
-        self.out = tfpl.OneHotCategorical(self.out_spec.size)(self.out)
-
-    def make_normal(self):
-        self.out = tfpl.DenseReparameterization(
-            tfpl.IndependentNormal.params_size(self.out_spec.shape)
-            )(self.out)
-        self.out = tfpl.IndependentNormal(self.out_spec.shape)(self.out)
+    def make_normal(self, units=UNITS, fn=FN):
+        prior, shapes = get_prior(self.out_spec.shape, "normal")
+        last_layer_units = int(get_size(shapes["loc"]))
+        out = L.Flatten()(self.out)
+        if out.shape[-1] is None:
+            out = tf.einsum('ij->ji', out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        loc_layer = tfpl.DenseReparameterization(last_layer_units)
+        scale_layer = tfpl.DenseReparameterization(last_layer_units)
+        loc, scale = loc_layer(out), scale_layer(out)
+        if self.out_spec.shape[-1] is 1:
+            expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
+            loc, scale = expand(loc), expand(scale)
+        else:
+            reshape = L.Reshape(shapes["loc"])
+            loc, scale = reshape(loc), reshape(scale)
+        self.out = tfpl.DistributionLambda(
+                make_distribution_fn=lambda x: tfd.Normal(
+                    x[0], tf.math.abs(x[1])
+                ),
+                convert_to_tensor_fn=lambda d: d.sample(),
+                activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+            )([loc, scale])
 
     def call_model(self, input):
+        print("")
+        log("call interface", self.brick_id, color="blue")
+        log("in_spec", self.in_spec, color="blue")
+        log("out_spec", self.out_spec, color="blue")
+        log("input", input, color="yellow")
         return self.model(input)

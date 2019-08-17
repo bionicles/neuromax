@@ -3,12 +3,15 @@
 import tensorflow_addons as tfa
 import tensorflow as tf
 from nature.bricks.graph_model.graph import Graph
+from nature.bricks.interface import Interface
 from nature.bricks.conv_1D import get_conv_1D
 from nature.bricks.k_conv import KConvSet1D
-from nature.bricks.kernel import get_kernel
+from nature.bricks.get_mlp import get_mlp
+# from nature.bricks.kernel import get_kernel
 
 from tools.get_unique_id import get_unique_id
 from tools.show_model import show_model
+from tools.get_spec import get_spec
 from tools.log import log
 
 InstanceNormalization = tfa.layers.InstanceNormalization
@@ -16,7 +19,7 @@ K = tf.keras
 L = K.layers
 
 # bricks
-BRICK_OPTIONS = ["conv1d", "kernel", "k_conv"]
+BRICK_OPTIONS = ["conv1d", "mlp"]
 
 
 class GraphModel:
@@ -36,8 +39,12 @@ class GraphModel:
         self.make_model()
         show_model(self.model, ".", "M", "png")
 
-    def __call__(self, code):
-        return self.model(code)
+    def __call__(self, codes):
+        print("")
+        log("GraphModel.__call__", color="blue")
+        log(self.agent.code_spec, color="blue")
+        [log(c, color="yellow") for c in codes]
+        return self.model(codes)
 
     def make_model(self):
         """Build the keras model described by a graph."""
@@ -45,6 +52,12 @@ class GraphModel:
                         for id in list(self.G.predecessors("sink"))]
         self.inputs = [self.G.node[id]['brick']
                        for id in list(self.G.successors('source'))]
+        log("GraphModel.make_model building output interfaces", color="red")
+        self.outputs = [
+            Interface(self.agent, "shared",
+                      get_spec(format="code", shape=out.shape),
+                      self.agent.code_spec)(out)
+            for out in self.outputs]
         self.model = K.Model(self.inputs, self.outputs)
         self.__call__ = self.model.__call__
 
@@ -64,6 +77,9 @@ class GraphModel:
             if node_type is not "input":
                 inputs = [self.get_output(parent_id) for parent_id in parent_ids]
                 log("inputs:", inputs)
+                inputs = [L.DenseReparameterization(self.agent.code_spec.size, "tanh")(input)
+                          if hasattr(input, "entropy") else input
+                          for input in inputs]
                 inputs = L.Concatenate(1)(inputs) if len(inputs) > 1 else inputs[0]
                 if node_type is "recurrent":
                     output = inputs
@@ -75,19 +91,20 @@ class GraphModel:
                         try:
                             output = L.Add()([inputs, output])
                         except Exception as e:
-                            log("error adding inputs to output", e)
+                            log("error adding inputs to output", e, color="red")
                         try:
                             output = L.Concatenate(1)([inputs, output])
                         except Exception as e:
-                            log("error concatenating inputs to output", e)
+                            log("error concatenating inputs to output", e, color="red")
             else:
                 output = self.build_brick(id)
-            try:
-                output = InstanceNormalization()(output)
-            except Exception as e:
-                log(f"can't use instance norm\n", e)
+            if node_type is not "input":
+                try:
+                    output = InstanceNormalization()(output)
+                except Exception as e:
+                    log(f"can't use instance norm\n", e)
             self.G.node[id]["output"] = output
-            log(f"got {node_type} output", output)
+            log(f"got {node_type} node output", output)
             return output
 
     def build_brick(self, id, inputs=None):
@@ -95,7 +112,8 @@ class GraphModel:
         node = self.G.node[id]
         log('build brick for', node)
         if node["node_type"] == "input":
-            brick = L.Input((None, 1))
+            brick = L.Input(self.agent.code_spec.shape,
+                            batch_size=self.agent.batch_size)
             brick_type = "input"
         else:
             d_in = d_out = inputs.shape[-1]
@@ -104,8 +122,8 @@ class GraphModel:
             log("building a ", brick_type, "brick")
         if brick_type == "conv1d":
             brick = get_conv_1D(self.agent, id, d_out)
-        if brick_type == "kernel":
-            brick = get_kernel(self.agent, id, d_in, d_out, -1)
+        if brick_type == "mlp":
+            brick = get_mlp(inputs.shape, last_layer=(d_out, "tanh"))
         if "k_conv" in brick_type:
             brick = KConvSet1D(self.agent, id, d_in, d_out, None)
         # if brick_type == "attention":
