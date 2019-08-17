@@ -111,6 +111,45 @@ class Interface(L.Layer):
         self.model = K.Model(self.input_layer, outputs)
         self.built = True
 
+    def make_categorical(self, units=UNITS, fn=FN, one_hot=False):
+        prior_type = "one_hot_categorical" if one_hot else "categorical"
+        prior, n = get_prior(self.out_spec.shape, prior_type=prior_type)
+        out = L.Flatten()(self.out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        p = tfpl.DenseReparameterization(n)(out)
+        distribution = tfd.OneHotCategorical if one_hot else tfd.Categorical
+        self.out = tfpl.DistributionLambda(
+            make_distribution_fn=lambda p: distribution(
+                probs=p, name=f"{prior_type}_{self.brick_id}"),
+            activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+        )(p)
+
+    def make_normal(self, units=UNITS, fn=FN):
+        prior, shapes = get_prior(self.out_spec.shape, "normal")
+        last_units = int(get_size(shapes["loc"]))
+        out = L.Flatten()(self.out)
+        if out.shape[-1] is None:
+            out = tf.einsum('ij->ji', out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        out = tfpl.DenseReparameterization(units, fn)(out)
+        loc_layer = tfpl.DenseReparameterization(last_units)
+        scale_layer = tfpl.DenseReparameterization(last_units)
+        loc, scale = loc_layer(out), scale_layer(out)
+        if self.out_spec.shape[-1] is 1:
+            expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
+            loc, scale = expand(loc), expand(scale)
+        else:
+            reshape = L.Reshape(shapes["loc"])
+            loc, scale = reshape(loc), reshape(scale)
+        self.out = tfpl.DistributionLambda(
+                make_distribution_fn=lambda x: tfd.Normal(
+                    loc=x[0], scale=tf.math.abs(x[1]),
+                    name=f"N_{self.brick_id}"
+                ),
+                activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+            )([loc, scale])
+
     @staticmethod
     def get_hw(shape):
         """Returns height and width of image shape (no batch dim)"""
@@ -162,13 +201,13 @@ class Interface(L.Layer):
 
     def get_ragged_actuator_output(self):
         """all input elements innervate each output element (all for one)"""
-        self.shape_var_id = self.out_spec.variables[0][0]
         self.placeholder = K.Input(
             (None, 1), batch_size=self.agent.batch_size)
         self.input_layer = [self.input_layer, self.placeholder]
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "all_for_one")([self.out, self.placeholder])
+        log("get_ragged_actuator_output", self.out, color="red")
 
     def get_box_sensor_output(self):
         self.make_normal()
@@ -193,47 +232,6 @@ class Interface(L.Layer):
 
     def get_discrete_actuator_output(self):
         self.make_categorical()
-
-    def make_categorical(self, units=UNITS, fn=FN, one_hot=False):
-        prior_type = "one_hot_categorical" if one_hot else "categorical"
-        prior, n = get_prior(self.out_spec.shape, prior_type=prior_type)
-        out = L.Flatten()(self.out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        p = tfpl.DenseReparameterization(n)(out)
-        distribution = tfd.OneHotCategorical if one_hot else tfd.Categorical
-        self.out = tfpl.DistributionLambda(
-            make_distribution_fn=lambda p: distribution(
-                probs=p, name=f"{prior_type}_{self.brick_id}"),
-            # convert_to_tensor_fn=lambda d: d.sample(),
-            # activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
-        )(p)
-
-    def make_normal(self, units=UNITS, fn=FN):
-        prior, shapes = get_prior(self.out_spec.shape, "normal")
-        last_layer_units = int(get_size(shapes["loc"]))
-        out = L.Flatten()(self.out)
-        if out.shape[-1] is None:
-            out = tf.einsum('ij->ji', out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        loc_layer = tfpl.DenseReparameterization(last_layer_units)
-        scale_layer = tfpl.DenseReparameterization(last_layer_units)
-        loc, scale = loc_layer(out), scale_layer(out)
-        if self.out_spec.shape[-1] is 1:
-            expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
-            loc, scale = expand(loc), expand(scale)
-        else:
-            reshape = L.Reshape(shapes["loc"])
-            loc, scale = reshape(loc), reshape(scale)
-        self.out = tfpl.DistributionLambda(
-                make_distribution_fn=lambda x: tfd.Normal(
-                    loc=x[0], scale=tf.math.abs(x[1]),
-                    name=f"N_{self.brick_id}"
-                ),
-                # convert_to_tensor_fn=lambda d: d.sample(),
-                # activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
-            )([loc, scale])
 
     def call_model(self, input):
         print("")

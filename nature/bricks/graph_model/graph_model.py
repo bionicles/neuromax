@@ -1,10 +1,9 @@
 # graph_model.py - bion
 # why?: learn to map N inputs to M outputs with graph GP
 import tensorflow_probability as tfp
-import tensorflow_addons as tfa
+# import tensorflow_addons as tfa
 import tensorflow as tf
 from nature.bricks.graph_model.graph import Graph
-from nature.bricks.interface import Interface
 from nature.bricks.conv_1D import get_conv_1D
 from nature.bricks.k_conv import KConvSet1D
 from nature.bricks.get_mlp import get_mlp
@@ -12,7 +11,6 @@ from nature.bricks.get_mlp import get_mlp
 
 from tools.get_unique_id import get_unique_id
 from tools.show_model import show_model
-from tools.get_spec import get_spec
 from tools.log import log
 
 # InstanceNormalization = tfa.layers.InstanceNormalization
@@ -24,43 +22,31 @@ L = K.layers
 BRICK_OPTIONS = ["conv1d", "mlp"]
 
 
-class GraphModel:
+class GraphModel(L.Layer):
     """
     GraphModel maps [n_in x code_shape] -> [n_out x code_shape]
     because we need to be able to handle multiple inputs
     """
 
-    def __init__(self, agent, n_in=None, code_shape=None, n_out=None):
+    def __init__(self, agent):
+        super(GraphModel, self).__init__()
         log("\nGraphModel.__init__")
         self.agent = agent
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
-        self.name = get_unique_id("GraphModel")
-        self.graph = Graph(agent, self.name)
+        self.graph = Graph(agent, get_unique_id("GraphModel"))
         self.G = self.graph.G
-        self.make_model()
+        self.build([agent.code_spec.shape for i in range(agent.n_in)])
         show_model(self.model, ".", "M", "png")
 
-    def __call__(self, codes):
-        print("")
-        log("GraphModel.__call__", color="blue")
-        log(self.agent.code_spec, color="blue")
-        [log(c, color="yellow") for c in codes]
-        return self.model(codes)
-
-    def make_model(self):
+    def build(self, input_shapes):
         """Build the keras model described by a graph."""
         self.outputs = [self.get_output(id)
                         for id in list(self.G.predecessors("sink"))]
         self.inputs = [self.G.node[id]['brick']
                        for id in list(self.G.successors('source'))]
-        log("GraphModel.make_model building output interfaces", color="red")
-        self.outputs = [
-            Interface(self.agent, "shared",
-                      get_spec(format="code", shape=out.shape),
-                      self.agent.code_spec)(out)
-            for out in self.outputs]
         self.model = K.Model(self.inputs, self.outputs)
+        return self
         # self.__call__ = self.model.__call__
 
     def get_output(self, id):
@@ -132,3 +118,10 @@ class GraphModel:
         self.G.node[id]['brick'] = brick
         log("built a", brick_type)
         return brick
+
+    def call(self, codes):
+        print("")
+        log("GraphModel.__call__", color="blue")
+        log(self.agent.code_spec, color="blue")
+        [log(c, color="yellow") for c in codes]
+        return self.model(codes)

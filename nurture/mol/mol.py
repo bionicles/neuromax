@@ -13,6 +13,7 @@ from nurture.mol.make_dataset import load, load_proteins
 from nurture.gym.spaces.ragged import Ragged
 
 from tools.get_onehot import get_onehot
+from tools.log import log
 
 K = tf.keras
 B, L = K.backend, K.layers
@@ -25,7 +26,8 @@ MAX_STEPS = 420
 
 
 def run_mol_task(agent, task_key, task_dict):
-    dataset = task_dict.dataset.shuffle(10000)
+    dataset = task_dict.dataset_fn()
+    log(dataset)
     model = task_dict.model
     total_free_energy = 0.
     onehot_task_key = get_onehot(task_key, list(agent.tasks.keys()))
@@ -91,7 +93,7 @@ def parse_item(example):
 
 def read_mol_dataset():
     print("read_shards")
-    dataset_path = os.path.join('nurture', 'mol', 'datasets', 'tfrecord', 'cif')
+    dataset_path = os.path.join(".", 'nurture', 'mol', 'datasets', 'tfrecord', 'cif')
     n_records = len(os.listdir(dataset_path))
     filenames = [os.path.join(dataset_path, str(i) + '.tfrecord') for i in range(n_records)]
     dataset = tf.data.TFRecordDataset(filenames, 'ZLIB')

@@ -69,9 +69,11 @@ class KConvSet1D(L.Layer):
         coords = tf.expand_dims(coords, -1)
         code = tf.squeeze(code, 0)
         code = tf.reshape(code, (-1, 1))
-        return tf.map_fn(
+        output = tf.map_fn(
             lambda coord: self.kernel(tf.concat([code, coord], 0)),
             coords)
+        log("call_all_for_one output", output, color="red")
+        return output
 
     # TODO: find a nice recursive approach to N-ary set convolutions
     def call_for_one(self, atoms):

@@ -56,55 +56,16 @@ class Agent:
         # we build a keras model for each task
         self.tasks = map_attrdict(self.pull_model, self.tasks)
 
-    def train(self):
-        """Run EPISODES_PER_PRACTICE_SESSION episodes
-        uses functions stored in self.tasks (indicated in neuromax.py tasks)
-        """
-        [[task_dict.run_agent_on_task(self, task_key, task_dict)
-          for task_key, task_dict in self.tasks.items()]
-            for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
-
-    def compute_free_energy(
-        self, loss, outputs, task_dict, prior_predictions
-    ):
-        normies, reconstructions, codes, predictions, actions = self.unpack(
-            task_dict.output_roles, outputs)
-        surprise = tf.math.reduce_sum([
-            -1 * prediction.log_prob(code)
-            for prediction, code in zip(prior_predictions, codes)])
-        reconstruction_error = 0.
-        for normie, reconstruction in zip(normies, reconstructions):
-            if hasattr(reconstruction, "entropy"):
-                error = -1 * reconstruction.log_prob(normie)
-                error = error - reconstruction.entropy()
-            else:
-                error = tf.keras.losses.MSE(normie, reconstruction)
-            reconstruction_error = reconstruction_error + error
-        freedom = tf.math.reduce_sum([action.entropy() for action in actions])
-        free_energy = loss + reconstruction_error + surprise - freedom
-        return free_energy, predictions
-
-    def decide_n_in_n_out(self):
-        """
-        Decide how many inputs and outputs are needed for the graph_model
-        n_in = task_code + loss_code + max(len(task_dict.inputs))
-        n_out = n_in predictions + max(len(task_dict.outputs))
-        """
-        self.n_in = 2 + max([len(task_dict.inputs)
-                             for _, task_dict in self.tasks.items()])
-        self.n_out = self.n_in + max([len(task_dict.outputs)
-                                      for _, task_dict in self.tasks.items()])
-
     def pull_model(self, task_id, task_dict):
         print("")
         log("MAKE_TASK_MODEL FOR {task_id}",
             color="black_on_white")
         # we track lists of all the things
-        codes, outputs, output_roles = [], [], []
+        outputs, output_roles = [], []
         # we make an input for the task_id and encode it
         task_id_input = K.Input(self.task_id_spec.shape, batch_size=BATCH_SIZE)
         task_code = self.task_sensor(task_id_input)
-        codes.append(task_code)
+        codes = [task_code]
         # likewise for loss float value
         loss_input = K.Input((1,), batch_size=BATCH_SIZE)
         task_dict.loss_sensor = Interface(self, task_id + "loss_sensor",
@@ -147,24 +108,29 @@ class Agent:
         # graph_model always expects the max number of codes
         # so we make placeholders
         n_placeholders = self.n_in - (2 + len(task_dict.inputs))
+        log("n_placeholders", n_placeholders, color="red")
         for _ in range(n_placeholders):
             prior, _ = get_prior(self.code_spec.shape)
             codes.append(prior)
         samples = [c.sample() for c in codes]
         samples = [tf.expand_dims(s, 0) if len(s.shape) < 3 else s
                    for s in samples]
-        judgments = self.graph_model(samples)
-        # we save the predictions
-        for judgment_number, judgment in enumerate(judgments):
-            if judgment_number < (self.n_in - n_placeholders):
-                output_roles.append(f"prediction-{judgment_number}")
-                outputs.append(judgment)
-        # we concatenate the jusgments for the actuators
-        j_samples = [j.sample() for j in judgments]
-        j_samples = [tf.expand_dims(js, 0) if len(js.shape) < 3 else js
-                     for js in j_samples]
-        log("judgment", judgment.shape, color="yellow")
-        world_model = tf.concat([*samples, *j_samples], 1)
+        predictions = self.graph_model(samples)
+        log("we save the predictions", color="black_on_white")
+        for prediction_number, prediction in enumerate(predictions):
+            distribution = Interface(
+                self, "shared", get_spec(
+                    format="code", shape=prediction.shape),
+                self.code_spec)(prediction)
+            log("judgment_number", prediction_number, color="red")
+            log("prediction", prediction, color="red")
+            output_roles.append(f"prediction-{prediction_number}")
+            outputs.append(distribution)
+        log("we assemble a world model for the actuators")
+        predictions = [
+            tf.expand_dims(p, 0) if len(p.shape) < 3 else p
+            for p in predictions]
+        world_model = tf.concat([*samples, *predictions], 1)
         world_model_spec = get_spec(format="code", shape=world_model.shape)
         log("world_model", world_model, color="green")
         log("world_model_spec", world_model_spec, color="green")
@@ -186,19 +152,13 @@ class Agent:
         log("")
         log("we build a model", color="blue")
         [log("input", n, i, color="yellow") for n, i in enumerate(inputs)]
-        [log("output", n, o, "hasattr op?", hasattr(o, "op"), color="yellow")
-         for n, o in enumerate(outputs)]
+        self.unpack(output_roles, outputs)
         task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
         task_dict.output_roles = output_roles
         task_dict.model = task_model
         show_model(task_model, ".", task_id, "png")
         [log(role, output.shape, color="green") for role, output in zip(output_roles, outputs)]
         return task_id, task_dict
-
-    def compute_code_shape(self, task_dict):
-        n_in = len(task_dict.inputs)
-        n_out = len(task_dict.outputs)
-        return (self.code_atoms * (2 + n_in + n_out))
 
     @staticmethod
     def unpack(output_roles, outputs):
@@ -216,6 +176,45 @@ class Agent:
             elif "action" in role:  # distribution
                 actions.append(output)
         return (normies, reconstructions, codes, predictions, actions)
+
+    def decide_n_in_n_out(self):
+        """
+        Decide how many inputs and outputs are needed for the graph_model
+        n_in = task_code + loss_code + max(len(task_dict.inputs))
+        n_out = n_in predictions + max(len(task_dict.outputs))
+        """
+        self.n_in = 2 + max([len(task_dict.inputs)
+                             for _, task_dict in self.tasks.items()])
+        self.n_out = self.n_in + max([len(task_dict.outputs)
+                                      for _, task_dict in self.tasks.items()])
+
+    def compute_free_energy(
+        self, loss, outputs, task_dict, prior_predictions
+    ):
+        normies, reconstructions, codes, predictions, actions = self.unpack(
+            task_dict.output_roles, outputs)
+        surprise = tf.math.reduce_sum([
+            -1 * prediction.log_prob(code)
+            for prediction, code in zip(prior_predictions, codes)])
+        reconstruction_error = 0.
+        for normie, reconstruction in zip(normies, reconstructions):
+            if hasattr(reconstruction, "entropy"):
+                error = -1 * reconstruction.log_prob(normie)
+                error = error - reconstruction.entropy()
+            else:
+                error = tf.keras.losses.MSE(normie, reconstruction)
+            reconstruction_error = reconstruction_error + error
+        freedom = tf.math.reduce_sum([action.entropy() for action in actions])
+        free_energy = loss + reconstruction_error + surprise - freedom
+        return free_energy, predictions
+
+    def train(self):
+        """Run EPISODES_PER_PRACTICE_SESSION episodes
+        uses functions stored in self.tasks (indicated in neuromax.py tasks)
+        """
+        [[task_dict.run_agent_on_task(self, task_key, task_dict)
+          for task_key, task_dict in self.tasks.items()]
+            for episode_number in range(EPISODES_PER_PRACTICE_SESSION)]
 
     def pull_numbers(self, pkey, a, b, step=1, n=1):
         """
