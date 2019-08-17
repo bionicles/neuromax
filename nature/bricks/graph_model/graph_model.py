@@ -60,7 +60,7 @@ class GraphModel(L.Layer):
         node = self.G.node[id]
         keys = node.keys()
         node_type = node["node_type"]
-        log('get output for', node)
+        # log('get output for', node)
         if node["output"] is not None:
             return node["output"]
         else:
@@ -72,17 +72,17 @@ class GraphModel(L.Layer):
                     output = inputs
                 else:
                     brick = self.build_brick(id, inputs)
-                    log(f"got brick", brick)
+                    # log(f"got brick", brick)
                     output = brick(inputs)
                     if "output_shape" not in keys and "gives_feedback" not in keys:
                         try:
                             output = L.Add()([inputs, output])
                         except Exception as e:
                             log("error adding inputs to output", e, color="red")
-                        try:
-                            output = L.Concatenate(1)([inputs, output])
-                        except Exception as e:
-                            log("error concatenating inputs to output", e, color="red")
+                            try:
+                                output = L.Concatenate(1)([inputs, output])
+                            except Exception as e:
+                                log("error concatenating in+out", e, color="red")
             else:
                 output = self.build_brick(id)
             # if node_type is not "input":
@@ -91,13 +91,13 @@ class GraphModel(L.Layer):
             #     except Exception as e:
             #         log(f"can't use instance norm\n", e)
             self.G.node[id]["output"] = output
-            log(f"got {node_type} node output", output)
+            # log(f"got {node_type} node output", output)
             return output
 
     def build_brick(self, id, inputs=None):
         """Make the keras operation to be executed at a given node."""
         node = self.G.node[id]
-        log('build brick for', node)
+        # log('build brick for', node)
         if node["node_type"] == "input":
             brick = L.Input(self.agent.code_spec.shape,
                             batch_size=self.agent.batch_size)
@@ -106,7 +106,7 @@ class GraphModel(L.Layer):
             d_in = d_out = inputs.shape[-1]
             brick_type = self.agent.pull_choices(
                 f"{id}_brick_type", BRICK_OPTIONS)
-            log("building a ", brick_type, "brick")
+            # log("building a ", brick_type, "brick")
         if brick_type == "conv1d":
             brick = get_conv_1D(self.agent, id, d_out)
         if brick_type == "mlp":
@@ -119,14 +119,13 @@ class GraphModel(L.Layer):
         #     brick = DNC_RNN(self.agent, id)
         self.G.node[id]['brick_type'] = brick_type
         self.G.node[id]['brick'] = brick
-        log("built a", brick_type)
+        # log("built a", brick_type)
         return brick
 
     def call(self, codes):
         log("")
         log("GraphModel call", color="blue")
         log("code spec", self.agent.code_spec, color="blue")
-        log("codes in:", color="yellow")
-        [log(c, color="yellow") for c in codes]
+        log(f"got {len(codes)} codes", color="yellow")
         log("")
         return self.model(codes)

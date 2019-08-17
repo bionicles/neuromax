@@ -243,6 +243,14 @@ class Interface(L.Layer):
         print("")
         log("call interface", self.brick_id, color="blue")
         log("in_spec", self.in_spec, color="blue")
+        if isinstance(input, list):
+            [log("input.shape", i.shape, color="yellow") for i in input]
+        else:
+            log("input.shape", input.shape, color="yellow")
+        output = self.model(input)
         log("out_spec", self.out_spec, color="blue")
-        log("input", input, color="yellow")
-        return self.model(input)
+        if isinstance(output, list):
+            [log("output.shape", o.shape, color="yellow") for o in output]
+        else:
+            log("output.shape", output.shape, color="yellow")
+        return output

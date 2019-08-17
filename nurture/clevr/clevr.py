@@ -39,6 +39,7 @@ nlp = spacy.load("en_vectors_web_lg")
 def run_clevr_task(agent, task_id, task_dict):
     log("\n\nRUN_CLEVR_TASK", color="black_on_white")
     onehot_task_id = get_onehot(task_id, list(agent.tasks.keys()))
+    prior_predictions = agent.priors
     dataset = task_dict.dataset.shuffle(10000)
     model = task_dict.model
     total_free_energy = 0.
@@ -51,20 +52,21 @@ def run_clevr_task(agent, task_id, task_dict):
                   for input in inputs]
         with tf.GradientTape() as tape:
             outputs = model(inputs)
-            log("compute free energy: loss + surprise + complexity - freedom",
-                color="green")
+            log("clevr model outputs:", color="red")
+            [log(r, o.shape, color="red")
+             for r, o in zip(task_dict.output_roles, outputs)]
             one_hot_action = outputs[-1].sample()
             loss = tf.keras.losses.categorical_crossentropy(
                 one_hot_answer, one_hot_action)
             log("clevr loss", loss.numpy().item(0), color="red")
             free_energy, predictions = agent.compute_free_energy(
-                loss, outputs, task_dict)
-            log("free energy", free_energy, color="green")
+                loss, outputs, prior_predictions, task_dict)
         gradients = tape.gradient([free_energy, model.losses],
                                   model.trainable_variables)
         agent.optimizer.apply_gradients(zip(gradients,
                                             model.trainable_variables))
         total_free_energy = total_free_energy + free_energy
+        prior_predictions = predictions
     return total_free_energy
 
 

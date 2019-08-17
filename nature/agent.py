@@ -38,34 +38,35 @@ class Agent:
         self.code_spec = get_spec(shape=(self.code_atoms, 1), format="code")
         self.code_spec.size = self.code_atoms
         self.loss_spec = get_spec(format="float", shape=(1,))
-        # we add a sensor for task id
+        log("we add a task id sensor", color="green")
         n_tasks = len(self.tasks.keys())
         self.task_id_spec = get_spec(shape=n_tasks, format="onehot")
         self.task_sensor = Interface(self, "task_id",
                                      self.task_id_spec, self.code_spec)
-        # we add a sensor for images
+        log("we add a sensor for images", color="green")
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image",
                                    add_coords=True)
         self.image_sensor = Interface(self, "image_sensor",
                                       self.image_spec, self.code_spec)
         self.image_actuator = Interface(self, "image_actuator",
                                         self.code_spec, self.image_spec)
-        # we build the shared GraphModel
+        log("we build the shared GraphModel", color="green")
         self.decide_n_in_n_out()
         self.graph_model = GraphModel(self)
-        # we build a keras model for each task
+        log("we build a keras model for each task", color="green")
         self.tasks = map_attrdict(self.pull_model, self.tasks)
+        self.priors = [tf.zeros(self.code_spec.shape)
+                       for _ in range(self.n_in)]
 
     def pull_model(self, task_id, task_dict):
         print("")
         log(f"agent.pull_model {task_id}", color="black_on_white")
-        # we track lists of all the things
         outputs, output_roles = [], []
-        # we make an input for the task_id and encode it
+        log("we encode the task's id", color="green")
         task_id_input = K.Input(self.task_id_spec.shape, batch_size=BATCH_SIZE)
         task_code = self.task_sensor(task_id_input)
         codes = [task_code]
-        # likewise for loss float value
+        log("likewise for loss float value", color="green")
         loss_input = K.Input((1,), batch_size=BATCH_SIZE)
         task_dict.loss_sensor = Interface(self, task_id + "loss_sensor",
                                           self.loss_spec, self.code_spec)
@@ -74,7 +75,7 @@ class Agent:
         inputs = [task_id_input, loss_input]
         log(f"now we'll autoencode {task_id} inputs", color="green")
         for in_number, in_spec in enumerate(task_dict.inputs):
-            # we'll need a sensor and an actuator
+            log(f"input {in_number} needs a sensor and an actuator", color="green")
             if in_spec.format is "image":
                 sensor = self.image_sensor
                 actuator = self.image_actuator
@@ -85,7 +86,8 @@ class Agent:
                 actuator = Interface(self, f"{task_id}_actuator",
                                      self.code_spec, in_spec,
                                      in_number=in_number)
-            # we make an input and use it on the sensor to get normies & codes
+            log("we pass an input to the sensor to get normies & codes",
+                color="green")
             input = K.Input(task_dict.inputs[in_number].shape,
                             batch_size=BATCH_SIZE)
             normie, input_code = sensor(input)
@@ -95,7 +97,7 @@ class Agent:
             output_roles.append(f"code-{in_number}")
             codes.append(input_code)
             inputs.append(input)
-            # now we reconstruct the normie
+            log("now we reconstruct the normie from the code", color="green")
             if in_spec.format is "ragged":
                 placeholder = tf.ones_like(normie)
                 placeholder = tf.slice(placeholder, [0, 0, 0], [-1, -1, 1])
@@ -104,17 +106,21 @@ class Agent:
                 reconstruction = actuator(input_code)
             outputs.append(reconstruction)
             output_roles.append(f"reconstruction-{in_number}")
-        # graph_model always expects the max number of codes
         log("we make placeholders for agent.graph_model", color="green")
         n_placeholders = self.n_in - (2 + len(task_dict.inputs))
-        for _ in range(n_placeholders):
-            prior, _ = get_prior(self.code_spec.shape)
-            codes.append(prior)
+        if n_placeholders < 1:
+            log("no placeholders to make...moving on", color="green")
+        else:
+            for _ in range(n_placeholders):
+                prior, _ = get_prior(self.code_spec.shape)
+                codes.append(prior)
+        log(f"GraphModel prefers tensors, so we sample {len(codes)} codes", color="green")
         samples = [c.sample() for c in codes]
         samples = [tf.expand_dims(s, 0) if len(s.shape) < 3 else s
                    for s in samples]
+        log("now we pass code samples to GraphModel:", color="green")
         predictions = self.graph_model(samples)
-        log("we save the predictions", color="green")
+        log("then we save the predictions", color="green")
         for prediction_number, prediction in enumerate(predictions):
             distribution = Interface(
                 self, "shared", get_spec(
@@ -128,7 +134,8 @@ class Agent:
             for p in predictions]
         world_model = tf.concat([*samples, *predictions], 1)
         world_model_spec = get_spec(format="code", shape=world_model.shape)
-        # we pass codes and judgments to actuators to get actions
+        log("we pass codes and judgments to actuators to get actions",
+            color="green")
         for output_number, out_spec in enumerate(task_dict.outputs):
             if out_spec.format is "image":
                 actuator = self.image_actuator
@@ -144,21 +151,23 @@ class Agent:
             outputs.append(action)
             output_roles.append(f"action-{output_number}")
         log("")
-        log("we build a model", color="blue")
+        log("we build a model", color="green")
+        log("with inputs:", color="yellow")
         [log("input", n, i, color="yellow") for n, i in enumerate(inputs)]
+        log("")
+        log("and outputs:", color="green")
         self.unpack(output_roles, outputs)
         task_model = K.Model(inputs, outputs, name=f"{task_id}_model")
         task_dict.output_roles = output_roles
         task_dict.model = task_model
         show_model(task_model, ".", task_id, "png")
-        [log(role, output.shape, color="green") for role, output in zip(output_roles, outputs)]
         return task_id, task_dict
 
     @staticmethod
     def unpack(output_roles, outputs):
         normies, codes, reconstructions, predictions, actions = [], [], [], [], []
         for role, output in zip(output_roles, outputs):
-            log("unpack", role, output.shape, color="blue")
+            log("unpack", role, output.shape, color="green")
             if "normie" in role:  # tensor
                 normies.append(output)
             elif "code" in role:  # tensor
@@ -185,6 +194,7 @@ class Agent:
     def compute_free_energy(
         self, loss, outputs, task_dict, prior_predictions
     ):
+        log("free_energy = loss + error + surprise - freedom", color="green")
         normies, reconstructions, codes, predictions, actions = self.unpack(
             task_dict.output_roles, outputs)
         surprise = tf.math.reduce_sum([
@@ -200,6 +210,7 @@ class Agent:
             reconstruction_error = reconstruction_error + error
         freedom = tf.math.reduce_sum([action.entropy() for action in actions])
         free_energy = loss + reconstruction_error + surprise - freedom
+        log("free energy", free_energy, color="green")
         return free_energy, predictions
 
     def train(self):
