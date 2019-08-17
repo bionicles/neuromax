@@ -45,7 +45,7 @@ def run_clevr_task(agent, task_id, task_dict):
     model = task_dict.model
     total_free_energy = 0.
     loss = 0.
-    for image_tensor, embedded_question, one_hot_answer in dataset.take(
+    for image_tensor, embedded_question, one_hot_answer, question, answer in dataset.take(
             task_dict.examples_per_episode):
         expanded_loss = tf.expand_dims(loss, 0)
         inputs = [onehot_task_id, expanded_loss, image_tensor, embedded_question]
@@ -53,14 +53,17 @@ def run_clevr_task(agent, task_id, task_dict):
                   for input in inputs]
         with tf.GradientTape() as tape:
             outputs = model(inputs)
-            log("clevr model outputs:", color="blue")
-            [log(f"{r}: [{list(o.shape)}]", color="yellow")
-             for r, o in zip(task_dict.output_roles, outputs)]
             one_hot_distribution = outputs[-1]
-            log("one_hot_answer", one_hot_answer, color="white")
-            log("one_hot_distribution", one_hot_distribution, color="white")
-            one_hot_action = outputs[-1].sample()
-            log("one_hot_action", one_hot_action, color="white")
+            index = one_hot_answer.numpy().tolist().index(1)
+            y_pred = answer_choices[index]
+            log("")
+            log(question.numpy().decode(), color="green")
+            log("y_true:", answer.numpy().decode(), color="green")
+            log("y_pred:", y_pred, color="green")
+            log("")
+            # log("one_hot_distribution", one_hot_distribution, color="white")
+            one_hot_action = one_hot_distribution.sample()
+            # log("one_hot_action", one_hot_action, color="white")
             loss = tf.keras.losses.categorical_crossentropy(
                 one_hot_answer, tf.cast(one_hot_action, tf.float32))
             log("clevr loss", loss.numpy().item(0), color="red")
@@ -97,16 +100,16 @@ def generate_clevr_item():
     image_tensor = tf.convert_to_tensor(imread(image_path), dtype=tf.int32)
     image_tensor = tf.einsum("WHC->HWC", image_tensor)
     question = image_data['question']
-    question = nlp(question)
-    embedded_question = tf.convert_to_tensor(question.vector)
-    tensors = [tf.convert_to_tensor(word.vector) for word in question]
+    nlp_question = nlp(question)
+    embedded_question = tf.convert_to_tensor(nlp_question.vector)
+    tensors = [tf.convert_to_tensor(word.vector) for word in nlp_question]
     tensors.append(embedded_question)
     tensors = [tf.expand_dims(tensor, 0) for tensor in tensors]
     question_embedding = tf.concat(tensors, axis=0)
     answer = image_data['answer']
     one_hot_answer = get_onehot(answer, answer_choices)
     row_number += 1
-    yield (image_tensor, question_embedding, one_hot_answer)
+    yield (image_tensor, question_embedding, one_hot_answer, question, answer)
 
 
 def read_clevr_dataset():
@@ -114,4 +117,5 @@ def read_clevr_dataset():
     row_number = 0
     get_dataframe()
     return tf.data.Dataset.from_generator(generate_clevr_item,
-                                          (tf.float32, tf.float32, tf.float32))
+                                          (tf.float32, tf.float32, tf.float32,
+                                           tf.string, tf.string))
