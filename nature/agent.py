@@ -58,8 +58,7 @@ class Agent:
 
     def pull_model(self, task_id, task_dict):
         print("")
-        log("MAKE_TASK_MODEL FOR {task_id}",
-            color="black_on_white")
+        log(f"agent.pull_model {task_id}", color="black_on_white")
         # we track lists of all the things
         outputs, output_roles = [], []
         # we make an input for the task_id and encode it
@@ -73,8 +72,8 @@ class Agent:
         loss_code = task_dict.loss_sensor(loss_input)
         codes.append(loss_code)
         inputs = [task_id_input, loss_input]
-        # now we'll encode the inputs
-        for input_number, in_spec in enumerate(task_dict.inputs):
+        log(f"now we'll autoencode {task_id} inputs", color="green")
+        for in_number, in_spec in enumerate(task_dict.inputs):
             # we'll need a sensor and an actuator
             if in_spec.format is "image":
                 sensor = self.image_sensor
@@ -82,18 +81,18 @@ class Agent:
             else:
                 sensor = Interface(self, f"{task_id}_sensor",
                                    in_spec, self.code_spec,
-                                   input_number=input_number)
+                                   in_number=in_number)
                 actuator = Interface(self, f"{task_id}_actuator",
                                      self.code_spec, in_spec,
-                                     input_number=input_number)
+                                     in_number=in_number)
             # we make an input and use it on the sensor to get normies & codes
-            input = K.Input(task_dict.inputs[input_number].shape,
+            input = K.Input(task_dict.inputs[in_number].shape,
                             batch_size=BATCH_SIZE)
             normie, input_code = sensor(input)
             outputs.append(normie)
-            output_roles.append(f"normie-{input_number}")
+            output_roles.append(f"normie-{in_number}")
             outputs.append(input_code)
-            output_roles.append(f"code-{input_number}")
+            output_roles.append(f"code-{in_number}")
             codes.append(input_code)
             inputs.append(input)
             # now we reconstruct the normie
@@ -104,11 +103,10 @@ class Agent:
             else:
                 reconstruction = actuator(input_code)
             outputs.append(reconstruction)
-            output_roles.append(f"reconstruction-{input_number}")
+            output_roles.append(f"reconstruction-{in_number}")
         # graph_model always expects the max number of codes
-        # so we make placeholders
+        log("we make placeholders for agent.graph_model", color="green")
         n_placeholders = self.n_in - (2 + len(task_dict.inputs))
-        log("n_placeholders", n_placeholders, color="red")
         for _ in range(n_placeholders):
             prior, _ = get_prior(self.code_spec.shape)
             codes.append(prior)
@@ -116,24 +114,20 @@ class Agent:
         samples = [tf.expand_dims(s, 0) if len(s.shape) < 3 else s
                    for s in samples]
         predictions = self.graph_model(samples)
-        log("we save the predictions", color="black_on_white")
+        log("we save the predictions", color="green")
         for prediction_number, prediction in enumerate(predictions):
             distribution = Interface(
                 self, "shared", get_spec(
                     format="code", shape=prediction.shape),
                 self.code_spec)(prediction)
-            log("judgment_number", prediction_number, color="red")
-            log("prediction", prediction, color="red")
             output_roles.append(f"prediction-{prediction_number}")
             outputs.append(distribution)
-        log("we assemble a world model for the actuators")
+        log("we assemble a world model for the actuators", color="green")
         predictions = [
             tf.expand_dims(p, 0) if len(p.shape) < 3 else p
             for p in predictions]
         world_model = tf.concat([*samples, *predictions], 1)
         world_model_spec = get_spec(format="code", shape=world_model.shape)
-        log("world_model", world_model, color="green")
-        log("world_model_spec", world_model_spec, color="green")
         # we pass codes and judgments to actuators to get actions
         for output_number, out_spec in enumerate(task_dict.outputs):
             if out_spec.format is "image":

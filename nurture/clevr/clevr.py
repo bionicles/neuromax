@@ -43,32 +43,27 @@ def run_clevr_task(agent, task_id, task_dict):
     model = task_dict.model
     total_free_energy = 0.
     loss = 0.
-    code_shape = agent.compute_code_shape(task_dict)
-    for image_tensor, embedded_question, one_hot_answer in dataset.take(task_dict.examples_per_episode):
+    for image_tensor, embedded_question, one_hot_answer in dataset.take(
+            task_dict.examples_per_episode):
         expanded_loss = tf.expand_dims(loss, 0)
         inputs = [onehot_task_id, expanded_loss, image_tensor, embedded_question]
         inputs = [tf.cast(tf.expand_dims(input, axis=0), dtype=tf.float32)
                   for input in inputs]
-        prior_code_prediction = tfd.Normal(
-            loc=tf.zeros(code_shape), scale=tf.ones(code_shape))
-        prior_loss_prediction = tfd.Normal(loc=0., scale=1.)
         with tf.GradientTape() as tape:
             outputs = model(inputs)
-            # compute free energy: loss + surprise + complexity - freedom
+            log("compute free energy: loss + surprise + complexity - freedom",
+                color="green")
             one_hot_action = outputs[-1].sample()
             loss = tf.keras.losses.categorical_crossentropy(
                 one_hot_answer, one_hot_action)
             log("clevr loss", loss.numpy().item(0), color="red")
-            free_energy, code_prediction, loss_prediction = agent.compute_free_energy(
-                loss, outputs, task_dict,
-                prior_code_prediction, prior_loss_prediction)
+            free_energy, predictions = agent.compute_free_energy(
+                loss, outputs, task_dict)
             log("free energy", free_energy, color="green")
         gradients = tape.gradient([free_energy, model.losses],
                                   model.trainable_variables)
         agent.optimizer.apply_gradients(zip(gradients,
                                             model.trainable_variables))
-        prior_code_prediction = code_prediction
-        prior_loss_prediction = loss_prediction
         total_free_energy = total_free_energy + free_energy
     return total_free_energy
 

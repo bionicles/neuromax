@@ -36,18 +36,21 @@ class GraphModel(L.Layer):
         self.pull_choices = agent.pull_choices
         self.graph = Graph(agent, get_unique_id("GraphModel"))
         self.G = self.graph.G
+        self.built = False
         self.build([agent.code_spec.shape for i in range(agent.n_in)])
         show_model(self.model, ".", "M", "png")
 
     def build(self, input_shapes):
         """Build the keras model described by a graph."""
+        if self.built:
+            return self
         self.outputs = [self.get_output(id)
                         for id in list(self.G.predecessors("sink"))]
         self.inputs = [self.G.node[id]['brick']
                        for id in list(self.G.successors('source'))]
         self.model = K.Model(self.inputs, self.outputs)
+        self.built = True
         return self
-        # self.__call__ = self.model.__call__
 
     def get_output(self, id):
         """
@@ -120,8 +123,10 @@ class GraphModel(L.Layer):
         return brick
 
     def call(self, codes):
-        print("")
-        log("GraphModel.__call__", color="blue")
-        log(self.agent.code_spec, color="blue")
+        log("")
+        log("GraphModel call", color="blue")
+        log("code spec", self.agent.code_spec, color="blue")
+        log("codes in:", color="yellow")
         [log(c, color="yellow") for c in codes]
+        log("")
         return self.model(codes)

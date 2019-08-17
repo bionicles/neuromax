@@ -2,6 +2,8 @@ import tensorflow_probability as tfp
 import tensorflow_addons as tfa
 import tensorflow as tf
 
+from nanoid import generate
+
 from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
 from nature.bricks.k_conv import KConvSet1D
 
@@ -42,7 +44,7 @@ class Interface(L.Layer):
         float -> code (loss values)
 
     MESSAGES:
-        code -> code (internal message passing)
+        code -> code (pass messages + predict)
 
     ACTUATORS
         code -> onehot (clevr answer)
@@ -52,18 +54,18 @@ class Interface(L.Layer):
         code -> box (bounded arrays)
     """
 
-    def __init__(self, agent, task_id, in_spec, out_spec, input_number=None):
+    def __init__(self, agent, task_id, in_spec, out_spec, in_number=None):
         super(Interface, self).__init__()
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
         self.agent = agent
         self.task_id, self.in_spec, self.out_spec = task_id, in_spec, out_spec
-        self.brick_id = f"{task_id}{'_'+str(input_number) if input_number else ''}_{in_spec.format}_to_{out_spec.format}"
+        self.brick_id = f"{task_id}{'_'+str(in_number) if in_number else ''}_{in_spec.format}_to_{out_spec.format}_{generate()}"
         print("")
         print(f"Interface.__init__ -- {self.brick_id}")
         print("in_spec", in_spec)
         print("out_spec", out_spec)
-        self.input_layer_number = input_number
+        self.input_layer_number = in_number
         self.shape_variable_key = None
         if self.out_spec.format is not "code":
             self.reshape = L.Reshape(self.out_spec.shape)
@@ -81,7 +83,7 @@ class Interface(L.Layer):
             return
         self.input_layer = K.Input(self.in_spec.shape,
                                    batch_size=self.agent.batch_size)
-        log(f"input layer", self.input_layer)
+        log(f"{self.brick_id} input layer", self.input_layer)
         if self.in_spec.format is not "code":
             try:
                 self.normie = InstanceNormalization()(self.input_layer)
@@ -107,7 +109,7 @@ class Interface(L.Layer):
             outputs = [self.normie, self.out]
         else:
             outputs = self.out
-        log("outputs", outputs, color="yellow")
+        log(f"{self.brick_id} outputs", outputs, color="yellow")
         self.model = K.Model(self.input_layer, outputs)
         self.built = True
 
@@ -139,7 +141,11 @@ class Interface(L.Layer):
         if self.out_spec.shape[-1] is 1:
             expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
             loc, scale = expand(loc), expand(scale)
-        else:
+        loc_shape = list(loc.shape[1:])
+        shapes_loc = shapes["loc"].numpy().tolist()
+        log(loc_shape, shapes_loc, color="red")
+        if loc_shape != shapes_loc:
+            log("reshape", color="red")
             reshape = L.Reshape(shapes["loc"])
             loc, scale = reshape(loc), reshape(scale)
         self.out = tfpl.DistributionLambda(
