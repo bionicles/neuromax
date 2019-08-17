@@ -193,17 +193,17 @@ class Interface(L.Layer):
 
     def get_ragged_sensor_output(self):
         """each input element innervates all output elements (one for all)"""
-        self.call = self.call_ragged_sensor
+        # self.call = self.call_ragged_sensor
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "one_for_all")(self.out)
         self.make_normal()
 
-    def call_ragged_sensor(self, inputs):
-        if "variables" in self.in_spec.keys():
-            for id, n, index in self.in_spec.variables:
-                self.agent.parameters[id] = inputs[n].shape[index]
-        return self.call_model(inputs)
+    # def call_ragged_sensor(self, inputs):
+    #     if "variables" in self.in_spec.keys():
+    #         for id, n, index in self.in_spec.variables:
+    #             self.agent.parameters[id] = inputs[n].shape[index]
+    #     return self.call_model(inputs)
 
     def get_ragged_actuator_output(self):
         """all input elements innervate each output element (all for one)"""
@@ -241,16 +241,16 @@ class Interface(L.Layer):
 
     def call_model(self, input):
         print("")
-        log("call interface", self.brick_id, color="blue")
-        log("in_spec", self.in_spec, color="blue")
+        log("call interface", self.brick_id, color="yellow")
+        log("in_spec", list(self.in_spec.shape) if not isinstance(self.in_spec.shape, int) else self.in_spec.shape, self.in_spec.format, color="blue")
         if isinstance(input, list):
-            [log("input.shape", i.shape, color="yellow") for i in input]
+            [log("input.shape", list(i.shape), color="yellow") for i in input]
         else:
-            log("input.shape", input.shape, color="yellow")
+            log("input.shape", list(input.shape), color="yellow")
         output = self.model(input)
-        log("out_spec", self.out_spec, color="blue")
+        log("out_spec", list(self.out_spec.shape), self.out_spec.format, color="blue")
         if isinstance(output, list):
-            [log("output.shape", o.shape, color="yellow") for o in output]
+            [log("output", list(o.shape), color="yellow") for o in output]
         else:
-            log("output.shape", output.shape, color="yellow")
+            log("output", list(output.shape), color="yellow")
         return output

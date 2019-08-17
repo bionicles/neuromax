@@ -169,8 +169,8 @@ class Agent:
     @staticmethod
     def unpack(output_roles, outputs):
         normies, codes, reconstructions, predictions, actions = [], [], [], [], []
-        for role, output in zip(output_roles, outputs):
-            log("unpack", role, list(output.shape), color="yellow")
+        for n, (role, output) in enumerate(zip(output_roles, outputs)):
+            log(n, role, list(output.shape), color="yellow")
             if "normie" in role:  # tensor
                 normies.append(output)
             elif "code" in role:  # tensor
@@ -190,8 +190,8 @@ class Agent:
             log("")
             log("pair", n)
             entropy = 0.
-            log("y_true", y_true.shape, color="red")
-            log("y_pred", y_pred.shape, color="white")
+            log("y_true", list(y_true.shape), color="red")
+            log("y_pred", list(y_pred.shape), color="white")
             log("")
             time.sleep(1)
             if hasattr(y_pred, "entropy"):
