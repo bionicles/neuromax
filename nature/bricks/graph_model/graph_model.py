@@ -30,7 +30,7 @@ class GraphModel(L.Layer):
 
     def __init__(self, agent):
         super(GraphModel, self).__init__()
-        log("\nGraphModel.__init__")
+        log("GraphModel init")
         self.agent = agent
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices

@@ -21,7 +21,7 @@ MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
 
 class Graph:
     def __init__(self, agent, brick_id):
-        log("Graph.__init__")
+        log("Graph init")
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
         self.brick_id = brick_id + "_graph"

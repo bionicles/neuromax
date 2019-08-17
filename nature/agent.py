@@ -161,13 +161,14 @@ class Agent:
         task_dict.output_roles = output_roles
         task_dict.model = task_model
         show_model(task_model, ".", task_id, "png")
+        log(f"SUCCESS! WE BUILT A {task_id.upper()} MODEL!", color="green")
         return task_id, task_dict
 
     @staticmethod
     def unpack(output_roles, outputs):
         normies, codes, reconstructions, predictions, actions = [], [], [], [], []
         for role, output in zip(output_roles, outputs):
-            log("unpack", role, output.shape, color="green")
+            log("unpack", role, output.shape, color="yellow")
             if "normie" in role:  # tensor
                 normies.append(output)
             elif "code" in role:  # tensor
