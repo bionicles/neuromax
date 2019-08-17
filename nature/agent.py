@@ -57,6 +57,7 @@ class Agent:
         self.tasks = map_attrdict(self.pull_model, self.tasks)
         self.priors = [tf.zeros(self.code_spec.shape)
                        for _ in range(self.n_in)]
+        self.optimizer = tf.keras.optimizers.Adam(amsgrad=True)
 
     def pull_model(self, task_id, task_dict):
         print("")
@@ -181,6 +182,62 @@ class Agent:
                 actions.append(output)
         return (normies, reconstructions, codes, predictions, actions)
 
+    @staticmethod
+    def compute_error_or_surprise(y_true_list, y_pred_list):
+        total = 0.
+        for n, (y_true, y_pred) in enumerate(zip(y_true_list, y_pred_list)):
+            log("")
+            log("pair", n)
+            entropy = 0.
+            log("y_true", y_true, color="red")
+            log("y_pred", y_pred, color="white")
+            if hasattr(y_pred, "entropy"):
+                if hasattr(y_true, "entropy"):
+                    log("y_true and y_pred are both distributions")
+                    error = tfd.kl_divergence(y_true, y_pred)
+                else:
+                    log("y_true is a tensor and y_pred is a distribution")
+                    error = -1 * y_pred.log_prob(y_true)
+                entropy = y_pred.entropy()
+                log("y_pred entropy", entropy)
+            else:
+                if hasattr(y_true, "entropy"):
+                    log("y_true is a distribution and y_pred is a tensor")
+                    error = -1 * y_true.log_prob(y_pred)
+                else:
+                    log("y_true and y_pred are both tensors")
+                    error = tf.keras.losses.MSE(y_true, y_pred)
+            error = tf.reduce_sum(error)
+            error = error - entropy
+            log("error", error)
+            total = total + error
+        log("total", total)
+        return total
+
+    def compute_free_energy(
+        self, loss, outputs, prior_predictions, task_dict
+    ):
+        log("free_energy = loss + error + surprise - freedom", color="green")
+        log("task_dict", task_dict)
+        normies, reconstructions, codes, predictions, actions = self.unpack(
+            task_dict.output_roles, outputs)
+        error_or_surprise = loss
+        log("we compute reconstruction error/surprise", color="green")
+        log("normies", normies)
+        log("reconstructions", reconstructions)
+        error_or_surprise = error_or_surprise + self.compute_error_or_surprise(
+            normies, reconstructions)
+        log("we compute prediction error/surprise", color="green")
+        log("codes", codes)
+        log("predictions", predictions)
+        error_or_surprise = error_or_surprise + self.compute_error_or_surprise(
+            codes, prior_predictions
+        )
+        freedom = tf.math.reduce_sum([action.entropy() for action in actions])
+        free_energy = loss + error_or_surprise - freedom
+        log("free energy", free_energy, color="green")
+        return free_energy, predictions
+
     def decide_n_in_n_out(self):
         """
         Decide how many inputs and outputs are needed for the graph_model
@@ -191,28 +248,6 @@ class Agent:
                              for _, task_dict in self.tasks.items()])
         self.n_out = self.n_in + max([len(task_dict.outputs)
                                       for _, task_dict in self.tasks.items()])
-
-    def compute_free_energy(
-        self, loss, outputs, task_dict, prior_predictions
-    ):
-        log("free_energy = loss + error + surprise - freedom", color="green")
-        normies, reconstructions, codes, predictions, actions = self.unpack(
-            task_dict.output_roles, outputs)
-        surprise = tf.math.reduce_sum([
-            -1 * prediction.log_prob(code)
-            for prediction, code in zip(prior_predictions, codes)])
-        reconstruction_error = 0.
-        for normie, reconstruction in zip(normies, reconstructions):
-            if hasattr(reconstruction, "entropy"):
-                error = -1 * reconstruction.log_prob(normie)
-                error = error - reconstruction.entropy()
-            else:
-                error = tf.keras.losses.MSE(normie, reconstruction)
-            reconstruction_error = reconstruction_error + error
-        freedom = tf.math.reduce_sum([action.entropy() for action in actions])
-        free_energy = loss + reconstruction_error + surprise - freedom
-        log("free energy", free_energy, color="green")
-        return free_energy, predictions
 
     def train(self):
         """Run EPISODES_PER_PRACTICE_SESSION episodes
