@@ -73,7 +73,7 @@ class Agent:
         loss_code = task_dict.loss_sensor(loss_input)
         codes.append(loss_code)
         inputs = [task_id_input, loss_input]
-        log(f"now we'll autoencode {task_id} inputs", color="green")
+        log(f"we autoencode {task_id} inputs", color="green")
         for in_number, in_spec in enumerate(task_dict.inputs):
             log(f"input {in_number} needs a sensor and an actuator", color="green")
             if in_spec.format is "image":
@@ -151,8 +151,7 @@ class Agent:
             outputs.append(action)
             output_roles.append(f"action-{output_number}")
         log("")
-        log("we build a model", color="green")
-        log("with inputs:", color="yellow")
+        log("we build a model with inputs:", color="green")
         [log("input", n, i, color="yellow") for n, i in enumerate(inputs)]
         log("")
         log("and outputs:", color="green")
@@ -161,6 +160,7 @@ class Agent:
         task_dict.output_roles = output_roles
         task_dict.model = task_model
         show_model(task_model, ".", task_id, "png")
+        log("")
         log(f"SUCCESS! WE BUILT A {task_id.upper()} MODEL!", color="green")
         return task_id, task_dict
 

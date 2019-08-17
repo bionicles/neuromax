@@ -51,7 +51,7 @@ class KConvSet1D(L.Layer):
         self.layer_id = f"{brick_id}_KConvSet_{set_size}-{generate()}"
         super(KConvSet1D, self).__init__(name=self.layer_id)
 
-    def call_one_for_all(self, input):  # input unknown needs ragged sensor
+    def call_one_for_all(self, input):  # input unknown = ragged sensor
         """Each input element innervates all output elements"""
         # output = tf.foldl(lambda a, item: a + self.kernel(item), input)
         output = tf.map_fn(lambda item: self.kernel(item), input)
@@ -60,20 +60,26 @@ class KConvSet1D(L.Layer):
         log("call_one_for_all", output.shape, color="blue")
         return output
 
-    def call_all_for_one(self, inputs):  # output unknown needs ragged actuator
+    def call_all_for_one(self, inputs):  # output unknown = ragged actuator
         """All input elements innervate each output element"""
-        log("KConv call_all_for_one", color="red")
+        log("")
+        log("we map all inputs onto one output", color="green")
+        log(f"[{self.in_spec.shape}] in_spec", color="white")
         code, placeholder = inputs
         placeholder_with_coords = concat_1D_coords(placeholder)
         placeholder_with_coords = tf.squeeze(placeholder_with_coords, 0)
         coords = tf.slice(placeholder_with_coords, [0, 1], [-1, 1])
-        coords = tf.expand_dims(coords, -1)
         code = tf.squeeze(code, 0)
-        code = tf.reshape(code, (-1, 1))
+        log(list(code.shape), "code", color="white")
+        log(list(coords.shape), "coords", color="white")
         output = tf.map_fn(
-            lambda coord: self.kernel(tf.concat([code, coord], 0)),
-            coords)
-        log("output shape", output.shape, color="red")
+            lambda coord: self.kernel(
+                tf.concat([code, coord], 0)
+                ), tf.expand_dims(coords, 1))
+        log(f"[{self.out_spec.shape}] out_spec", color="blue")
+        output = tf.reduce_sum(output, 1)
+        log(list(output.shape), "output", color="yellow")
+        log("")
         return output
 
     # TODO: find a nice recursive approach to N-ary set convolutions
