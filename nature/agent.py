@@ -4,6 +4,7 @@ from attrdict import AttrDict
 import tensorflow as tf
 import numpy as np
 import random
+import time
 
 from tools.map_attrdict import map_attrdict
 from tools.show_model import show_model
@@ -153,7 +154,7 @@ class Agent:
             output_roles.append(f"action-{output_number}")
         log("")
         log("we build a model with inputs:", color="green")
-        [log("input", n, i, color="yellow") for n, i in enumerate(inputs)]
+        [log("input", n, list(i.shape), color="yellow") for n, i in enumerate(inputs)]
         log("")
         log("and outputs:", color="green")
         self.unpack(output_roles, outputs)
@@ -169,7 +170,7 @@ class Agent:
     def unpack(output_roles, outputs):
         normies, codes, reconstructions, predictions, actions = [], [], [], [], []
         for role, output in zip(output_roles, outputs):
-            log("unpack", role, output.shape, color="yellow")
+            log("unpack", role, list(output.shape), color="yellow")
             if "normie" in role:  # tensor
                 normies.append(output)
             elif "code" in role:  # tensor
@@ -189,47 +190,54 @@ class Agent:
             log("")
             log("pair", n)
             entropy = 0.
-            log("y_true", y_true, color="red")
-            log("y_pred", y_pred, color="white")
+            log("y_true", y_true.shape, color="red")
+            log("y_pred", y_pred.shape, color="white")
+            log("")
+            time.sleep(1)
             if hasattr(y_pred, "entropy"):
                 if hasattr(y_true, "entropy"):
                     log("y_true and y_pred are both distributions")
                     error = tfd.kl_divergence(y_true, y_pred)
+                    string = "kl_divergence(y_true, y_pred):"
                 else:
                     log("y_true is a tensor and y_pred is a distribution")
                     error = -1 * y_pred.log_prob(y_true)
-                entropy = y_pred.entropy()
-                log("y_pred entropy", entropy)
+                    string = "negative log-probability of y_true given y_pred"
+                entropy = tf.reduce_sum(y_pred.entropy())
             else:
                 if hasattr(y_true, "entropy"):
                     log("y_true is a distribution and y_pred is a tensor")
                     error = -1 * y_true.log_prob(y_pred)
+                    string = "negative log-probability of y_pred given y_true:"
                 else:
                     log("y_true and y_pred are both tensors")
                     error = tf.keras.losses.MSE(y_true, y_pred)
+                    string = "MSE loss:"
             error = tf.reduce_sum(error)
+            log(error.numpy().tolist() if not isinstance(error, float) else error, string)
+            log(entropy.numpy().tolist() if not isinstance(entropy, float) else entropy, "y_pred entropy")
             error = error - entropy
-            log("error", error)
+            log(error.numpy().tolist() if not isinstance(error, float) else error, "error - entropy")
             total = total + error
-        log("total", total)
+        log(total.numpy().tolist() if not isinstance(total, float) else total, "total")
         return total
 
     def compute_free_energy(
         self, loss, outputs, prior_predictions, task_dict
     ):
         log("free_energy = loss + error + surprise - freedom", color="green")
-        log("task_dict", task_dict)
         normies, reconstructions, codes, predictions, actions = self.unpack(
             task_dict.output_roles, outputs)
         error_or_surprise = loss
+        log("")
         log("we compute reconstruction error/surprise", color="green")
-        log("normies", normies)
-        log("reconstructions", reconstructions)
+        # log("normies", normies)
+        # log("reconstructions", reconstructions)
         error_or_surprise = error_or_surprise + self.compute_error_or_surprise(
             normies, reconstructions)
         log("we compute prediction error/surprise", color="green")
-        log("codes", codes)
-        log("predictions", predictions)
+        # log("codes", codes)
+        # log("predictions", predictions)
         error_or_surprise = error_or_surprise + self.compute_error_or_surprise(
             codes, prior_predictions
         )
