@@ -198,7 +198,7 @@ class Agent:
                 if hasattr(y_true, "entropy"):
                     log("y_true and y_pred are both distributions")
                     error = tfd.kl_divergence(y_true, y_pred)
-                    string = "kl_divergence(y_true, y_pred):"
+                    string = "kl_divergence(y_true, y_pred)"
                 else:
                     log("y_true is a tensor and y_pred is a distribution")
                     error = -1 * y_pred.log_prob(y_true)
@@ -208,11 +208,11 @@ class Agent:
                 if hasattr(y_true, "entropy"):
                     log("y_true is a distribution and y_pred is a tensor")
                     error = -1 * y_true.log_prob(y_pred)
-                    string = "negative log-probability of y_pred given y_true:"
+                    string = "negative log-probability of y_pred given y_true"
                 else:
                     log("y_true and y_pred are both tensors")
                     error = tf.keras.losses.MSE(y_true, y_pred)
-                    string = "MSE loss:"
+                    string = "MSE loss"
             error = tf.reduce_sum(error)
             log(error.numpy().tolist() if not isinstance(error, float) else error, string)
             log(entropy.numpy().tolist() if not isinstance(entropy, float) else entropy, "y_pred entropy")
