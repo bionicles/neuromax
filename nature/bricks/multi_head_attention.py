@@ -1,10 +1,13 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
+
+from .dense import get_dense
+
 L = tf.keras.layers
 tfd = tfp.distributions
 tfpl = tfp.layers
 
-TFP_LAYER_OPTIONS = [tfpl.DenseReparameterization, tfpl.DenseFlipout]
+TFP_LAYER = tfpl.DenseReparameterization
 TRUE_FALSE = [True, False]
 D_MODEL_OPTIONS = [32, 64]
 N_HEADS_OPTIONS = [1, 2]
@@ -27,17 +30,15 @@ class MultiHeadAttention(L.Layer):
         assert d_model % self.n_heads == 0
         self.depth = d_model // self.n_heads
         if use_tfp:
-            tfp_layer = self.pull_choices(f"{self.brick_id}_transformer_tfp_layer",
-                                          TFP_LAYER_OPTIONS)
-            self.wq = tfp_layer(d_model)
-            self.wk = tfp_layer(d_model)
-            self.wv = tfp_layer(d_model)
-            self.dense = tfp_layer(d_model)
+            self.wq = TFP_LAYER(d_model)
+            self.wk = TFP_LAYER(d_model)
+            self.wv = TFP_LAYER(d_model)
+            self.dense = TFP_LAYER(d_model)
         else:
-            self.wq = L.Dense(d_model)
-            self.wk = L.Dense(d_model)
-            self.wv = L.Dense(d_model)
-            self.dense = L.Dense(d_model)
+            self.wq = get_dense(agent, self.brick_id, units=d_model)
+            self.wk = get_dense(agent, self.brick_id, units=d_model)
+            self.wv = get_dense(agent, self.brick_id, units=d_model)
+            self.dense = get_dense(agent, self.brick_id, units=d_model)
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (n_heads, depth).

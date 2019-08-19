@@ -1,13 +1,13 @@
 import tensorflow as tf
 
-from . import preact_conv2D
+from .conv import get_conv_2D_out
 
 L = tf.keras.layers
 
 
-def ResidualBlock2D(inputs, kernal_size=3, filters=64):
-    outputs = preact_conv2D(inputs, k=kernal_size, n_filters=filters)
-    outputs = preact_conv2D(outputs, k=kernal_size, n_filters=filters)
+def ResidualBlock2D(inputs, kernal_size=4, filters=64):
+    outputs = get_conv_2D_out(inputs, k=kernal_size, n_filters=filters)
+    outputs = get_conv_2D_out(outputs, k=kernal_size, n_filters=filters)
     outputs = L.Add()([outputs, inputs])
     return outputs
 
@@ -15,7 +15,7 @@ def ResidualBlock2D(inputs, kernal_size=3, filters=64):
 def DenseBlock2D(stack, n_layers, growth_rate):
     new_features = []
     for i in range(n_layers):
-        layer_out = preact_conv2D(stack, filters=growth_rate)
+        layer_out = get_conv_2D_out(stack, filters=growth_rate)
         new_features.append(layer_out)
         stack = tf.concat([stack, layer_out], axis=-1)
     new_features = tf.concat(new_features, axis=-1)

@@ -65,6 +65,7 @@ def space2spec(space):
 def get_env_io_specs(task_key, task_dict):
     print("get_env_io_specs", task_key, task_dict)
     task_dict = AttrDict(task_dict)
+    task_dict.histogram = None
     if task_dict.type is "env":
         task_dict.inputs = [space2spec(task_dict.env.observation_space)]
         task_dict.outputs = [space2spec(task_dict.env.action_space)]

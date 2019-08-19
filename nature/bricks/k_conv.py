@@ -5,12 +5,13 @@ import tensorflow as tf
 
 from nature.bricks.kernel import get_kernel
 
-from tools.concat_1D_coords import concat_1D_coords
+from tools.concat_coords import concat_1D_coords
 from tools.log import log
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
-SET_OPTIONS = [-1, 1, 2, 3]  # todo ... fix one_for_all and all_for_one inside graph_model
+# todo ... fix one_for_all and all_for_one inside graph_model
+SET_OPTIONS = [-1, 1, 2, 3]
 
 
 class KConvSet1D(L.Layer):

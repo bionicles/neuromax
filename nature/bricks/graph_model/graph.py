@@ -8,12 +8,12 @@ from tools.log import log
 # appearance
 STYLE = "filled"
 # initial
-MIN_INITIAL_BOXES, MAX_INITIAL_BOXES = 1, 4
+MIN_INITIAL_BOXES, MAX_INITIAL_BOXES = 1, 8
 # evolution
 MIN_MUTATIONS, MAX_MUTATIONS = 1, 2
 MUTATION_OPTIONS = ["insert_motifs"]
-MIN_MIN_P_INSERT, MAX_MIN_P_INSERT = 0, 0.49
-MIN_MAX_P_INSERT, MAX_MAX_P_INSERT = 0.5, 1
+MIN_MIN_P_INSERT, MAX_MIN_P_INSERT = 0, 0.2
+MIN_MAX_P_INSERT, MAX_MAX_P_INSERT = 0.2, 0.5
 # regulons
 MIN_MIN_LAYERS, MAX_MIN_LAYERS, MIN_MAX_LAYERS, MAX_MAX_LAYERS = 1, 2, 3, 4
 MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
@@ -94,14 +94,14 @@ class Graph:
         ids = []
         for layer_number in range(num_layers):
             n_nodes = safe_sample(self.min_nodes, self.max_nodes)
-            log(f"add layer {layer_number} with {n_nodes} nodes")
+            # log(f"add layer {layer_number} with {n_nodes} nodes")
             ids_of_nodes_in_this_layer = []
             for node_number in range(n_nodes):
                 if parent:
                     node_id = f"{parent}.{layer_number}.{node_number}"
                 else:
                     node_id = f"{layer_number}.{node_number}"
-                log(f"add node {node_id}")
+                # log(f"add node {node_id}")
                 M.add_node(node_id, label="",
                            style=STYLE, shape="square", color="black",
                            node_type="brick", output=None)
@@ -113,7 +113,7 @@ class Graph:
                     continue
                 for predecessor_node_id in predecessor_node_ids:
                     for successor_node_id in successor_node_ids:
-                        log(f"{predecessor_node_id}--->{successor_node_id}")
+                        # log(f"{predecessor_node_id}--->{successor_node_id}")
                         M.add_edge(predecessor_node_id, successor_node_id)
         return M, ids
 
@@ -129,22 +129,22 @@ class Graph:
         successors = new_ids[0]
         for predecessor in predecessors:
             for successor in successors:
-                log(f"{predecessor}--->{successor}")
+                # log(f"{predecessor}--->{successor}")
                 self.G.add_edge(predecessor, successor)
         # connect the last layer of the motif to the node's successors
         predecessors = new_ids[-1]
         successors = list(self.G.successors(id))
         for predecessor in predecessors:
             for successor in successors:
-                log(f"{predecessor}--->{successor}")
+                # log(f"{predecessor}--->{successor}")
                 self.G.add_edge(predecessor, successor)
         self.G.remove_node(id)
 
     def insert_motifs(self):
         """with probability P, replace nodes with random feedforward regulons"""
         nodes = self.G.nodes(data=True)
-        if self.count_boxes() < self.n_initial_boxes:
-            p_insert = 1.
+        if self.count_boxes() <= self.n_initial_boxes:
+            p_insert = .5
         else:
             p_insert = safe_sample(self.min_p_insert, self.max_p_insert)
         for node in nodes:

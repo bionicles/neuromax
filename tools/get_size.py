@@ -5,6 +5,8 @@ from .log import log
 
 
 def get_size(shape):
+    if isinstance(shape, int):
+        return shape
     if None in shape:
         raise Exception("cannot get size for shape:", shape)
     size = reduce(mul, shape)

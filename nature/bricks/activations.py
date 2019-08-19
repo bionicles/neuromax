@@ -7,18 +7,21 @@ HARD_MIN, HARD_MAX = -1., 1.
 
 
 def clean_activation(activation):
-    if activation == 'gaussian':
-        return gaussian
-    elif activation == 'swish':
-        return swish
-    elif activation == 'lisht':
-        return lisht
-    elif activation == 'sin':
-        return tf.math.sin
-    elif activation == 'cos':
-        return tf.math.cos
-    else:
+    if callable(activation):
         return activation
+    elif activation == 'gaussian':
+        fn = gaussian
+    elif activation == 'swish':
+        fn = swish
+    elif activation == 'lisht':
+        fn = lisht
+    elif activation == 'sin':
+        fn = tf.math.sin
+    elif activation == 'cos':
+        fn = tf.math.cos
+    else:
+        fn = activation
+    return fn
 
 
 def swish(x):

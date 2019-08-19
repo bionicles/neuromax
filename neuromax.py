@@ -1,3 +1,5 @@
+# import os
+import tensorflow as tf
 from attrdict import AttrDict
 # import gym
 
@@ -8,6 +10,9 @@ from nature.agent import Agent
 
 from tools.map_attrdict import map_attrdict
 from tools.get_spec import get_spec
+
+import logging
+tf.get_logger().setLevel(logging.ERROR)
 
 WORD_VECTOR_SIZE = 300
 MAX_LOOPS = 100
@@ -51,8 +56,9 @@ tasks = AttrDict({
                  })
 
 # we build env I/O specs for gym tasks:
-print("preparing tasks:\n", tasks)
+print("preparing tasks.\n", )
 tasks = map_attrdict(get_env_io_specs, tasks)
+[[print(tk, k, v) for k, v in tv.items()] for tk, tv in tasks.items()]
 
 agent = Agent(tasks)
 

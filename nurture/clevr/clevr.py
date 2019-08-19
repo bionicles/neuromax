@@ -40,10 +40,10 @@ def run_clevr_task(agent, task_id, task_dict):
     log("")
     log("RUN_CLEVR_TASK", color="black_on_white")
     onehot_task_id = get_onehot(task_id, list(agent.tasks.keys()))
-    prior_predictions = agent.priors
     dataset = task_dict.dataset.shuffle(10000)
-    model = task_dict.model
     total_free_energy = 0.
+    priors = agent.priors
+    action_index = -1
     loss = 0.
     for image_tensor, embedded_question, one_hot_answer, question, answer in dataset.take(
             task_dict.examples_per_episode):
@@ -51,30 +51,11 @@ def run_clevr_task(agent, task_id, task_dict):
         inputs = [onehot_task_id, expanded_loss, image_tensor, embedded_question]
         inputs = [tf.cast(tf.expand_dims(input, axis=0), dtype=tf.float32)
                   for input in inputs]
-        with tf.GradientTape() as tape:
-            outputs = model(inputs)
-            one_hot_distribution = outputs[-1]
-            index = one_hot_answer.numpy().tolist().index(1)
-            y_pred = answer_choices[index]
-            log("")
-            log(question.numpy().decode(), color="green")
-            log("y_true:", answer.numpy().decode(), color="green")
-            log("y_pred:", y_pred, color="green")
-            log("")
-            # log("one_hot_distribution", one_hot_distribution, color="white")
-            one_hot_action = one_hot_distribution.sample()
-            # log("one_hot_action", one_hot_action, color="white")
-            loss = tf.keras.losses.categorical_crossentropy(
-                one_hot_answer, tf.cast(one_hot_action, tf.float32))
-            log("clevr loss", loss.numpy().item(0), color="red")
-            free_energy, predictions = agent.compute_free_energy(
-                loss, outputs, prior_predictions, task_dict)
-        gradients = tape.gradient([free_energy, model.losses],
-                                  model.trainable_variables)
-        agent.optimizer.apply_gradients(zip(gradients,
-                                            model.trainable_variables))
+        loss_fn = tf.keras.losses.categorical_crossentropy
+        y_true = (one_hot_answer)
+        free_energy, priors = agent.train_op(
+            task_id, inputs, action_index, y_true, loss_fn, priors)
         total_free_energy = total_free_energy + free_energy
-        prior_predictions = predictions
     return total_free_energy
 
 

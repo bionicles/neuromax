@@ -1,29 +1,33 @@
 import tensorflow_probability as tfp
 import tensorflow as tf
 
-from nature.bricks.activations import clean_activation
+from .activations import clean_activation, swish
+from .noisedrop import NoiseDrop
+from .chaos import EdgeOfChaos
+from tools.log import log
 
-# tfd = tfp.distributions
-tfpl = tfp.layers
 K = tf.keras
 B, L = K.backend, K.layers
+tfpl = tfp.layers
 
-FN_OPTIONS = ["tanh", "linear", "swish", "lisht"]
-MIN_UNITS, MAX_UNITS = 8, 16
-LAYER_OPTIONS = [tfpl.DenseReparameterization]
+UNITS = 256
+TFP_LAYER = tfpl.DenseReparameterization
+LAYER = NoiseDrop
+FN = swish
+L1, L2 = 0.001, 0.001
+KERNEL_STDDEV = 2.952
+BIAS_STDDEV = 0.04
 
 
-def get_dense_out(agent, brick_id, input, layer=None, units=None, fn=None,
-                  fn_options=None):
+def get_dense(agent, brick_id, layer=None, units=UNITS, fn=FN):
     if layer is None:
-        layer = agent.pull_choices(f"{brick_id}-layer_type", LAYER_OPTIONS)
-    if units is None:
-        units = agent.pull_numbers(f"{brick_id}-units", MIN_UNITS, MAX_UNITS)
-    if fn is None:
-        if fn_options is None:
-            fn = agent.pull_choices(f"{brick_id}-fn", FN_OPTIONS)
-        else:
-            fn = agent.pull_choices(f"{brick_id}-fn", fn_options)
-    print(brick_id, input, units, fn)
-    fn = clean_activation(fn)
-    return layer(units, activation=fn)(input)
+        layer = TFP_LAYER if agent.probabilistic else LAYER
+    log("getting a dense layer for", brick_id, "units:", units, "fn:", fn)
+    if fn is not None:
+        fn = clean_activation(fn)
+    return layer(
+        units, activation=fn,
+        kernel_regularizer=K.regularizers.L1L2(l1=L1, l2=L2),
+        kernel_initializer=EdgeOfChaos(True, "swish"),
+        bias_initializer=EdgeOfChaos(False, "swish")
+        )

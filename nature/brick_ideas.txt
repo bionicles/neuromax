@@ -7,9 +7,6 @@ differentiable neural dictionary https://github.com/mjacar/pytorch-nec/blob/mast
 add, subtract, multiply, divide
 PRELU/RRELU
 mixed convolutions
-tfp layers
-tfp distributions -- see helpers.add_distribution
-tfp bijectors ?
 replay buffer (duh) -- just using a list right now
 tied-weight autoencoder?
 pooling (ugh)
@@ -43,3 +40,6 @@ bilinear https://pytorch.org/docs/stable/nn.html#torch.nn.Bilinear
 spatial_transformer
 elemental operations
 shared layers in interfaces
+tfp layers
+tfp distributions -- see helpers.add_distribution
+tfp bijectors ?

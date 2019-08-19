@@ -4,10 +4,13 @@ import tensorflow as tf
 
 from nanoid import generate
 
-from nature.bricks.vae import get_image_encoder_output, get_image_decoder_output
-from nature.bricks.k_conv import KConvSet1D
+from .vae import get_image_encoder_out, get_image_decoder_out
+from .multiply import get_multiply_out
+from .activations import swish
+from .k_conv import KConvSet1D
+from .dense import get_dense
 
-from tools.concat_2D_coords import concat_2D_coords
+from tools.concat_coords import concat_coords
 from tools.get_prior import get_prior
 from tools.get_spec import get_spec
 from tools.get_size import get_size
@@ -20,7 +23,7 @@ tfpl = tfp.layers
 K = tf.keras
 L = K.layers
 
-UNITS, FN = 32, "tanh"
+UNITS, FN = 32, swish
 
 
 class Interface(L.Layer):
@@ -32,7 +35,7 @@ class Interface(L.Layer):
         agent: Agent which holds this brick and has pull_choices/pull_numbers
         task_id: string key to retrieve task data
         in_spec: AttrDict description of input
-        out_spec: AttrDict description of output
+        out_spec: AttrDict description of out
 
         specs hold info like (shape, n, format, high, low, dtype)
 
@@ -59,16 +62,16 @@ class Interface(L.Layer):
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
         self.agent = agent
+        self.probabilistic = agent.probabilistic
         self.task_id, self.in_spec, self.out_spec = task_id, in_spec, out_spec
         self.brick_id = f"{task_id}{'_'+str(in_number) if in_number else ''}_{in_spec.format}_to_{out_spec.format}_{generate()}"
-        print("")
-        print(f"Interface.__init__ -- {self.brick_id}")
-        print("in_spec", in_spec)
-        print("out_spec", out_spec)
+        self.debug = 1 if "predictor" in self.brick_id else 0
+        log("", debug=self.debug)
+        log(f"Interface.__init__ -- {self.brick_id}", debug=self.debug)
+        log("in_spec", in_spec, debug=self.debug)
+        log("out_spec", out_spec, debug=self.debug)
         self.input_layer_number = in_number
         self.shape_variable_key = None
-        if self.out_spec.format is not "code":
-            self.reshape = L.Reshape(self.out_spec.shape)
         if self.in_spec.format == "image":
             self.channels_before_concat_coords = self.in_spec.shape[-1]
             self.size_to_resize_to = self.get_hw(self.in_spec.shape)
@@ -83,7 +86,7 @@ class Interface(L.Layer):
             return
         self.input_layer = K.Input(self.in_spec.shape,
                                    batch_size=self.agent.batch_size)
-        log(f"{self.brick_id} input layer", self.input_layer)
+        log(f"{self.brick_id} input layer", self.input_layer, debug=self.debug)
         if self.in_spec.format is not "code":
             try:
                 self.normie = InstanceNormalization()(self.input_layer)
@@ -100,61 +103,82 @@ class Interface(L.Layer):
             model_type = f"code_interface"
         if in_spec.format is "code" and out_spec.format is not "code":
             model_type = f"{out_spec.format}_actuator"
-        builder_fn = f"self.get_{model_type}_output()"
+        builder_fn = f"self.get_{model_type}_out()"
         eval(builder_fn)
         if ("sensor" in model_type and "loss" not in self.brick_id and "task" not in self.brick_id):
             if "image" in model_type:
                 self.normie = tf.slice(self.normie,
                                        [0, 0, 0, 0], [-1, -1, -1, 4])
-            outputs = [self.normie, self.out]
+            outs = [self.normie, self.out]
         else:
-            outputs = self.out
-        log(f"{self.brick_id} outputs", outputs, color="yellow")
-        self.model = K.Model(self.input_layer, outputs)
+            outs = self.out
+        log(f"{self.brick_id} outs", outs, color="yellow")
+        self.model = K.Model(self.input_layer, outs)
         self.built = True
 
     def make_categorical(self, units=UNITS, fn=FN, one_hot=False):
-        prior_type = "one_hot_categorical" if one_hot else "categorical"
-        prior, n = get_prior(self.out_spec.shape, prior_type=prior_type)
-        out = L.Flatten()(self.out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        p = tfpl.DenseReparameterization(n)(out)
-        distribution = tfd.OneHotCategorical if one_hot else tfd.Categorical
-        self.out = tfpl.DistributionLambda(
-            make_distribution_fn=lambda p: distribution(
-                probs=p, name=f"{prior_type}_{self.brick_id}"),
-            activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
-        )(p)
+        if self.probabilistic is False:
+            self.flatten_resize_reshape()
+            self.out = L.Activation("softmax")(self.out)
+        else:
+            prior_type = "one_hot_categorical" if one_hot else "categorical"
+            prior, n = get_prior(self.out_spec.shape, prior_type=prior_type)
+            out = L.Flatten()(self.out)
+            out = tfpl.DenseReparameterization(units, fn)(out)
+            out = tfpl.DenseReparameterization(units, fn)(out)
+            p = tfpl.DenseReparameterization(n)(out)
+            model = tfd.OneHotCategorical if one_hot else tfd.Categorical
+            self.out = tfpl.DistributionLambda(
+                make_distribution_fn=lambda p: model(
+                    probs=p, name=f"{prior_type}_{self.brick_id}"),
+                activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+            )(p)
 
     def make_normal(self, units=UNITS, fn=FN):
-        prior, shapes = get_prior(self.out_spec.shape, "normal")
-        last_units = int(get_size(shapes["loc"]))
-        out = L.Flatten()(self.out)
-        if out.shape[-1] is None:
-            out = tf.einsum('ij->ji', out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        out = tfpl.DenseReparameterization(units, fn)(out)
-        loc_layer = tfpl.DenseReparameterization(last_units)
-        scale_layer = tfpl.DenseReparameterization(last_units)
-        loc, scale = loc_layer(out), scale_layer(out)
-        if self.out_spec.shape[-1] is 1:
-            expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
-            loc, scale = expand(loc), expand(scale)
-        loc_shape = list(loc.shape[1:])
-        shapes_loc = shapes["loc"].numpy().tolist()
-        log(loc_shape, shapes_loc, color="red")
-        if loc_shape != shapes_loc:
-            log("reshape", color="red")
-            reshape = L.Reshape(shapes["loc"])
-            loc, scale = reshape(loc), reshape(scale)
-        self.out = tfpl.DistributionLambda(
-                make_distribution_fn=lambda x: tfd.Normal(
-                    loc=x[0], scale=tf.math.abs(x[1]),
-                    name=f"N_{self.brick_id}"
-                ),
-                activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
-            )([loc, scale])
+        if self.probabilistic is False:
+            self.flatten_resize_reshape()
+        else:
+            prior, shapes = get_prior(self.out_spec.shape, "normal")
+            last_units = int(get_size(shapes["loc"]))
+            out = L.Flatten()(self.out)
+            if out.shape[-1] is None:
+                out = tf.einsum('ij->ji', out)
+            out = tfpl.DenseReparameterization(units, fn)(out)
+            out = tfpl.DenseReparameterization(units, fn)(out)
+            loc_layer = tfpl.DenseReparameterization(last_units)
+            scale_layer = tfpl.DenseReparameterization(last_units)
+            loc, scale = loc_layer(out), scale_layer(out)
+            if self.out_spec.shape[-1] is 1:
+                expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
+                loc, scale = expand(loc), expand(scale)
+            loc_shape = list(loc.shape[1:])
+            shapes_loc = shapes["loc"].numpy().tolist()
+            log(loc_shape, shapes_loc, color="red")
+            if loc_shape != shapes_loc:
+                log("reshape", color="red")
+                reshape = L.Reshape(shapes["loc"])
+                loc, scale = reshape(loc), reshape(scale)
+            self.out = tfpl.DistributionLambda(
+                    make_distribution_fn=lambda x: tfd.Normal(
+                        loc=x[0], scale=tf.math.abs(x[1]),
+                        name=f"N_{self.brick_id}"
+                    ),
+                    activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
+                )([loc, scale])
+
+    def flatten_resize_reshape(self):
+        log(f"flatten_resize_reshape {self.out.shape}-->{self.out_spec.shape}")
+        out_size = self.out_spec.size
+        out = L.Lambda(lambda x: concat_coords(x))(self.out)
+        out = L.Flatten()(out)
+        log(0, out.shape, color="yellow")
+        if len(out.shape) is 3:
+            out = get_multiply_out(self.agent, self.brick_id, out_size, out)
+        else:
+            out = get_dense(self.agent, self.brick_id,
+                            units=out_size, fn=FN)(out)
+        log(5, out.shape, color="yellow")
+        self.out = L.Reshape(self.out_spec.shape)(out)
 
     @staticmethod
     def get_hw(shape):
@@ -168,9 +192,9 @@ class Interface(L.Layer):
         new_shape[-1] += len(new_shape) - 1
         return tuple(new_shape)
 
-    def get_image_sensor_output(self):
+    def get_image_sensor_out(self):
         self.call = self.call_image_sensor
-        self.out = get_image_encoder_output(
+        self.out = get_image_encoder_out(
             self.agent, self.brick_id, self.out, self.out_spec)
         self.make_normal()
 
@@ -183,74 +207,67 @@ class Interface(L.Layer):
                              self.in_spec.shape[1], channels_needed)
             zeros = tf.zeros(padding_shape)
             image = tf.concat([image, zeros], -1)
-        image = concat_2D_coords(image)
+        image = concat_coords(image)
         return self.model(image)
 
-    def get_image_actuator_output(self):
-        self.out = get_image_decoder_output(
+    def get_image_actuator_out(self):
+        self.out = get_image_decoder_out(
             self.agent, self.brick_id, self.out, self.out_spec)
         self.make_normal()
 
-    def get_ragged_sensor_output(self):
-        """each input element innervates all output elements (one for all)"""
-        # self.call = self.call_ragged_sensor
+    def get_ragged_sensor_out(self):
+        """each input element innervates all out elements (one for all)"""
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "one_for_all")(self.out)
         self.make_normal()
 
-    # def call_ragged_sensor(self, inputs):
-    #     if "variables" in self.in_spec.keys():
-    #         for id, n, index in self.in_spec.variables:
-    #             self.agent.parameters[id] = inputs[n].shape[index]
-    #     return self.call_model(inputs)
-
-    def get_ragged_actuator_output(self):
-        """all input elements innervate each output element (all for one)"""
+    def get_ragged_actuator_out(self):
+        """all input elements innervate each out element (all for one)"""
         self.placeholder = K.Input(
             (None, 1), batch_size=self.agent.batch_size)
         self.input_layer = [self.input_layer, self.placeholder]
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "all_for_one")([self.out, self.placeholder])
-        log("get_ragged_actuator_output", self.out, color="red")
+        log("get_ragged_actuator_out", self.out, color="red")
 
-    def get_box_sensor_output(self):
+    def get_box_sensor_out(self):
         self.make_normal()
 
-    def get_box_actuator_output(self):
+    def get_box_actuator_out(self):
         self.make_normal()
 
-    def get_float_sensor_output(self):
+    def get_float_sensor_out(self):
         self.make_normal()
 
-    def get_float_actuator_output(self):
+    def get_float_actuator_out(self):
         self.make_normal()
 
-    def get_code_interface_output(self):
+    def get_code_interface_out(self):
         self.make_normal()
 
-    def get_onehot_sensor_output(self):
+    def get_onehot_sensor_out(self):
         self.make_normal()
 
-    def get_onehot_actuator_output(self):
+    def get_onehot_actuator_out(self):
         self.make_categorical(one_hot=True)
 
-    def get_discrete_actuator_output(self):
+    def get_discrete_actuator_out(self):
         self.make_categorical()
 
     def call_model(self, input):
-        print("")
-        log("call interface", self.brick_id, color="yellow")
-        log("in_spec", list(self.in_spec.shape) if not isinstance(self.in_spec.shape, int) else self.in_spec.shape, self.in_spec.format, color="blue")
-        if isinstance(input, list):
-            [log("input.shape", list(i.shape), color="yellow") for i in input]
-        else:
-            log("input.shape", list(input.shape), color="yellow")
-        output = self.model(input)
-        log("out_spec", list(self.out_spec.shape), self.out_spec.format, color="blue")
-        if isinstance(output, list):
-            [log("output", list(o.shape), color="yellow") for o in output]
-        else:
-            log("output", list(output.shape), color="yellow")
-        return output
+        # log("")
+        # log("call interface", self.brick_id, color="yellow")
+        # log("in_spec", list(self.in_spec.shape) if not isinstance(self.in_spec.shape, int) else self.in_spec.shape, self.in_spec.format, color="blue")
+        # if isinstance(input, list):
+            # [log("input.shape", list(i.shape), color="yellow") for i in input]
+        # else:
+            # log("input.shape", list(input.shape), color="yellow")
+        out = self.model(input)
+        # log("out_spec", list(self.out_spec.shape), self.out_spec.format, color="blue")
+        # if isinstance(out, list):
+            # [log("out", list(o.shape), color="yellow") for o in out]
+        # else:
+            # log("out", list(out.shape), color="yellow")
+        return out

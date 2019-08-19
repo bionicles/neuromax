@@ -1,43 +1,52 @@
 # agent.py - handle multitask AI
-import tensorflow_probability as tfp
 from attrdict import AttrDict
 import tensorflow as tf
 import numpy as np
 import random
-import time
-
-from tools.map_attrdict import map_attrdict
-from tools.show_model import show_model
-from tools.get_prior import get_prior
-from tools.get_spec import get_spec
-from tools.log import log
 
 from nature.bricks.graph_model.graph_model import GraphModel
 from nature.bricks.interface import Interface
 
-tfd = tfp.distributions
-tfpl = tfp.layers
-K = tf.keras
-L = K.layers
-B = tf.keras.backend
+from tools.map_attrdict import map_attrdict
+from tools.get_percent import get_percent
+from tools.show_model import show_model
+from tools.get_prior import get_prior
+from tools.get_spec import get_spec
+from tools.add_up import add_up
+from tools.log import log
 
-MIN_CODE_ATOMS, MAX_CODE_ATOMS = 4, 16
-EPISODES_PER_PRACTICE_SESSION = 5
-IMAGE_SHAPE = (64, 64, 4)
+
+OPTIMIZER = tf.keras.optimizers.SGD(3e-4)
+LOSS_FN = tf.keras.losses.MSLE
+
+EPISODES_PER_PRACTICE_SESSION = 100
+
+IMAGE_SHAPE = (32, 32, 4)
+PROBABILISTIC = False
+CODE_ATOMS = 256
 BATCH_SIZE = 1
+
+
+if PROBABILISTIC:
+    import tensorflow_probability as tfp
+    tfd = tfp.distributions
+    tfpl = tfp.layers
+
+K = tf.keras
+B = K.backend
+L = K.layers
 
 
 class Agent:
     """Entity which learns to solve tasks using bricks"""
 
     def __init__(self, tasks):
+        self.n_gradient_steps = 0
+        self.probabilistic = PROBABILISTIC
         self.batch_size = BATCH_SIZE
         self.tasks = tasks
         self.parameters = AttrDict({})
-        self.code_atoms = self.pull_numbers(
-            "code_atoms", MIN_CODE_ATOMS, MAX_CODE_ATOMS)
-        self.code_spec = get_spec(shape=(self.code_atoms, 1), format="code")
-        self.code_spec.size = self.code_atoms
+        self.code_spec = get_spec(shape=(CODE_ATOMS, 1), format="code")
         self.loss_spec = get_spec(format="float", shape=(1,))
         log("we add a task id sensor", color="green")
         n_tasks = len(self.tasks.keys())
@@ -58,7 +67,7 @@ class Agent:
         self.tasks = map_attrdict(self.pull_model, self.tasks)
         self.priors = [tf.zeros(self.code_spec.shape)
                        for _ in range(self.n_in)]
-        self.optimizer = tf.keras.optimizers.Adam(amsgrad=True)
+        self.optimizer = OPTIMIZER
 
     def pull_model(self, task_id, task_dict):
         print("")
@@ -116,28 +125,37 @@ class Agent:
             for _ in range(n_placeholders):
                 prior, _ = get_prior(self.code_spec.shape)
                 codes.append(prior)
-        log(f"GraphModel prefers tensors, so we sample {len(codes)} codes", color="green")
-        samples = [c.sample() for c in codes]
-        samples = [tf.expand_dims(s, 0) if len(s.shape) < 3 else s
-                   for s in samples]
-        log("now we pass code samples to GraphModel:", color="green")
-        predictions = self.graph_model(samples)
-        log("then we save the predictions", color="green")
-        for prediction_number, prediction in enumerate(predictions):
-            distribution = Interface(
-                self, "shared", get_spec(
-                    format="code", shape=prediction.shape),
-                self.code_spec)(prediction)
-            output_roles.append(f"prediction-{prediction_number}")
-            outputs.append(distribution)
+        if self.probabilistic:
+            log(f"GraphModel prefers tensors, so we sample {len(codes)} codes", color="green")
+            samples = [c.sample() for c in codes]
+            samples = [tf.expand_dims(s, 0) if len(s.shape) < 3 else s
+                       for s in samples]
+        else:
+            samples = codes
+        log("we pass sensations to GraphModel:", color="green")
+        graph_outputs = self.graph_model(samples)
+        log("we make predictions and save them", color="green")
+        predictions = []
+        predictor = None
+        for graph_output_number, graph_output in enumerate(graph_outputs):
+            graph_out_with_code = L.Concatenate(1)([graph_output, task_code])
+            log("graph_out_with_code shape", graph_out_with_code.shape, color="red", debug=1)
+            if predictor is None:
+                in_spec = get_spec(
+                    format="code", shape=graph_out_with_code.shape[1:])
+                predictor = Interface(
+                    self, "predictor", in_spec, self.code_spec)
+            prediction = predictor(graph_out_with_code)
+            output_roles.append(f"prediction-{graph_output_number}")
+            predictions.append(prediction)
+            outputs.append(prediction)
         log("we assemble a world model for the actuators", color="green")
         predictions = [
             tf.expand_dims(p, 0) if len(p.shape) < 3 else p
             for p in predictions]
         world_model = tf.concat([*samples, *predictions], 1)
-        world_model_spec = get_spec(format="code", shape=world_model.shape)
-        log("we pass codes and judgments to actuators to get actions",
-            color="green")
+        world_model_spec = get_spec(format="code", shape=world_model.shape[1:])
+        log("we pass the model to actuators to get actions", color="green")
         for output_number, out_spec in enumerate(task_dict.outputs):
             if out_spec.format is "image":
                 actuator = self.image_actuator
@@ -154,7 +172,8 @@ class Agent:
             output_roles.append(f"action-{output_number}")
         log("")
         log("we build a model with inputs:", color="green")
-        [log("input", n, list(i.shape), color="yellow") for n, i in enumerate(inputs)]
+        [log("input", n, list(i.shape), color="yellow")
+         for n, i in enumerate(inputs)]
         log("")
         log("and outputs:", color="green")
         self.unpack(output_roles, outputs)
@@ -184,66 +203,87 @@ class Agent:
         return (normies, reconstructions, codes, predictions, actions)
 
     @staticmethod
-    def compute_error_or_surprise(y_true_list, y_pred_list):
-        total = 0.
+    @tf.function
+    def compute_surprise(y_true_list, y_pred_list):
+        errors = []
         for n, (y_true, y_pred) in enumerate(zip(y_true_list, y_pred_list)):
             log("")
-            log("pair", n)
-            entropy = 0.
-            log("y_true", list(y_true.shape), color="red")
-            log("y_pred", list(y_pred.shape), color="white")
+            log("pair", n,
+                "y_true", list(y_true.shape), "y_pred", list(y_pred.shape))
             log("")
-            time.sleep(1)
             if hasattr(y_pred, "entropy"):
                 if hasattr(y_true, "entropy"):
                     log("y_true and y_pred are both distributions")
                     error = tfd.kl_divergence(y_true, y_pred)
-                    string = "kl_divergence(y_true, y_pred)"
                 else:
                     log("y_true is a tensor and y_pred is a distribution")
                     error = -1 * y_pred.log_prob(y_true)
-                    string = "negative log-probability of y_true given y_pred"
                 entropy = tf.reduce_sum(y_pred.entropy())
+                errors.append(-entropy)
             else:
                 if hasattr(y_true, "entropy"):
                     log("y_true is a distribution and y_pred is a tensor")
                     error = -1 * y_true.log_prob(y_pred)
-                    string = "negative log-probability of y_pred given y_true"
                 else:
                     log("y_true and y_pred are both tensors")
-                    error = tf.keras.losses.MSE(y_true, y_pred)
-                    string = "MSE loss"
+                    error = LOSS_FN(y_true, y_pred)
             error = tf.reduce_sum(error)
-            log(error.numpy().tolist() if not isinstance(error, float) else error, string)
-            log(entropy.numpy().tolist() if not isinstance(entropy, float) else entropy, "y_pred entropy")
-            error = error - entropy
-            log(error.numpy().tolist() if not isinstance(error, float) else error, "error - entropy")
-            total = total + error
-        log(total.numpy().tolist() if not isinstance(total, float) else total, "total")
-        return total
+            errors.append(error)
+        return errors
 
-    def compute_free_energy(
-        self, loss, outputs, prior_predictions, task_dict
-    ):
+    def train_op(self, task_id, inputs, action_index, y_true, loss_fn, priors):
         log("free_energy = loss + error + surprise - freedom", color="green")
-        normies, reconstructions, codes, predictions, actions = self.unpack(
-            task_dict.output_roles, outputs)
-        error_or_surprise = loss
-        log("")
-        log("we compute reconstruction error/surprise", color="green")
-        # log("normies", normies)
-        # log("reconstructions", reconstructions)
-        error_or_surprise = error_or_surprise + self.compute_error_or_surprise(
-            normies, reconstructions)
-        log("we compute prediction error/surprise", color="green")
-        # log("codes", codes)
-        # log("predictions", predictions)
-        error_or_surprise = error_or_surprise + self.compute_error_or_surprise(
-            codes, prior_predictions
-        )
-        freedom = tf.math.reduce_sum([action.entropy() for action in actions])
-        free_energy = loss + error_or_surprise - freedom
-        log("free energy", free_energy, color="green")
+        task_dict = self.tasks[task_id]
+        model = task_dict.model
+        with tf.GradientTape() as tape:
+            losses = []
+            outputs = model(inputs)
+            normies, reconstructions, codes, predictions, actions = self.unpack(
+                task_dict.output_roles, outputs)
+            # this could be passed by the task runner script as 'get_y_pred_fn'
+            y_pred = actions[action_index]
+            if self.probabilistic:
+                y_pred = y_pred.sample()
+                [losses.append(-a.entropy()) for a in actions]
+            else:
+                if task_dict.histogram is None:
+                    task_dict.histogram = y_pred
+                else:
+                    task_dict.histogram = task_dict.histogram + y_pred
+                total_actions = tf.math.reduce_sum(task_dict.histogram)
+                normalized = task_dict.histogram / total_actions
+                equal_prior = tf.ones_like(y_true)
+                equal_prior = equal_prior / tf.math.reduce_sum(equal_prior)
+                entropy = K.losses.KLD(equal_prior, normalized)
+                losses.append(-entropy)
+            loss = loss_fn(y_true, y_pred)
+            losses.append(loss)
+            log("we compute reconstruction error/surprise", color="green")
+            reconstruction_errors = self.compute_surprise(
+                normies, reconstructions)
+            [losses.append(e) for e in reconstruction_errors]
+            log("we compute prediction error/surprise", color="green")
+            prediction_errors = self.compute_surprise(codes, priors)
+            [losses.append(e) for e in prediction_errors]
+        gradients = tape.gradient(losses, model.trainable_variables)
+        gradients_and_variables = zip(gradients, model.trainable_variables)
+        log(len(gradients), "gradients",
+            len(model.trainable_variables), "trainable_variables", color="red")
+        self.optimizer.apply_gradients(gradients_and_variables)
+        self.n_gradient_steps += 1
+        n_gradients = sum([1 if v is not None else 0
+                           for v in gradients])
+        n_variables = len(model.trainable_variables)
+        free_energy = add_up(losses)
+        total_reconstruction_error = add_up(reconstruction_errors)
+        total_prediction_error = add_up(prediction_errors)
+        log("", debug=True)
+        log(f"   step: {self.n_gradient_steps} --- task: {task_id}", debug=True)
+        log(f"   {get_percent(n_variables, n_gradients)} of variables have gradients", debug=True)
+        log(f"   {get_percent(free_energy, total_reconstruction_error)} reconstruction error at {round(total_reconstruction_error, 2)}", debug=True)
+        log(f"   {get_percent(free_energy, total_prediction_error)} prediction error at {round(total_prediction_error, 2)}", debug=True)
+        log(f"   {get_percent(free_energy, loss)} task loss at {round(add_up(loss), 2)}", debug=True)
+        log(f"   {round(free_energy, 1)} free energy", debug=True)
         return free_energy, predictions
 
     def decide_n_in_n_out(self):
@@ -254,8 +294,7 @@ class Agent:
         """
         self.n_in = 2 + max([len(task_dict.inputs)
                              for _, task_dict in self.tasks.items()])
-        self.n_out = self.n_in + max([len(task_dict.outputs)
-                                      for _, task_dict in self.tasks.items()])
+        self.n_out = self.n_in
 
     def train(self):
         """Run EPISODES_PER_PRACTICE_SESSION episodes
