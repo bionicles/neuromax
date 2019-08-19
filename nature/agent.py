@@ -4,8 +4,8 @@ import tensorflow as tf
 import numpy as np
 import random
 
-from nature.bricks.graph_model.graph_model import GraphModel
-from nature.bricks.interface import Interface
+from .bricks.graph_model.graph_model import GraphModel
+from .bricks.interface import Interface
 
 from tools.map_attrdict import map_attrdict
 from tools.get_percent import get_percent
@@ -15,22 +15,15 @@ from tools.get_spec import get_spec
 from tools.add_up import add_up
 from tools.log import log
 
-
-OPTIMIZER = tf.keras.optimizers.SGD(3e-4)
+SWITCH_TO_MAE_LOSS_WHEN_FREE_ENERGY_BELOW = 4.2
+OPTIMIZER = tf.keras.optimizers.SGD(3e-4, clipvalue=0.04)
 LOSS_FN = tf.keras.losses.MSLE
 
 EPISODES_PER_PRACTICE_SESSION = 100
 
 IMAGE_SHAPE = (32, 32, 4)
-PROBABILISTIC = False
-CODE_ATOMS = 256
+CODE_ATOMS = 32
 BATCH_SIZE = 1
-
-
-if PROBABILISTIC:
-    import tensorflow_probability as tfp
-    tfd = tfp.distributions
-    tfpl = tfp.layers
 
 K = tf.keras
 B = K.backend
@@ -42,8 +35,8 @@ class Agent:
 
     def __init__(self, tasks):
         self.n_gradient_steps = 0
-        self.probabilistic = PROBABILISTIC
         self.batch_size = BATCH_SIZE
+        self.loss_fn = LOSS_FN
         self.tasks = tasks
         self.parameters = AttrDict({})
         self.code_spec = get_spec(shape=(CODE_ATOMS, 1), format="code")
@@ -123,23 +116,17 @@ class Agent:
             log("no placeholders to make...moving on", color="green")
         else:
             for _ in range(n_placeholders):
-                prior, _ = get_prior(self.code_spec.shape)
+                prior = tf.random.normal(self.code_spec.shape)
                 codes.append(prior)
-        if self.probabilistic:
-            log(f"GraphModel prefers tensors, so we sample {len(codes)} codes", color="green")
-            samples = [c.sample() for c in codes]
-            samples = [tf.expand_dims(s, 0) if len(s.shape) < 3 else s
-                       for s in samples]
-        else:
-            samples = codes
-        log("we pass sensations to GraphModel:", color="green")
-        graph_outputs = self.graph_model(samples)
+        log("we pass codes to GraphModel:", color="green")
+        graph_outputs = self.graph_model(codes)
         log("we make predictions and save them", color="green")
         predictions = []
         predictor = None
         for graph_output_number, graph_output in enumerate(graph_outputs):
             graph_out_with_code = L.Concatenate(1)([graph_output, task_code])
-            log("graph_out_with_code shape", graph_out_with_code.shape, color="red", debug=1)
+            log("graph_out_with_code shape", graph_out_with_code.shape,
+                color="red", debug=1)
             if predictor is None:
                 in_spec = get_spec(
                     format="code", shape=graph_out_with_code.shape[1:])
@@ -153,7 +140,7 @@ class Agent:
         predictions = [
             tf.expand_dims(p, 0) if len(p.shape) < 3 else p
             for p in predictions]
-        world_model = tf.concat([*samples, *predictions], 1)
+        world_model = tf.concat([*codes, *predictions], 1)
         world_model_spec = get_spec(format="code", shape=world_model.shape[1:])
         log("we pass the model to actuators to get actions", color="green")
         for output_number, out_spec in enumerate(task_dict.outputs):
@@ -202,32 +189,13 @@ class Agent:
                 actions.append(output)
         return (normies, reconstructions, codes, predictions, actions)
 
-    @staticmethod
-    @tf.function
-    def compute_surprise(y_true_list, y_pred_list):
+    def compute_errors(self, y_true_list, y_pred_list):
         errors = []
         for n, (y_true, y_pred) in enumerate(zip(y_true_list, y_pred_list)):
             log("")
             log("pair", n,
                 "y_true", list(y_true.shape), "y_pred", list(y_pred.shape))
-            log("")
-            if hasattr(y_pred, "entropy"):
-                if hasattr(y_true, "entropy"):
-                    log("y_true and y_pred are both distributions")
-                    error = tfd.kl_divergence(y_true, y_pred)
-                else:
-                    log("y_true is a tensor and y_pred is a distribution")
-                    error = -1 * y_pred.log_prob(y_true)
-                entropy = tf.reduce_sum(y_pred.entropy())
-                errors.append(-entropy)
-            else:
-                if hasattr(y_true, "entropy"):
-                    log("y_true is a distribution and y_pred is a tensor")
-                    error = -1 * y_true.log_prob(y_pred)
-                else:
-                    log("y_true and y_pred are both tensors")
-                    error = LOSS_FN(y_true, y_pred)
-            error = tf.reduce_sum(error)
+            error = self.loss_fn(y_true, y_pred)
             errors.append(error)
         return errors
 
@@ -240,12 +208,10 @@ class Agent:
             outputs = model(inputs)
             normies, reconstructions, codes, predictions, actions = self.unpack(
                 task_dict.output_roles, outputs)
-            # this could be passed by the task runner script as 'get_y_pred_fn'
+            log("we get the action", color="green")
             y_pred = actions[action_index]
-            if self.probabilistic:
-                y_pred = y_pred.sample()
-                [losses.append(-a.entropy()) for a in actions]
-            else:
+            log("we approximate action conformity", color="green")
+            if task_dict.outputs[action_index].format is "onehot":
                 if task_dict.histogram is None:
                     task_dict.histogram = y_pred
                 else:
@@ -254,16 +220,17 @@ class Agent:
                 normalized = task_dict.histogram / total_actions
                 equal_prior = tf.ones_like(y_true)
                 equal_prior = equal_prior / tf.math.reduce_sum(equal_prior)
-                entropy = K.losses.KLD(equal_prior, normalized)
-                losses.append(-entropy)
+                conformity = K.losses.KLD(equal_prior, normalized)
+                losses.append(conformity)
+            log("we compute task_loss", color="green")
             loss = loss_fn(y_true, y_pred)
             losses.append(loss)
             log("we compute reconstruction error/surprise", color="green")
-            reconstruction_errors = self.compute_surprise(
+            reconstruction_errors = self.compute_errors(
                 normies, reconstructions)
             [losses.append(e) for e in reconstruction_errors]
             log("we compute prediction error/surprise", color="green")
-            prediction_errors = self.compute_surprise(codes, priors)
+            prediction_errors = self.compute_errors(codes, priors)
             [losses.append(e) for e in prediction_errors]
         gradients = tape.gradient(losses, model.trainable_variables)
         gradients_and_variables = zip(gradients, model.trainable_variables)
@@ -277,13 +244,18 @@ class Agent:
         free_energy = add_up(losses)
         total_reconstruction_error = add_up(reconstruction_errors)
         total_prediction_error = add_up(prediction_errors)
+        total_conformity = add_up(conformity)
         log("", debug=True)
         log(f"   step: {self.n_gradient_steps} --- task: {task_id}", debug=True)
         log(f"   {get_percent(n_variables, n_gradients)} of variables have gradients", debug=True)
         log(f"   {get_percent(free_energy, total_reconstruction_error)} reconstruction error at {round(total_reconstruction_error, 2)}", debug=True)
         log(f"   {get_percent(free_energy, total_prediction_error)} prediction error at {round(total_prediction_error, 2)}", debug=True)
+        log(f"   {get_percent(free_energy, total_conformity)} conformity at {round(total_conformity, 2)}", debug=True)
         log(f"   {get_percent(free_energy, loss)} task loss at {round(add_up(loss), 2)}", debug=True)
         log(f"   {round(free_energy, 1)} free energy", debug=True)
+        if free_energy < SWITCH_TO_MAE_LOSS_WHEN_FREE_ENERGY_BELOW:
+            log("  switched to Mean Absolute Error loss", color="red", debug=True)
+            self.loss_fn = tf.losses.MAE
         return free_energy, predictions
 
     def decide_n_in_n_out(self):
@@ -343,7 +315,7 @@ class Agent:
         self.parameters[pkey] = maybe_number_or_numbers
         return maybe_number_or_numbers
 
-    def pull_choices(self, pkey, options, n=1, distribution=None):
+    def pull_choices(self, pkey, options, n=None, p=None, replace=None):
         """
         WARNING!: IF KEY EXISTS, RETURNS CURRENT VALUE, NOT A NEW ONE!
 
@@ -352,27 +324,23 @@ class Agent:
 
         Args:
             pkey: unique key to share values
-            options: list of possible values
+            options: list of possible values # default [0, 1]
             n: number of choices to return
-            distribution: probability to return each option in options
+            p: probability to return each option in options
 
         Returns:
             maybe_choice_or_choices: string if n is 1, else a list
         """
+        options = [0, 1] if options is None else options
         if pkey in self.parameters.keys():
             return self.parameters[pkey]
-        if distribution is None:
-            maybe_choice_or_choices = random.sample(options, int(n))
-        else:
-            maybe_choice_or_choices = np.random.choice(
-                options, n, p=distribution).tolist()
-        if n is 1:
-            maybe_choice_or_choices = maybe_choice_or_choices[0]
+        maybe_choice_or_choices = np.random.choice(
+            options, size=n, p=p, replace=replace).tolist()
         self.parameters[pkey] = maybe_choice_or_choices
         return maybe_choice_or_choices
 
-    def pull_tensor(self, pkey, shape, method=tf.random.normal,
-                    dtype=tf.float32):
+    def pull_tensors(self, pkey, shape, n=None, method=tf.random.normal,
+                     dtype=tf.float32):
         """
         WARNING!: IF KEY EXISTS, RETURNS CURRENT VALUE, NOT A NEW ONE!
 
@@ -382,6 +350,7 @@ class Agent:
         Args:
             pkey: unique key to share / not share values
             shape: desired tensor shape
+            n: number of tensors to pull (default 1)
             method: the function to call (default tf.random.normal)
 
         Returns:
@@ -389,6 +358,9 @@ class Agent:
         """
         if pkey in self.parameters.keys():
             return self.parameters[pkey]
-        sampled_tensor = method(shape, dtype=dtype)
-        self.parameters[pkey] = sampled_tensor
-        return sampled_tensor
+        if n is None:
+            parameter = method(shape, dtype=dtype)
+        else:
+            parameter = [method(shape, dtype=dtype) for _ in range(n)]
+        self.parameters[pkey] = parameter
+        return parameter

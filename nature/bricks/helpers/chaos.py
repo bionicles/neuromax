@@ -3,6 +3,16 @@ import tensorflow as tf
 KERNELS = dict(swish=2.952, relu=2, tanh=1.722)
 BIASES = dict(swish=0.04, relu=0, tanh=0.04)
 
+DISTRIBUTION = "normal"
+DEFAULT_BIAS = False
+DEFAULT_FN = "swish"
+MODE = 'fan_avg'
+
+
+def get_chaos(
+        bias=DEFAULT_BIAS, fn=DEFAULT_FN):
+    return EdgeOfChaos(bias, fn)
+
 
 class EdgeOfChaos(tf.keras.initializers.VarianceScaling):
     """The edge of chaos truncated normal initializer.
@@ -20,12 +30,12 @@ class EdgeOfChaos(tf.keras.initializers.VarianceScaling):
       https://arxiv.org/pdf/1805.08266.pdf
     """
 
-    def __init__(self, kernel, fn_name, seed=None):
-        dictionary = KERNELS if kernel else BIASES
+    def __init__(self, bias, fn_name, seed=None):
+        dictionary = BIASES if bias else KERNELS
         super(EdgeOfChaos, self).__init__(
             scale=dictionary[fn_name],
             mode="fan_avg",
-            distribution="truncated_normal",
+            distribution=DISTRIBUTION,
             seed=seed)
 
     def get_config(self):

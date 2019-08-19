@@ -1,14 +1,13 @@
-import tensorflow_probability as tfp
-import tensorflow_addons as tfa
 import tensorflow as tf
 
 from nanoid import generate
 
 from .vae import get_image_encoder_out, get_image_decoder_out
+from .norm_preact import get_norm_preact_out
+from .set_conv.set_conv import KConvSet1D
 from .multiply import get_multiply_out
-from .activations import swish
-from .k_conv import KConvSet1D
-from .dense import get_dense
+from helpers.activations import swish
+from .layers.dense import get_dense
 
 from tools.concat_coords import concat_coords
 from tools.get_prior import get_prior
@@ -16,10 +15,6 @@ from tools.get_spec import get_spec
 from tools.get_size import get_size
 from tools.log import log
 
-InstanceNormalization = tfa.layers.InstanceNormalization
-
-tfd = tfp.distributions
-tfpl = tfp.layers
 K = tf.keras
 L = K.layers
 
@@ -89,7 +84,7 @@ class Interface(L.Layer):
         log(f"{self.brick_id} input layer", self.input_layer, debug=self.debug)
         if self.in_spec.format is not "code":
             try:
-                self.normie = InstanceNormalization()(self.input_layer)
+                self.normie = get_norm_preact_out(self.agent, self.id, self.input_layer)
                 self.out = self.normie
             except Exception as e:
                 log("instance norm failed", e, color="red")
@@ -116,55 +111,12 @@ class Interface(L.Layer):
         self.model = K.Model(self.input_layer, outs)
         self.built = True
 
-    def make_categorical(self, units=UNITS, fn=FN, one_hot=False):
-        if self.probabilistic is False:
-            self.flatten_resize_reshape()
-            self.out = L.Activation("softmax")(self.out)
-        else:
-            prior_type = "one_hot_categorical" if one_hot else "categorical"
-            prior, n = get_prior(self.out_spec.shape, prior_type=prior_type)
-            out = L.Flatten()(self.out)
-            out = tfpl.DenseReparameterization(units, fn)(out)
-            out = tfpl.DenseReparameterization(units, fn)(out)
-            p = tfpl.DenseReparameterization(n)(out)
-            model = tfd.OneHotCategorical if one_hot else tfd.Categorical
-            self.out = tfpl.DistributionLambda(
-                make_distribution_fn=lambda p: model(
-                    probs=p, name=f"{prior_type}_{self.brick_id}"),
-                activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
-            )(p)
+    def make_categorical(self):
+        self.flatten_resize_reshape()
+        self.out = L.Activation("softmax")(self.out)
 
-    def make_normal(self, units=UNITS, fn=FN):
-        if self.probabilistic is False:
-            self.flatten_resize_reshape()
-        else:
-            prior, shapes = get_prior(self.out_spec.shape, "normal")
-            last_units = int(get_size(shapes["loc"]))
-            out = L.Flatten()(self.out)
-            if out.shape[-1] is None:
-                out = tf.einsum('ij->ji', out)
-            out = tfpl.DenseReparameterization(units, fn)(out)
-            out = tfpl.DenseReparameterization(units, fn)(out)
-            loc_layer = tfpl.DenseReparameterization(last_units)
-            scale_layer = tfpl.DenseReparameterization(last_units)
-            loc, scale = loc_layer(out), scale_layer(out)
-            if self.out_spec.shape[-1] is 1:
-                expand = L.Lambda(lambda x: tf.expand_dims(x, -1))
-                loc, scale = expand(loc), expand(scale)
-            loc_shape = list(loc.shape[1:])
-            shapes_loc = shapes["loc"].numpy().tolist()
-            log(loc_shape, shapes_loc, color="red")
-            if loc_shape != shapes_loc:
-                log("reshape", color="red")
-                reshape = L.Reshape(shapes["loc"])
-                loc, scale = reshape(loc), reshape(scale)
-            self.out = tfpl.DistributionLambda(
-                    make_distribution_fn=lambda x: tfd.Normal(
-                        loc=x[0], scale=tf.math.abs(x[1]),
-                        name=f"N_{self.brick_id}"
-                    ),
-                    activity_regularizer=tfpl.KLDivergenceRegularizer(prior)
-                )([loc, scale])
+    def make_normal(self):
+        self.flatten_resize_reshape()
 
     def flatten_resize_reshape(self):
         log(f"flatten_resize_reshape {self.out.shape}-->{self.out_spec.shape}")

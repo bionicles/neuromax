@@ -4,11 +4,14 @@ K = tf.keras.backend
 
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
+SOFT_ARGMAX_BETA = 1e10
 
 
 def clean_activation(activation):
     if callable(activation):
         return activation
+    elif activation == 'soft_argmax':
+        fn = soft_argmax
     elif activation == 'gaussian':
         fn = gaussian
     elif activation == 'swish':
@@ -30,6 +33,16 @@ def swish(x):
     https://arxiv.org/abs/1710.05941
     """
     return (K.sigmoid(x) * x)
+
+
+def soft_argmax(x, beta=SOFT_ARGMAX_BETA):
+    """
+    https://stackoverflow.com/questions/46926809/getting-around-tf-argmax-which-is-not-differentiable
+    https://lucehe.github.io/differentiable-argmax/
+    """
+    x_range = tf.range(x.shape.as_list()[-1], dtype=x.dtype)
+    return tf.math.reduce_sum(
+        tf.nn.softmax(x * beta) * x_range, axis=-1)
 
 
 def gaussian(x):

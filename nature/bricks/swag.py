@@ -1,38 +1,41 @@
 import tensorflow as tf
 
-from .dense import get_dense
+from .layers.dense import get_dense_out
+from tools.get_brick import get_brick
 
 K = tf.keras
 L = K.layers
 
 MIN_POWER, MAX_POWER = 2, 3
+UNITS = 4
 
 
-# functional style
-def get_swag_out(agent, brick_id, units, input, power=None):
+def get_swag_out(agent, id, out, units=UNITS, power=None, return_brick=False):
     if power is None:
-        power = agent.pull_numbers(f"{brick_id}_power", MIN_POWER, MAX_POWER)
-    if "swag" not in brick_id:
-        brick_id = f"{brick_id}_swag_{power}"
-    outputs = []
-    for _ in range(power):
-        layer = get_dense(agent, brick_id)
-        if len(outputs) > 0:
-            output = layer(outputs[-1])
-            output = L.Multiply()([outputs[-1], output])
-        else:
-            output = layer(input)
-        outputs.append(output)
+        power = agent.pull_numbers(f"{id}_swag_power", MIN_POWER, MAX_POWER)
+    if "swag" not in id:
+        id = f"{id}_swag_{power}"
+
+    layers = []
+    for x in range(power):
+        _, dense = get_dense_out(
+            agent, id, out, units=units, return_brick=True)
+        layers.append(dense)
+    multiply = L.Multiply()
     flatten = L.Flatten()
-    outputs = [flatten(o) for o in outputs]
-    output = L.Concatenate()(outputs)
-    output = get_dense(agent, brick_id, units=units)(output)
-    return output
+    concat = L.Concatenate(-1)
+    _, output_layer = get_dense_out(agent, id, out,
+                                    units=units, return_brick=True)
 
-
-# object-oriented style
-def get_swag(agent, brick_id, units, input_shape, power=None):
-    brick_id = f"{brick_id}_swag{'' if power is None else '_' + str(power)}"
-    input = K.Input(input_shape[1:])
-    output = get_swag_out(agent, brick_id, units, input, power=power)
-    return K.Model(input, output, name=brick_id)
+    def swag(out):
+        outs = []
+        for i in range(power):
+            out = layers[i](agent, id, out, units=units)
+            if len(outs) > 0:
+                out = multiply([outs[-1], out])
+            outs.append(out)
+        outs = [flatten(o) for o in outs]
+        out = concat(outs)
+        out = output_layer(out)
+        return out
+    return get_brick(swag, out, return_brick)
