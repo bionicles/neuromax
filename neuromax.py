@@ -1,18 +1,13 @@
-# import os
-import tensorflow as tf
 from attrdict import AttrDict
-# import gym
-
-from nurture.clevr.clevr import read_clevr_dataset, run_clevr_task
-# from nurture.mol.mol import read_mol_dataset, run_mol_task
-from nurture.gym.gym import get_env_io_specs  # run_env_task
-from nature.agent import Agent
-
-from tools.map_attrdict import map_attrdict
-from tools.get_spec import get_spec
-
+import tensorflow as tf
 import logging
-tf.get_logger().setLevel(logging.ERROR)
+
+from nurture import read_clevr_dataset, run_clevr_task, get_env_io_specs
+from nature import Agent
+
+from tools import map_attrdict, get_spec
+
+tf.get_logger().setLevel(logging.WARNING)
 
 WORD_VECTOR_SIZE = 300
 MAX_LOOPS = 100

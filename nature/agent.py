@@ -4,15 +4,9 @@ import tensorflow as tf
 import numpy as np
 import random
 
-from .bricks.graph_model.graph_model import GraphModel
-from .bricks.interface import Interface
+from tools import map_attrdict, get_percent, show_model, get_spec, add_up, log
+from nature import use_graph_model, use_interface, Brick
 
-from tools.map_attrdict import map_attrdict
-from tools.get_percent import get_percent
-from tools.show_model import show_model
-from tools.get_spec import get_spec
-from tools.add_up import add_up
-from tools.log import log
 
 SWITCH_TO_MAE_LOSS_WHEN_FREE_ENERGY_BELOW = 4.2
 OPTIMIZER = tf.keras.optimizers.SGD(3e-4, clipvalue=0.04)
@@ -38,29 +32,40 @@ class Agent:
         self.loss_fn = LOSS_FN
         self.tasks = tasks
         self.probabilistic = PROBABILISTIC
-        self.parameters = AttrDict({})
+        self.graph = AttrDict({})
         self.code_spec = get_spec(shape=(CODE_ATOMS, 1), format="code")
         self.loss_spec = get_spec(format="float", shape=(1,))
         log("we add a task id sensor", color="green")
         n_tasks = len(self.tasks.keys())
         self.task_id_spec = get_spec(shape=n_tasks, format="onehot")
-        self.task_sensor = Interface(self, "task_id",
+        self.task_sensor = use_interface(self, "task_id",
                                      self.task_id_spec, self.code_spec)
         log("we add a sensor for images", color="green")
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image",
                                    add_coords=True)
-        self.image_sensor = Interface(self, "image_sensor",
+        self.image_sensor = use_interface(self, "image_sensor",
                                       self.image_spec, self.code_spec)
-        self.image_actuator = Interface(self, "image_actuator",
+        self.image_actuator = use_interface(self, "image_actuator",
                                         self.code_spec, self.image_spec)
         log("we build the shared GraphModel", color="green")
         self.decide_n_in_n_out()
-        self.graph_model = GraphModel(self)
+        self.graph_model = use_graph_model(self, "shared", )
         log("we build a keras model for each task", color="green")
         self.tasks = map_attrdict(self.pull_model, self.tasks)
         self.priors = [tf.zeros(self.code_spec.shape)
                        for _ in range(self.n_in)]
         self.optimizer = OPTIMIZER
+
+    def build_brick(self, id, parts, call, out, return_brick):
+        """construct a brick from parts and a function to use them
+
+        https://stackoverflow.com/a/45102583/4898464
+        """
+        self.graph[id].brick = brick = Brick(self, id, parts, call, out)
+        if out is None:
+            return brick
+        self.graph[id].out = out = brick(out)
+        return out, brick if return_brick else out
 
     def pull_model(self, task_id, task_dict):
         print("")
@@ -72,7 +77,7 @@ class Agent:
         codes = [task_code]
         log("likewise for loss float value", color="green")
         loss_input = K.Input((1,), batch_size=BATCH_SIZE)
-        task_dict.loss_sensor = Interface(self, task_id + "loss_sensor",
+        task_dict.loss_sensor = use_interface(self, task_id + "loss_sensor",
                                           self.loss_spec, self.code_spec)
         loss_code = task_dict.loss_sensor(loss_input)
         codes.append(loss_code)
@@ -84,10 +89,10 @@ class Agent:
                 sensor = self.image_sensor
                 actuator = self.image_actuator
             else:
-                sensor = Interface(self, f"{task_id}_sensor",
+                sensor = use_interface(self, f"{task_id}_sensor",
                                    in_spec, self.code_spec,
                                    in_number=in_number)
-                actuator = Interface(self, f"{task_id}_actuator",
+                actuator = use_interface(self, f"{task_id}_actuator",
                                      self.code_spec, in_spec,
                                      in_number=in_number)
             log("we pass an input to the sensor to get normies & codes",
@@ -130,7 +135,7 @@ class Agent:
             if predictor is None:
                 in_spec = get_spec(
                     format="code", shape=graph_out_with_code.shape[1:])
-                predictor = Interface(
+                predictor = use_interface(
                     self, "predictor", in_spec, self.code_spec)
             prediction = predictor(graph_out_with_code)
             output_roles.append(f"prediction-{graph_output_number}")
@@ -147,7 +152,7 @@ class Agent:
             if out_spec.format is "image":
                 actuator = self.image_actuator
             else:
-                actuator = Interface(self, task_id, world_model_spec, out_spec)
+                actuator = use_interface(self, task_id, world_model_spec, out_spec)
             if out_spec.format is "ragged":
                 id, n, index = out_spec.variables[0]
                 placeholder = tf.ones_like(inputs[n + 2])
@@ -293,8 +298,8 @@ class Agent:
             maybe_number_or_numbers: a number if n is 1, a list if n > 1
             an int if a and b are ints, else a float
         """
-        if pkey in self.parameters.keys():
-            return self.parameters[pkey]
+        if pkey in self.graph.keys():
+            return self.graph[pkey]
         if a == b:
             maybe_number_or_numbers = [a for _ in range(n)]
         if a > b:
@@ -312,7 +317,7 @@ class Agent:
                     size=n).tolist()
         if n is 1:
             maybe_number_or_numbers = maybe_number_or_numbers[0]
-        self.parameters[pkey] = maybe_number_or_numbers
+        self.graph[pkey] = maybe_number_or_numbers
         return maybe_number_or_numbers
 
     def pull_choices(self, pkey, options, n=None, p=None, replace=None):
@@ -332,11 +337,11 @@ class Agent:
             maybe_choice_or_choices: string if n is 1, else a list
         """
         options = [0, 1] if options is None else options
-        if pkey in self.parameters.keys():
-            return self.parameters[pkey]
+        if pkey in self.graph.keys():
+            return self.graph[pkey]
         maybe_choice_or_choices = np.random.choice(
             options, size=n, p=p, replace=replace).tolist()
-        self.parameters[pkey] = maybe_choice_or_choices
+        self.graph[pkey] = maybe_choice_or_choices
         return maybe_choice_or_choices
 
     def pull_tensors(self, pkey, shape, n=None, method=tf.random.normal,
@@ -356,11 +361,11 @@ class Agent:
         Returns:
             sampled_tensor: tensor of shape
         """
-        if pkey in self.parameters.keys():
-            return self.parameters[pkey]
+        if pkey in self.graph.keys():
+            return self.graph[pkey]
         if n is None:
             parameter = method(shape, dtype=dtype)
         else:
             parameter = [method(shape, dtype=dtype) for _ in range(n)]
-        self.parameters[pkey] = parameter
+        self.graph[pkey] = parameter
         return parameter

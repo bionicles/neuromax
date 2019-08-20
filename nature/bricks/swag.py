@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from .layers.dense import get_dense_out
-from tools.get_brick import get_brick
+from nature import use_dense
+from tools import make_uuid
 
 K = tf.keras
 L = K.layers
@@ -10,24 +10,27 @@ MIN_POWER, MAX_POWER = 2, 3
 UNITS = 4
 
 
-def get_swag_out(agent, id, out, units=UNITS, power=None, return_brick=False):
+def use_swag(agent, id, out, units=UNITS, power=None, return_brick=False):
+    id = make_uuid([id, "swag"])
+
     if power is None:
-        power = agent.pull_numbers(f"{id}_swag_power", MIN_POWER, MAX_POWER)
+        power = agent.pull_numbers(f"{id}_power", MIN_POWER, MAX_POWER)
     if "swag" not in id:
-        id = f"{id}_swag_{power}"
+        id = f"{id}_{power}"
 
     layers = []
     for x in range(power):
-        _, dense = get_dense_out(
-            agent, id, out, units=units, return_brick=True)
+        _, dense = use_dense(agent, id, out, units=units, return_brick=True)
         layers.append(dense)
     multiply = L.Multiply()
     flatten = L.Flatten()
     concat = L.Concatenate(-1)
-    _, output_layer = get_dense_out(agent, id, out,
-                                    units=units, return_brick=True)
+    _, output_layer = use_dense(agent, id, out, units=units, return_brick=True)
+    parts = dict(
+        layers=layers, multiply=multiply, flatten=flatten,
+        concat=concat, output_layer=output_layer)
 
-    def swag(out):
+    def call(out):
         outs = []
         for i in range(power):
             out = layers[i](agent, id, out, units=units)
@@ -38,4 +41,4 @@ def get_swag_out(agent, id, out, units=UNITS, power=None, return_brick=False):
         out = concat(outs)
         out = output_layer(out)
         return out
-    return get_brick(swag, out, return_brick)
+    return agent.build_brick(id, parts, call, out, return_brick)

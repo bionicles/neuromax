@@ -1,9 +1,8 @@
 from tensorflow_addons.layers import InstanceNormalization
 import tensorflow as tf
 
-from tools.get_brick import get_brick
-
-from .helpers.activations import clean_activation, swish
+from nature import clean_activation, swish
+from tools import make_uuid
 
 K = tf.keras
 L = K.layers
@@ -12,22 +11,32 @@ NORM = "instance"
 FN = swish
 
 
-def get_norm_preact_out(
-        agent, id, out, norm=NORM, fn=FN, layer_fn=None, return_brick=False):
+def use_norm_preact(
+        agent, id, out, norm=NORM, fn=FN, layer_fn=None, return_brick=False,
+        return_normie=False):
+    id = make_uuid([id, "norm_preact"])
+
     if not norm and not fn:
         return out
     if norm is "instance":
         normalizer = InstanceNormalization()
     elif norm is "batch":
         normalizer = L.BatchNormalization()
-
-    if fn is None:
-        def op(out):
-            return normalizer(out)
-    else:
+    parts = dict(normalizer=normalizer)
+    if fn:
         activation = L.Activation(clean_activation(fn))
+        parts["activation"] = activation
 
-        def op(out):
-            out = normalizer()(out)
-            return activation(out)
-    return get_brick(op, out, return_brick)
+        if return_normie:
+            def call(x):
+                normie = normalizer(x)
+                return (normie, activation(normie))
+        else:
+            def call(x):
+                y = normalizer(x)
+                return activation(y)
+
+    else:
+        def call(x):
+            return normalizer(x)
+    return agent.build_brick(id, parts, call, out, return_brick)

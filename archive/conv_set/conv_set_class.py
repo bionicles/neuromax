@@ -1,12 +1,10 @@
 # conv-kernel.py
 # why?: build a resnet with kernel and attention set convolutions
-from nanoid import generate
 import tensorflow as tf
 
 from .kernel import get_kernel
 
-from tools.concat_coords import concat_1D_coords
-from tools.log import log
+from tools import concat_1D_coords, log, make_uuid
 
 B, L, K = tf.keras.backend, tf.keras.layers, tf.keras
 
@@ -49,8 +47,8 @@ class KConvSet1D(L.Layer):
             self.call = self.call_all_for_one
         self.kernel = get_kernel(agent, brick_id, d_in, d_out, set_size,
                                  d_in2=d_in2)
-        self.layer_id = f"{brick_id}_KConvSet_{set_size}-{generate()}"
-        super(KConvSet1D, self).__init__(name=self.layer_id)
+        self.id = make_uuid([id, "KConvSet1D", set_size])
+        super(KConvSet1D, self).__init__(name=self.id)
 
     def call_one_for_all(self, input):  # input unknown = ragged sensor
         """Each input element innervates all output elements"""

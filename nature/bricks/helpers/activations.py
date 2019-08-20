@@ -1,10 +1,23 @@
 import tensorflow as tf
 
-K = tf.keras.backend
+from tools import make_uuid
+
+K = tf.keras
+
+B, L = K.backend, K.layers
 
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
+FN = 'swish'
+
+
+def use_fn(agent, id, input, fn=FN, return_brick=False):
+    id = make_uuid([id, "fn"])
+    activation = L.Activation(clean_activation(fn))
+    parts = dict(fn=activation)
+    call = activation.call
+    return agent.build_brick(id, parts, call, input, return_brick)
 
 
 def clean_activation(activation):
@@ -32,7 +45,7 @@ def swish(x):
     Searching for Activation Functions
     https://arxiv.org/abs/1710.05941
     """
-    return (K.sigmoid(x) * x)
+    return (B.sigmoid(x) * x)
 
 
 def soft_argmax(x, beta=SOFT_ARGMAX_BETA):
@@ -46,7 +59,7 @@ def soft_argmax(x, beta=SOFT_ARGMAX_BETA):
 
 
 def gaussian(x):
-    return K.exp(-K.pow(x, 2))
+    return B.exp(-B.pow(x, 2))
 
 
 def hard_tanh(x, min=HARD_MIN, max=HARD_MAX):
@@ -63,7 +76,7 @@ def lisht(x):
     LiSHT: Non-Parametric Linearly Scaled Hyperbolic Tangent
     https://github.com/swalpa/LiSHT
     """
-    return (K.tanh(x) * x)
+    return (B.tanh(x) * x)
 
 
 def rrelu(x, min=RRELU_MIN, max=RRELU_MAX):
@@ -71,7 +84,7 @@ def rrelu(x, min=RRELU_MIN, max=RRELU_MAX):
 
 
 def tanhshrink(x):
-    return x - K.tanh(x)
+    return x - B.tanh(x)
 
 
 def hardshrink(x, min=HARD_MIN, max=HARD_MAX):

@@ -2,17 +2,18 @@ import tensorflow as tf
 
 from nanoid import generate
 
-from .vae import get_image_encoder_out, get_image_decoder_out
-from .norm_preact import get_norm_preact_out
-from .set_conv.set_conv import KConvSet1D
-from .elemental import get_multiply_out
-from .helpers.activations import swish
-from .layers.dense import get_dense_out
+from . import get_image_encoder_out, get_image_decoder_out
+from . import get_norm_preact_out
+from . import KConvSet1D
+from . import get_multiply_out
+from layers import get_dense_out
+from helpers import swish
 
-from tools.concat_coords import concat_coords
-from tools.get_spec import get_spec
-from tools.get_size import get_size
-from tools.log import log
+from tools import concat_coords
+from tools import get_spec
+from tools import get_size
+from tools import get_hw
+from tools import log
 
 K = tf.keras
 L = K.layers
@@ -20,6 +21,7 @@ L = K.layers
 UNITS, FN = 32, swish
 
 
+# DEPRECATED -- switching to simpler "use_interface" function
 class Interface(L.Layer):
     """
     Interface resizes + reshapes + reformats in_spec into out_spec
@@ -68,7 +70,7 @@ class Interface(L.Layer):
         self.shape_variable_key = None
         if self.in_spec.format == "image":
             self.channels_before_concat_coords = self.in_spec.shape[-1]
-            self.size_to_resize_to = self.get_hw(self.in_spec.shape)
+            self.size_to_resize_to = get_hw(self.in_spec.shape)
             encoder_shape = self.add_coords_to_shape(self.in_spec.shape)
             self.in_spec = get_spec(format="image", shape=encoder_shape)
             self.in_spec.size = get_size(encoder_shape)
@@ -112,9 +114,6 @@ class Interface(L.Layer):
         self.flatten_resize_reshape()
         self.out = L.Activation("softmax")(self.out)
 
-    def make_normal(self):
-        self.flatten_resize_reshape()
-
     def flatten_resize_reshape(self):
         log(f"flatten_resize_reshape {self.out.shape}-->{self.out_spec.shape}")
         out_size = self.out_spec.size
@@ -124,15 +123,10 @@ class Interface(L.Layer):
         if len(out.shape) is 3:
             out = get_multiply_out(self.agent, self.brick_id, out_size, out)
         else:
-            out = get_dense_out(self.agent, self.brick_id,
-                            units=out_size, fn=FN)(out)
+            out = get_dense_out(
+                self.agent, self.brick_id, units=out_size, fn=FN)(out)
         log(5, out.shape, color="yellow")
         self.out = L.Reshape(self.out_spec.shape)(out)
-
-    @staticmethod
-    def get_hw(shape):
-        """Returns height and width of image shape (no batch dim)"""
-        return (shape[0], shape[1])
 
     @staticmethod
     def add_coords_to_shape(shape):
@@ -145,7 +139,7 @@ class Interface(L.Layer):
         self.call = self.call_image_sensor
         self.out = get_image_encoder_out(
             self.agent, self.brick_id, self.out, self.out_spec)
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def call_image_sensor(self, input):
         image = tf.image.resize(input, self.size_to_resize_to)
@@ -162,14 +156,14 @@ class Interface(L.Layer):
     def get_image_actuator_out(self):
         self.out = get_image_decoder_out(
             self.agent, self.brick_id, self.out, self.out_spec)
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def get_ragged_sensor_out(self):
         """each input element innervates all out elements (one for all)"""
         self.out = KConvSet1D(
             self.agent, self.brick_id, self.in_spec, self.out_spec,
             "one_for_all")(self.out)
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def get_ragged_actuator_out(self):
         """all input elements innervate each out element (all for one)"""
@@ -182,22 +176,22 @@ class Interface(L.Layer):
         log("get_ragged_actuator_out", self.out, color="red")
 
     def get_box_sensor_out(self):
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def get_box_actuator_out(self):
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def get_float_sensor_out(self):
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def get_float_actuator_out(self):
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def get_code_interface_out(self):
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def get_onehot_sensor_out(self):
-        self.make_normal()
+        self.flatten_resize_reshape()
 
     def get_onehot_actuator_out(self):
         self.make_categorical(one_hot=True)

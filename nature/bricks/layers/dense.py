@@ -1,21 +1,19 @@
 import tensorflow as tf
 
-from ..helpers.regularize import get_l1_l2
-from ..helpers.chaos import get_chaos
-# from .noisedrop import NoiseDrop
-
-from tools.get_brick import get_brick
+from nature import get_l1_l2, get_chaos
+from tools import make_uuid
 
 K = tf.keras
-B, L = K.backend, K.layers
+L = K.layers
 
 LAYER_CLASS = L.Dense  # NoiseDrop
 UNITS = 256
 
 
-def get_dense_out(
+def use_dense(
         agent, id, input,
         layer_class=LAYER_CLASS, units=UNITS, return_brick=False):
+    id = make_uuid([id, "dense"])
     layer = layer_class(
             units,
             kernel_regularizer=get_l1_l2(),
@@ -24,7 +22,7 @@ def get_dense_out(
             kernel_initializer=get_chaos(),
             bias_initializer=get_chaos(bias=True),
         )
+    parts = dict(layer=layer)
+    call = layer.call
 
-    def use_layer(x):
-        return layer(x)
-    return get_brick(use_layer, input, return_brick)
+    return agent.build_brick(id, parts, call, input, return_brick)

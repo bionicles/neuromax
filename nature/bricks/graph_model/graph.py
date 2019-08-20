@@ -1,9 +1,7 @@
 import networkx as nx
 import random
 
-from tools.screenshot_graph import screenshot_graph
-from tools.safe_sample import safe_sample
-from tools.log import log
+from tools import screenshot_graph, safe_sample, log
 
 # appearance
 STYLE = "filled"
@@ -14,17 +12,17 @@ MIN_MUTATIONS, MAX_MUTATIONS = 0, 1
 MUTATION_OPTIONS = ["insert_motifs"]
 MIN_MIN_P_INSERT, MAX_MIN_P_INSERT = 0, 0.2
 MIN_MAX_P_INSERT, MAX_MAX_P_INSERT = 0.2, 0.5
-# regulons
+# regulons ... dat imprecise probability
 MIN_MIN_LAYERS, MAX_MIN_LAYERS, MIN_MAX_LAYERS, MAX_MAX_LAYERS = 1, 2, 3, 4
 MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
 
 
 class Graph:
-    def __init__(self, agent, brick_id):
+    def __init__(self, agent, id):
         log("Graph init")
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
-        self.brick_id = brick_id + "_graph"
+        self.id = id + "_graph"
         self.code_spec = agent.code_spec
         self.agent = agent
         self.get_graph()

@@ -1,8 +1,8 @@
 import tensorflow as tf
 
-from tools.get_unique_id import get_unique_id
-from ..layers.dense import get_dense_out
-from tools.log import log
+from tools import make_uuid, log
+from nature import use_dense
+
 K = tf.keras
 L = K.layers
 
@@ -11,12 +11,11 @@ MIN_LAYERS, MAX_LAYERS = 1, 2
 SET_OPTIONS = [-1, 1]
 
 
-def get_kernel(agent, brick_id, d_in, d_out, set_size,
-               name=None, input_shape=None, d_in2=None):
+def use_kernel(agent, id, d_in, d_out, set_size, input_shape=None, d_in2=None):
     """get a deep or wide/deep dense set kernel"""
-    log("get_kernel", brick_id, d_in, d_out, set_size)
+    log("get_kernel", id, d_in, d_out, set_size)
     log("agent code spec", agent.code_spec)
-    name = get_unique_id(f"{brick_id}_mlp") if name is None else name
+    name = make_uuid([id, "kernel"])
     n_layers = agent.pull_numbers(f"{name}-n_layers", MIN_LAYERS, MAX_LAYERS)
     model_type = agent.pull_choices(f"{name}-model_type", MODEL_OPTIONS)
     if set_size is None:
@@ -50,12 +49,12 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         code = K.Input((d_in2,))
         inputs = [atom1, code]
         concat = L.Concatenate(-1)([atom1, code])
-    output = get_dense_out(agent, f"{name}_0")(concat)
+    output = use_dense(agent, f"{name}_0")(concat)
     for i in range(n_layers - 1):
-        output = get_dense_out(agent, f"{name}_{i}")(output)
+        output = use_dense(agent, f"{name}_{i}")(output)
     if "wide" in model_type:
         stuff_to_concat = inputs + [output]
         output = L.Concatenate(-1)(stuff_to_concat)
-    output = get_dense_out(agent, f"{name}_dense_{n_layers}", units=d_out)(output)
+    output = use_dense(agent, f"{name}_{n_layers}", units=d_out)(output)
     name = f"{name}_{n_layers}_{model_type}"
     return K.Model(inputs, output, name=name)
