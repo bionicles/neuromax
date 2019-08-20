@@ -10,7 +10,7 @@ def map_sets_tf(tensor, set_size, fn, pool):
 
     Args:
         tensor: tf.Tensor from which we draw sets
-        set_size: integer number of elements from tensor upon which we operate
+        set_size: integer # of elements from tensor to which we apply fn
         fn: callable to apply to each set of set_size elements in tensor
         pool: callable to apply to the results of mapping fn over sets
 
@@ -37,7 +37,7 @@ def map_sets(iterable, set_size, fn, pool):
 
     Args:
         iterable: list from which we draw sets
-        set_size: integer number of elements from tensor to be applied
+        set_size: integer # of elements from iterable to which we apply fn
         fn: callable to apply to each set of set_size elements in tensor
         pool: callable to apply to the results of mapping fn over sets
 

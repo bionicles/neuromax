@@ -10,7 +10,6 @@ from helpers.activations import swish
 from .layers.dense import get_dense
 
 from tools.concat_coords import concat_coords
-from tools.get_prior import get_prior
 from tools.get_spec import get_spec
 from tools.get_size import get_size
 from tools.log import log
@@ -82,14 +81,12 @@ class Interface(L.Layer):
         self.input_layer = K.Input(self.in_spec.shape,
                                    batch_size=self.agent.batch_size)
         log(f"{self.brick_id} input layer", self.input_layer, debug=self.debug)
-        if self.in_spec.format is not "code":
-            try:
-                self.normie = get_norm_preact_out(self.agent, self.id, self.input_layer)
-                self.out = self.normie
-            except Exception as e:
-                log("instance norm failed", e, color="red")
-        else:
-            self.out = self.input_layer
+        try:
+            self.normie = get_norm_preact_out(self.agent, self.id, self.input_layer)
+        except Exception as e:
+            log("instance norm failed", e, color="red")
+            self.normie = None
+        self.out = self.normie if self.normie else self.input_layer
         self.call = self.call_model  # might be overridden in builder fn
         in_spec, out_spec = self.in_spec, self.out_spec
         if in_spec.format is not "code" and out_spec.format is "code":
@@ -219,7 +216,7 @@ class Interface(L.Layer):
         out = self.model(input)
         # log("out_spec", list(self.out_spec.shape), self.out_spec.format, color="blue")
         # if isinstance(out, list):
-            # [log("out", list(o.shape), color="yellow") for o in out]
+        #     [log("out", list(o.shape), color="yellow") for o in out]
         # else:
-            # log("out", list(out.shape), color="yellow")
+        #     log("out", list(out.shape), color="yellow")
         return out

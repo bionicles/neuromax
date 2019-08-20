@@ -10,7 +10,6 @@ from .bricks.interface import Interface
 from tools.map_attrdict import map_attrdict
 from tools.get_percent import get_percent
 from tools.show_model import show_model
-from tools.get_prior import get_prior
 from tools.get_spec import get_spec
 from tools.add_up import add_up
 from tools.log import log
