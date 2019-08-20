@@ -17,7 +17,7 @@ from tools.log import log
 SWITCH_TO_MAE_LOSS_WHEN_FREE_ENERGY_BELOW = 4.2
 OPTIMIZER = tf.keras.optimizers.SGD(3e-4, clipvalue=0.04)
 LOSS_FN = tf.keras.losses.MSLE
-
+PROBABILISTIC = False
 EPISODES_PER_PRACTICE_SESSION = 100
 
 IMAGE_SHAPE = (32, 32, 4)
@@ -37,6 +37,7 @@ class Agent:
         self.batch_size = BATCH_SIZE
         self.loss_fn = LOSS_FN
         self.tasks = tasks
+        self.probabilistic = PROBABILISTIC
         self.parameters = AttrDict({})
         self.code_spec = get_spec(shape=(CODE_ATOMS, 1), format="code")
         self.loss_spec = get_spec(format="float", shape=(1,))

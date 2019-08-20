@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from nurture.bricks.helpers.regularize import get_l1_l2
-from nurture.bricks.helpers.chaos import get_chaos
+from ..helpers.regularize import get_l1_l2
+from ..helpers.chaos import get_chaos
 # from .noisedrop import NoiseDrop
 
 from tools.get_brick import get_brick

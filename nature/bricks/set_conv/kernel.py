@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from tools.get_unique_id import get_unique_id
-from nature.bricks.dense import get_dense
+from ..layers.dense import get_dense_out
 from tools.log import log
 K = tf.keras
 L = K.layers
@@ -50,12 +50,12 @@ def get_kernel(agent, brick_id, d_in, d_out, set_size,
         code = K.Input((d_in2,))
         inputs = [atom1, code]
         concat = L.Concatenate(-1)([atom1, code])
-    output = get_dense(agent, f"{name}_0")(concat)
+    output = get_dense_out(agent, f"{name}_0")(concat)
     for i in range(n_layers - 1):
-        output = get_dense(agent, f"{name}_{i}")(output)
+        output = get_dense_out(agent, f"{name}_{i}")(output)
     if "wide" in model_type:
         stuff_to_concat = inputs + [output]
         output = L.Concatenate(-1)(stuff_to_concat)
-    output = get_dense(agent, f"{name}_dense_{n_layers}", units=d_out)(output)
+    output = get_dense_out(agent, f"{name}_dense_{n_layers}", units=d_out)(output)
     name = f"{name}_{n_layers}_{model_type}"
     return K.Model(inputs, output, name=name)

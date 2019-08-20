@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from layers.dense import get_dense_out
-from helpers.activations import swish
+from .layers.dense import get_dense_out
+from .helpers.activations import swish
 from tools.get_brick import get_brick
 
 UNITS, FN, LAYERS = 256, swish, 2

@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from .layers.conv import get_deconv_2D_out, get_conv_2D_out, get_conv_1D_out
 from .layers.dense import get_dense_out
-from .preact import get_norm_preact_out
+from .norm_preact import get_norm_preact_out
 
 L = tf.keras.layers
 

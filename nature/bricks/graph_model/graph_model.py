@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from nature.bricks.residual_dense import get_residual_block_out, get_dense_block_out
 from nature.bricks.norm_preact import get_norm_preact_out
-from nature.bricks.get_mlp import get_mlp_out
+from nature.bricks.mlp import get_mlp_out
 from nature.bricks.swag import get_swag_out
 from .graph import Graph
 

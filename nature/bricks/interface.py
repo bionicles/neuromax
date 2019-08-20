@@ -5,9 +5,9 @@ from nanoid import generate
 from .vae import get_image_encoder_out, get_image_decoder_out
 from .norm_preact import get_norm_preact_out
 from .set_conv.set_conv import KConvSet1D
-from .multiply import get_multiply_out
-from helpers.activations import swish
-from .layers.dense import get_dense
+from .elemental import get_multiply_out
+from .helpers.activations import swish
+from .layers.dense import get_dense_out
 
 from tools.concat_coords import concat_coords
 from tools.get_spec import get_spec
@@ -124,7 +124,7 @@ class Interface(L.Layer):
         if len(out.shape) is 3:
             out = get_multiply_out(self.agent, self.brick_id, out_size, out)
         else:
-            out = get_dense(self.agent, self.brick_id,
+            out = get_dense_out(self.agent, self.brick_id,
                             units=out_size, fn=FN)(out)
         log(5, out.shape, color="yellow")
         self.out = L.Reshape(self.out_spec.shape)(out)
