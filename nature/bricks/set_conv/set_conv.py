@@ -3,7 +3,7 @@
 from nanoid import generate
 import tensorflow as tf
 
-from nature.bricks.kernel import get_kernel
+from .kernel import get_kernel
 
 from tools.concat_coords import concat_1D_coords
 from tools.log import log
