@@ -54,10 +54,9 @@ def use_interface(
         resizer = L.Lambda(lambda x: tf.image.resize(x, in_spec.shape))
         parts["resizer"] = resizer
         out = resizer(out)
-
-    log("concat coordinates")
-    parts["coordinator"] = coordinator = L.Lambda(concat_coords)
-    out = coordinator(out)
+        log("concat coordinates")
+        parts["coordinator"] = coordinator = L.Lambda(concat_coords)
+        out = coordinator(out)
 
     log("normalize inputs")
     out, norm_preact = use_norm_preact(
