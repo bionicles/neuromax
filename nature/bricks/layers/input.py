@@ -30,4 +30,4 @@ def use_input(
 
     def call(*args):
         return layer
-    return agent.pull_brick(parts)(id, parts, call, "Bob", return_brick)
+    return agent.pull_brick(parts)
