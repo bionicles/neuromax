@@ -5,7 +5,7 @@ import numpy as np
 from tools import get_size, get_onehot
 
 
-def get_spec(format=None, shape=None, size=None, n=None, variables=None,
+def get_spec(format=None, shape=None, size=None, n=None, variables=[],
              add_coords=None, low=None, high=None):
     """
     Build an AttrDict for an input or output tensor
@@ -23,7 +23,7 @@ def get_spec(format=None, shape=None, size=None, n=None, variables=None,
     spec = AttrDict({})
     if shape is not None:
         if format is "onehot":
-            shape = get_onehot(1, ).shape
+            shape = get_onehot(1, variables).shape
         spec["shape"] = shape
     if format is not None:
         spec["format"] = format
