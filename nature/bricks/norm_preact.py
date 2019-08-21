@@ -39,4 +39,5 @@ def use_norm_preact(
     else:
         def call(x):
             return normalizer(x)
+    parts["id"], parts["call"], parts["out"] = id, call, out
     return agent.pull_brick(parts)
