@@ -39,7 +39,7 @@ def use_conv_1D(
     )
     parts = dict(layer=layer)
     call = layer.call
-    return agent.pull_brick(id, parts, call, out, return_brick)
+    return agent.pull_brick(parts)(id, parts, call, out, return_brick)
 
 
 def use_conv_2D(
@@ -57,7 +57,7 @@ def use_conv_2D(
     id = make_uuid([id, "conv2D"])
     parts = dict(layer=layer)
     call = layer.call
-    return agent.pull_brick(id, parts, call, out, return_brick)
+    return agent.pull_brick(parts)(id, parts, call, out, return_brick)
 
 
 def use_deconv_2D(
@@ -75,4 +75,4 @@ def use_deconv_2D(
     )
     parts = dict(layer=layer)
     call = layer.call
-    return agent.pull_brick(id, parts, call, out, return_brick)
+    return agent.pull_brick(parts)(id, parts, call, out, return_brick)

@@ -21,7 +21,7 @@ def use_add(agent, id, input, layer_fn=LAYER_FN, return_brick=False):
     def call(x):
         out = op(x)
         return adder([x, out])
-    return agent.pull_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(parts)
 
 
 def use_multiply(
@@ -37,4 +37,4 @@ def use_multiply(
         o1 = layer1(x)
         o2 = layer2(x)
         return multiplier([o1, o2])
-    return agent.pull_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(parts)

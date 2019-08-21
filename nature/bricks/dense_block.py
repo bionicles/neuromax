@@ -38,4 +38,4 @@ def use_dense_block(
     parts = dict(model=model)
     # we make the function
     call = model.call
-    return agent.pull_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(parts)

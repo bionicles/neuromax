@@ -23,4 +23,4 @@ def use_skip(agent, id, input, op_fn=OP_FN, skip_class=SKIP_CLASS,
     def call(x):
         y = op(x)
         return skipper([x, y])
-    return agent.pull_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(parts)

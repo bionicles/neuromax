@@ -17,7 +17,7 @@ def use_fn(agent, id, input, fn=FN, return_brick=False):
     activation = L.Activation(clean_activation(fn))
     parts = dict(fn=activation)
     call = activation.call
-    return agent.pull_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(parts)
 
 
 def clean_activation(activation):

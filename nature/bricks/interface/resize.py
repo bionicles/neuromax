@@ -21,4 +21,4 @@ def use_flatten_resize_reshape(
     model = K.Model(input, out, name=f"{id}_model")
     parts = dict(model=model)
     call = model.call
-    return agent.pull_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(parts)

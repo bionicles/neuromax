@@ -25,4 +25,4 @@ def use_dense(
     parts = dict(layer=layer)
     call = layer.call
 
-    return agent.pull_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(parts)
