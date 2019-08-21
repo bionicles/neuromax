@@ -23,11 +23,11 @@ def use_input(
 
     log("make the layer")
     layer = Input(shape, batch_size=batch_size)
-    parts = dict(
-        brick_type=BRICK_TYPE, layer=layer, input_or_spec=input_or_spec)
 
     log("make call and brick")
 
     def call(*args):
         return layer
+    parts = dict(
+        id=id, call=call, out=layer)
     return agent.pull_brick(parts)
