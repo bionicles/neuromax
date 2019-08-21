@@ -7,7 +7,7 @@ from .log import log
 
 
 def concat_coords(tensor, should_normalize=True):
-    log("concat coords onto", tensor.shape)
+    log("concat coords to tensor", tensor)
     if len(tensor.shape) in [2, 3]:  # B, W, C
         if len(tensor.shape) is 2:
             tensor = tf.expand_dims(tensor, -1)

@@ -11,4 +11,4 @@ def make_uuid(string_or_list):
         name = "_".join([str(x).lower() for x in no_nones])
     else:
         name = "bob"
-    return f"{name}_{generate(size=NANOID_SIZE)}"
+    return f"{name}_{generate('0123456789', NANOID_SIZE)}"

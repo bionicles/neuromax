@@ -38,15 +38,11 @@ class Agent:
         log("we add a task id sensor", color="green")
         n_tasks = len(self.tasks.keys())
         self.task_id_spec = get_spec(shape=n_tasks, format="onehot")
-        self.task_sensor = use_interface(self, "task_id",
-                                     self.task_id_spec, self.code_spec)
+        self.task_sensor = use_interface(
+            self, "task_id_sensor",
+            in_spec=self.task_id_spec, out_spec=self.code_spec)
         log("we add a sensor for images", color="green")
-        self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image",
-                                   add_coords=True)
-        self.image_sensor = use_interface(self, "image_sensor",
-                                      self.image_spec, self.code_spec)
-        self.image_actuator = use_interface(self, "image_actuator",
-                                        self.code_spec, self.image_spec)
+        self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
         log("we build the shared GraphModel", color="green")
         self.decide_n_in_n_out()
         self.graph_model = use_graph_model(self, "shared", )
@@ -56,16 +52,33 @@ class Agent:
                        for _ in range(self.n_in)]
         self.optimizer = OPTIMIZER
 
-    def build_brick(self, id, parts, call, out, return_brick):
+    def pull_brick(self, parts, result="out", reusing=False):
         """construct a brick from parts and a function to use them
 
+        Args:
+            parts: dict with id, call, input, and sub-bricks
+            result: string in "brick", "out", "both"
         https://stackoverflow.com/a/45102583/4898464
         """
-        self.graph[id].brick = brick = Brick(self, id, parts, call, out)
-        if out is None:
+        # make sure we have necessary parts
+        assert all([key in parts.keys() for key in ["id", "call", "out"]])
+        assert result in ["out", "brick", "both"]
+        id, out = parts["id"], parts["out"]
+        if reusing and id in self.graph.keys():
+            return self.graph[id]
+        log('pull_brick')
+        [log(k, v) for k, v in parts.items()]
+        log('result?', result)
+        log('reusing?', reusing)
+        self.graph[id] = brick = Brick(self, parts)
+        log(brick, color="green")
+        if result is "brick":
             return brick
-        self.graph[id].out = out = brick(out)
-        return out, brick if return_brick else out
+        elif result is "both":
+            return brick(out), brick
+        elif result is "out":
+            return brick(out)
+        raise Exception("failed to pull_brick", color="red")
 
     def pull_model(self, task_id, task_dict):
         print("")
@@ -86,6 +99,13 @@ class Agent:
         for in_number, in_spec in enumerate(task_dict.inputs):
             log(f"input {in_number} needs a sensor and an actuator", color="green")
             if in_spec.format is "image":
+                if self.image_sensor is None:
+                    self.image_sensor = use_interface(
+                        self, "image_sensor",
+                        in_spec=self.image_spec, out_spec=self.code_spec)
+                if self.image_actuator is None:
+                    self.image_actuator = use_interface(self, "image_actuator",
+                                                    self.code_spec, self.image_spec)
                 sensor = self.image_sensor
                 actuator = self.image_actuator
             else:

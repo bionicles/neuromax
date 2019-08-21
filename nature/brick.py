@@ -16,3 +16,25 @@ class Brick(Layer):
 
     def build(self):
         pass
+
+    def __repr__(self):
+        nl = '\n'
+        kv = []
+        kv.append(f" id:  {self.id}")
+        kv.append("")
+        for k, v in self.parts.items():
+            if isinstance(v, Brick):
+                string = f"  brick: {v.id}"
+            else:
+                string = f" {k}:  {v}"
+            kv.append(string)
+        kv.append("")
+        kv.append(f" out:  {self.out}")
+        substring = nl.join([str(x) for x in kv])
+        return f"""
+
+-------------------------------- Brick --------------------------------
+{substring}
+-----------------------------------------------------------------------
+
+"""

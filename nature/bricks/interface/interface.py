@@ -16,21 +16,23 @@ SIMPLE_INTERFACES = [
 
 
 def use_interface(
-        agent, id, input,
+        agent, id, input=None,
         in_spec=None, out_spec=None, n=None, return_brick=False
         ):
     log("allow specs to be optional")
     out_spec = out_spec if out_spec else agent.code_spec
     in_spec = in_spec if in_spec else agent.code_spec
+    log("trust input shape more than in_spec shape")
+    if input:
+        if in_spec.shape is not input.shape:
+            in_spec = get_spec(**in_spec) if in_spec else get_spec(format="code")
+            in_spec.shape = input.shape
+    log("in_spec", in_spec)
+    log("out_spec", out_spec)
 
     log("update the id")
     id = f"{id}{f'_{n}' if n else ''}"
     id = make_uuid([id, in_spec.format, "to", out_spec.format])
-
-    log("trust input shape more than in_spec shape")
-    if in_spec.shape is not input.shape:
-        in_spec = get_spec(**in_spec) if in_spec else get_spec(format="code")
-        in_spec.shape = input.shape
 
     log("decide what to build")
     return_normie = False
@@ -43,23 +45,19 @@ def use_interface(
         model_type = f"{out_spec.format}_actuator"
 
     log("build the input")
-    input_layer = use_input(agent, id, in_spec)
+    out = input_layer = use_input(agent, id, in_spec)
     parts = dict(input_layer=input_layer)
-
-    log("cast to tf.float32")
-    parts["caster"] = caster = L.Lambda(lambda x: tf.cast(x, tf.float32))
-    out = caster(input_layer)
 
     log("resize images")
     if in_spec.format is "image":
         log("image, resizing")
         resizer = L.Lambda(lambda x: tf.image.resize(x, in_spec.shape))
         parts["resizer"] = resizer
-        out = resizer(input_layer)
+        out = resizer(out)
 
     log("concat coordinates")
     parts["coordinator"] = coordinator = L.Lambda(concat_coords)
-    out = coordinator(input_layer)
+    out = coordinator(out)
 
     log("normalize inputs")
     out, norm_preact = use_norm_preact(

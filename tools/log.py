@@ -1,11 +1,11 @@
-# debug.py - bion
-# why?: organize helper functions for debugging
+# log.py - bion
+# why?: log is shorter to type than 'print' and we can add extra features
 from blessings import Terminal
 from time import sleep
 
 T = Terminal()
 
-DEBUG = False
+DEBUG = True
 
 # color
 # black
@@ -18,18 +18,17 @@ DEBUG = False
 # white
 
 
-def log(*args, color="white", delay=0, debug=DEBUG):
+def log(*args, color="white", debug=DEBUG, delay=0):
     """
-    Print args to the terminal
+    log to the terminal
 
-    Kwargs:
-        color: string black, red, green, yellow, blue, magenta, cyan, white
-        delay: number of seconds to pause after printing
+    kwargs:
+        color: string; black, red, green, yellow, blue, magenta, cyan, white
+        debug: boolean; to print or not. default set in log.py
+        delay: number; seconds to pause after printing
     """
-    args = str(args)
-    for char in ["(", ")", ",", "'"]:
-        args = args.replace(char, '')
     if debug:
-        print(getattr(T, color)(args))
+        string = " ".join([getattr(T, color)(str(arg)) for arg in args])
+        print(string)
     if delay:
         sleep(delay)

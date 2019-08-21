@@ -43,3 +43,4 @@ shared layers in interfaces
 tfp layers
 tfp distributions -- see helpers.add_distribution
 tfp bijectors ?
+convolution over distributions https://towardsdatascience.com/differentiable-convolution-of-probability-distributions-with-tensorflow-79c1dd769b46

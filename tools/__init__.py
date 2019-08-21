@@ -3,6 +3,7 @@ from tools.concat_coords import concat_coords
 from tools.map_attrdict import map_attrdict
 from tools.safe_sample import safe_sample
 from tools.show_model import show_model
+from tools.get_onehot import get_onehot
 from tools.make_uuid import make_uuid
 from tools.get_spec import get_spec
 from tools.get_size import get_size

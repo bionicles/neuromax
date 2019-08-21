@@ -2,11 +2,13 @@ from tensorflow.keras import Input
 
 from tools import make_uuid, log
 
+BRICK_TYPE = "input"
+
 
 def use_input(
         agent, id, input_or_spec,
         return_brick=True, shape_has_batch_dim=True, batch_size=None):
-    id = make_uuid([id, "input"])
+    id = make_uuid([id, BRICK_TYPE])
     if input_or_spec is None:
         input_or_spec = agent.code_spec
 
@@ -21,7 +23,8 @@ def use_input(
 
     log("make the layer")
     layer = Input(shape, batch_size=batch_size)
-    parts = dict(layer=layer, input_or_spec=input_or_spec)
+    parts = dict(
+        brick_type=BRICK_TYPE, layer=layer, input_or_spec=input_or_spec)
 
     log("make call and brick")
 
