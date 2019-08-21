@@ -63,14 +63,14 @@ class Agent:
         # make sure we have necessary parts
         assert all([key in parts.keys() for key in ["id", "call", "out"]]), f"Parts keys are {parts.keys()}"
         assert result in ["out", "brick", "both"], f"Result is {result}"
-        id, out = parts["id"], parts["out"]
+        id, call, out = parts["id"], parts["call"], parts["out"]
         if reusing and id in self.graph.keys():
             return self.graph[id]
         log('pull_brick')
         [log(k, v) for k, v in parts.items()]
         log('result?', result)
         log('reusing?', reusing)
-        self.graph[id] = brick = Brick(self, parts)
+        self.graph[id] = brick = Brick(Agent, id, parts, call, out)
         log(brick, color="green")
         if result is "brick":
             return brick
