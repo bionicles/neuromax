@@ -61,8 +61,8 @@ class Agent:
         https://stackoverflow.com/a/45102583/4898464
         """
         # make sure we have necessary parts
-        assert all([key in parts.keys() for key in ["id", "call", "out"]])
-        assert result in ["out", "brick", "both"]
+        assert all([key in parts.keys() for key in ["id", "call", "out"]]), f"Parts keys are {parts.keys()}"
+        assert result in ["out", "brick", "both"], f"Result is {result}"
         id, out = parts["id"], parts["out"]
         if reusing and id in self.graph.keys():
             return self.graph[id]
