@@ -85,4 +85,4 @@ def use_interface(
     outputs = (normie, out) if "sensor" in model_type else out
     parts["model"] = model = K.Model(input_layer, outputs)
     call = model.call
-    return agent.build_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(id, parts, call, input, return_brick)

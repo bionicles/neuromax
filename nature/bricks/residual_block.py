@@ -36,4 +36,4 @@ def use_residual_block(
     parts = dict(model=model)
     # we make a function to use it
     call = model.call
-    return agent.build_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(id, parts, call, input, return_brick)

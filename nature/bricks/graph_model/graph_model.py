@@ -65,4 +65,4 @@ def use_graph_model(agent, id, input, return_brick):
     model = build(G, agent)
     parts = dict(graph=G, model=model)
     call = model.call
-    return agent.build_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(id, parts, call, input, return_brick)

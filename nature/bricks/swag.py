@@ -41,4 +41,4 @@ def use_swag(agent, id, out, units=UNITS, power=None, return_brick=False):
         out = concat(outs)
         out = output_layer(out)
         return out
-    return agent.build_brick(id, parts, call, out, return_brick)
+    return agent.pull_brick(id, parts, call, out, return_brick)

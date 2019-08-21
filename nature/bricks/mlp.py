@@ -26,4 +26,4 @@ def use_mlp(
     model = K.Sequential(layers)
     parts = dict(layers=layers, model=model)
     call = model
-    return agent.build_brick(id, parts, call, out, return_brick)
+    return agent.pull_brick(id, parts, call, out, return_brick)

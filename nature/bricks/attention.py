@@ -15,7 +15,7 @@ def use_attention(agent, id, input,
     attention = MultiHeadAttention(agent, id, d_model=d_model, n_heads=n_heads)
     parts = dict(attention=attention)
     call = attention.call
-    return agent.build_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(id, parts, call, input, return_brick)
 
 
 class MultiHeadAttention(L.Layer):

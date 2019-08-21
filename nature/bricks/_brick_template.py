@@ -22,4 +22,4 @@ def get_xxx_out(agent, id, input, layer_class=LAYER_CLASS, return_brick=False):
         x = part1(x)
         x = part2(x)
         return x
-    return agent.build_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(id, parts, call, input, return_brick)

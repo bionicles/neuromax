@@ -44,7 +44,7 @@ def use_image_sensor(
     def call(x):
         x = tf.image.resize(x, in_spec.shape)
         return model(x)
-    return agent.build_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(id, parts, call, input, return_brick)
 
 
 def use_image_actuator(
@@ -65,4 +65,4 @@ def use_image_actuator(
     model = K.Model(input_layer, out)
     parts = dict(model=model, out_spec=out_spec)
     call = model.call
-    return agent.build_brick(id, parts, call, input, return_brick)
+    return agent.pull_brick(id, parts, call, input, return_brick)
