@@ -15,7 +15,7 @@ class Brick(Layer):
         self.id = id
         super(Brick, self).__init__()
 
-    def build(self):
+    def build(self, input):
         pass
 
     def __repr__(self):
