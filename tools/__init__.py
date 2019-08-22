@@ -4,8 +4,9 @@ from tools.map_attrdict import map_attrdict
 from tools.safe_sample import safe_sample
 from tools.show_model import show_model
 from tools.get_onehot import get_onehot
-from tools.make_uuid import make_uuid
+from tools.map_sets import map_sets_tf
 from tools.get_spec import get_spec
 from tools.get_size import get_size
+from tools.make_id import make_id
 from tools.add_up import add_up
 from tools.log import log

@@ -1,40 +1,35 @@
 import tensorflow as tf
 
-from nature import use_dense, use_layer
-from tools import make_uuid
+from nature import use_dense
 
 K = tf.keras
 L = K.layers
 
-LAYER_FN = use_dense
 UNITS = 128
 
 
-def use_add(agent, id, input, layer_fn=LAYER_FN, return_brick=False):
-    id = make_uuid([id, "add"])
-
-    d_in = input.shape[-1]
-    _, op = use_layer(agent, id, layer_fn, input, d_in)
-    adder = L.Add()
-    parts = dict(op=op, adder=adder)
+def use_add(agent, parts):
+    assert "units" in parts.keys()
+    parts.dense = dense = use_dense(parts.units)
+    parts.adder = adder = L.Add()
 
     def call(x):
-        out = op(x)
+        out = dense(x)
         return adder([x, out])
-    return agent.pull_brick(parts)
+    parts.call = call
+    return parts
 
 
-def use_multiply(
-        agent, id, input, layer_fn=LAYER_FN, units=UNITS, return_brick=False):
-    id = make_uuid([id, "multiply"])
-
-    layer1 = use_layer(agent, id, layer_fn, input, units)
-    layer2 = use_layer(agent, id, layer_fn, input, units)
-    multiplier = L.Multiply()
-    parts = dict(layer1=layer1, layer2=layer2, multiplier=multiplier)
+def use_multiply(agent, parts):
+    if "units" not in parts.keys():
+        parts.units = UNITS
+    parts.dense1 = dense1 = use_dense(parts.units)
+    parts.dense2 = dense2 = use_dense(parts.units)
+    parts.multiplier = multiplier = L.Multiply()
 
     def call(x):
-        o1 = layer1(x)
-        o2 = layer2(x)
+        o1 = dense1(x)
+        o2 = dense2(x)
         return multiplier([o1, o2])
-    return agent.pull_brick(parts)
+    parts.call = call
+    return parts

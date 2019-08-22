@@ -2,10 +2,7 @@
 # to destroy bugs, interface encapsulates autoencoders for common data formats
 import tensorflow as tf
 
-from nature import use_flatten_resize_reshape, use_norm_preact
-from nature import use_fn, use_input
-
-from tools import concat_coords, get_spec, log, make_uuid
+from tools import concat_coords, get_spec, log, make_id
 
 K = tf.keras
 L = K.layers
@@ -15,24 +12,28 @@ SIMPLE_INTERFACES = [
     'box_sensor', 'float_sensor', 'float_actuator']
 
 
-def use_interface(
-        agent, id, input=None,
-        in_spec=None, out_spec=None, n=None, return_brick=False
-        ):
+def use_interface(agent, parts, reuse=True):
     log("allow specs to be optional")
-    out_spec = out_spec if out_spec else agent.code_spec
-    in_spec = in_spec if in_spec else agent.code_spec
-    log("trust input shape more than in_spec shape")
-    if input:
-        if in_spec.shape is not input.shape:
-            in_spec = get_spec(**in_spec) if in_spec else get_spec(format="code")
-            in_spec.shape = input.shape
+    keys = parts.keys()
+
+    if "in_spec" in keys:
+        in_spec = parts["in_spec"]
+    elif "input" in keys:
+        in_spec = get_spec(input)
+    else:
+        in_spec = agent.code_spec
     log("in_spec", in_spec)
+
+    out_spec = agent.code_spec if "out_spec" in keys else parts["out_spec"]
     log("out_spec", out_spec)
 
     log("update the id")
-    id = f"{id}{f'_{n}' if n else ''}"
-    id = make_uuid([id, in_spec.format, "to", out_spec.format])
+    if 'n' in keys:
+        n = parts['n']
+        id = f"{id}_{n}"
+    id = make_id(
+        [id, "interface", str(in_spec.shape), "to", str(out_spec.shape)],
+        reuse=reuse)
 
     log("decide what to build")
     return_normie = False
@@ -45,7 +46,8 @@ def use_interface(
         model_type = f"{out_spec.format}_actuator"
 
     log("build the input")
-    out = input_layer = use_input(agent, id, in_spec)
+    input_parts = dict(brick_type="input", id=id, in_spec=in_spec)
+    out = input_layer = agent.pull_brick(input_parts)
     parts = dict(input_layer=input_layer)
 
     log("resize images")
@@ -58,12 +60,14 @@ def use_interface(
         parts["coordinator"] = coordinator = L.Lambda(concat_coords)
         out = coordinator(out)
 
-    log("normalize inputs")
-    out, norm_preact = use_norm_preact(
-        agent, id, out, return_normie=return_normie, return_brick=True)
+    log(f"normalize inputs... return_normie={return_normie}")
+    norm_preact_parts = AttrDict(
+        brick_type="norm_preact", id=id, inputs=out,
+        return_normie=return_normie)
+    norm_preact = agent.pull_brick(norm_preact_parts)
     parts["norm_preact"] = norm_preact
 
-    log("unpack the normie for sensors")
+    log(f"unpack 'normie' from 'out' for sensors, out={out}")
     if "sensor" in model_type:
         normie, out = out
 
@@ -82,6 +86,6 @@ def use_interface(
 
     log("create the model and build the brick")
     outputs = (normie, out) if "sensor" in model_type else out
-    parts["model"] = model = K.Model(input_layer, outputs)
-    call = model.call
-    return agent.pull_brick(parts)
+    parts["model"] = K.Model(input_layer, outputs)
+    parts["call"] = parts["model"].call
+    return parts

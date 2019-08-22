@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-from tools import make_uuid
-
 K = tf.keras
 
 B, L = K.backend, K.layers
@@ -12,12 +10,8 @@ SOFT_ARGMAX_BETA = 1e10
 FN = 'swish'
 
 
-def use_fn(agent, id, input, fn=FN, return_brick=False):
-    id = make_uuid([id, "fn"])
-    activation = L.Activation(clean_activation(fn))
-    parts = dict(fn=activation)
-    call = activation.call
-    return agent.pull_brick(parts)
+def use_fn(fn):
+    return L.Activation(clean_activation(fn))
 
 
 def clean_activation(activation):

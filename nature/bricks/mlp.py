@@ -1,29 +1,24 @@
 import tensorflow as tf
 
-from nature import use_dense, swish
-from tools import make_uuid
+from nature import use_dense, use_input, swish
 K = tf.keras
 
 UNITS, FN, LAYERS = 256, swish, 2
 
+BRICK_TYPE = "mlp"
 
-def use_mlp(
-        agent, id, out, layer_list=None, last_layer=None, return_brick=False):
-    # we update id
-    id = make_uuid([id, "mlp"])
 
+def use_mlp(agent, parts):
     # we design layers if we didn't get them
-    if layer_list is None:
+    if parts.layer_list is None:
         layer_list = [(UNITS, FN) for _ in range(LAYERS)]
-        if last_layer is not None:
-            layer_list[-1] = last_layer
+        if parts.last_layer is not None:
+            layer_list[-1] = parts.last_layer
     # we make parts
-    layers = []
+    parts.layers = [use_input(parts.inputs)]
     for units, fn in layer_list:
-        _, layer = use_dense(
-            agent, id, out, units=units, fn=fn, return_brick=True)
-        layers.append(layer)
-    model = K.Sequential(layers)
-    parts = dict(layers=layers, model=model)
-    call = model
-    return agent.pull_brick(parts)
+        dense = use_dense(units)
+        parts.layers.append(dense)
+    parts.model = K.Sequential(parts.layers)
+    parts.call = parts.model.call
+    return parts

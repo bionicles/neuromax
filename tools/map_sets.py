@@ -1,10 +1,13 @@
 from itertools import combinations as sets
 import tensorflow as tf
 
+from tools import log
+
+DEFAULT_POOL_AXIS = 1
 np = None
 
 
-def map_sets_tf(tensor, set_size, fn, pool):
+def map_sets_tf(tensor, set_size, fn, pool, pool_axis=DEFAULT_POOL_AXIS):
     """
     Map_fn FN over SET_SIZE sets in TENSOR & POOL results
 
@@ -20,15 +23,19 @@ def map_sets_tf(tensor, set_size, fn, pool):
     Roughly:
         pool(map(fn, sets(iterable, set_size)))
     """
+    log("map_sets_tf", tensor, set_size, fn, pool, color="red")
     if np is None:
         import numpy as np
     indices = tf.flatten(np.indices(tensor.shape))
-    return pool(
-        tf.map_fn(
-            lambda index_set: fn(tf.gather_nd(tensor, index_set)),
-            list(sets(indices, set_size))
-            )
-        )
+    if set_size is 0:
+        return pool(tf.map_fn(fn, tensor), axis=pool_axis)
+    else:
+        return pool(
+            tf.map_fn(
+                lambda index_set: fn(tf.gather_nd(tensor, index_set)),
+                list(sets(indices, set_size))
+                ),
+            axis=pool_axis)
 
 
 def map_sets(iterable, set_size, fn, pool):
@@ -47,6 +54,7 @@ def map_sets(iterable, set_size, fn, pool):
     Roughly:
         pool(map(fn, sets(iterable, set_size)))
     """
+    log("map_sets_tf", iterable, set_size, fn, pool, color="red")
     return pool(
         map(
             lambda set: fn(set),

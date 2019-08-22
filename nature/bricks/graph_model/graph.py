@@ -18,17 +18,51 @@ MIN_MIN_NODES, MAX_MIN_NODES, MIN_MAX_NODES, MAX_MAX_NODES = 1, 2, 3, 4
 
 
 class Graph:
-    def __init__(self, agent, id):
+    def __init__(self, agent, id, in_specs=None, out_specs=None):
+        super(Graph, self).__init__()
         log("Graph init")
         self.pull_numbers = agent.pull_numbers
         self.pull_choices = agent.pull_choices
-        self.id = id + "_graph"
         self.code_spec = agent.code_spec
+        self.id = id + "_graph"
         self.agent = agent
-        self.get_graph()
+        self.get_initial_graph()
+        if in_specs and out_specs:
+            self.get_task_graph(in_specs, out_specs)
+        else:
+            self.get_internal_graph()
+            self.evolve_initial_graph()
         screenshot_graph(self.G, ".", "G")
 
-    def get_graph(self):
+    def get_initial_graph(self):
+        self.G = nx.MultiDiGraph()
+        self.G.add_node("source", label="SOURCE",
+                        style=STYLE, color="gold", shape="cylinder",
+                        node_type="source", output=None)
+        self.G.add_node("sink", label="SINK",
+                        style=STYLE, color="gold", shape="cylinder",
+                        node_type="sink", output=None)
+
+    def get_task_graph(self, in_specs, out_specs):
+        for n, in_spec in enumerate(in_specs):
+            input_key = f"input_{n}"
+            self.G.add_node(input_key, label=input_key,
+                            style=STYLE, color="blue", shape="circle",
+                            node_type="input", output=None)
+            self.G.add_edge("source", input_key)
+            [self.G.add_edge(input_key, box_number)
+             for box_number in range(n)]
+        for n, out_spec in enumerate(out_specs):
+            output_key = f"output_{n}"
+            self.G.add_node(output_key, label=output_key,
+                            style=STYLE, color="red", shape="triangle",
+                            node_type="output", output=None)
+            self.G.add_edge(output_key, "sink")
+            [self.G.add_edge(box_number, output_key)
+             for box_number in range(n_initial_boxes)]
+
+    def get_internal_graph(self):
+        """Create a graph connecting inputs to outputs with a black box."""
         self.min_p_insert = self.pull_numbers(
             "min_p_insert", MIN_MIN_P_INSERT, MAX_MIN_P_INSERT)
         self.max_p_insert = self.pull_numbers(
@@ -41,18 +75,6 @@ class Graph:
             "min_nodes", MIN_MIN_NODES, MAX_MIN_NODES)
         self.max_nodes = self.pull_numbers(
             "max_nodes", MIN_MAX_NODES, MAX_MAX_NODES)
-        self.get_initial_graph()
-        self.evolve_initial_graph()
-
-    def get_initial_graph(self):
-        """Create a graph connecting inputs to outputs with a black box."""
-        self.G = nx.MultiDiGraph()
-        self.G.add_node("source", label="SOURCE",
-                        style=STYLE, color="gold", shape="cylinder",
-                        node_type="source", output=None)
-        self.G.add_node("sink", label="SINK",
-                        style=STYLE, color="gold", shape="cylinder",
-                        node_type="sink", output=None)
         n_initial_boxes = self.pull_numbers("n_initial_boxes",
                                             MIN_INITIAL_BOXES,
                                             MAX_INITIAL_BOXES)

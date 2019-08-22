@@ -2,9 +2,6 @@
 # why?: learn to map N inputs to M outputs with graph GP
 import tensorflow as tf
 
-from nature import use_residual_block, use_dense_block, use_input
-from nature import use_norm_preact, use_swag, use_mlp
-from tools import make_uuid
 from .graph import Graph
 
 K = tf.keras
@@ -25,27 +22,19 @@ def get_out(G, agent, id):
     if node["out"]:
         return node["out"]
     if node_type is "input":
-        brick = out = use_input(agent, id, None)
+        parts = dict(brick_type="input", id=id, inputs=None)
+        brick, out = agent.pull_brick(parts, result="both")
     else:
         parent_ids = list(G.predecessors(id))
         inputs = [get_out(parent_id) for parent_id in parent_ids]
         inputs = L.Concatenate(-1)(inputs) if len(inputs) > 1 else inputs[0]
         G.node[id]['inputs'] = inputs
-        out = use_norm_preact(agent, id, inputs)
+        parts = dict(brick_type="preact_norm", id=id, inputs=inputs)
+        out = agent.pull_brick(parts, result="out")
         d_out = inputs.shape[-1]
         brick_type = agent.pull_choices(f"{id}_brick_type", BRICKS)
-        if brick_type == "residual":
-            out, brick = use_residual_block(
-                agent, id, out, units=d_out, return_brick=True)
-        if brick_type == "dense":
-            out, brick = use_dense_block(
-                agent, id, out, units=d_out, return_brick=True)
-        if brick_type == "mlp":
-            out, brick = use_mlp(
-                agent, id, out, last_layer=(d_out, "tanh"), return_brick=True)
-        if brick_type == "swag":
-            out, brick = use_swag(
-                agent, id, out, units=d_out, return_brick=True)
+        parts = dict(brick_type=brick_type, id=id, inputs=inputs, d_out=d_out)
+        out, brick = agent.pull_brick(parts, result="brick")
         G.node[id]['brick_type'] = brick_type
     G.node[id]['brick'] = brick
     G.node[id]["out"] = out
@@ -59,10 +48,9 @@ def build(G, agent):
     return K.Model(inputs, outs)
 
 
-def use_graph_model(agent, id, input, return_brick):
-    id = make_uuid([id, "graph_model"])
-    G = Graph(agent, id)
-    model = build(G, agent)
-    parts = dict(graph=G, model=model)
-    call = model.call
-    return agent.pull_brick(parts)
+def use_graph_model(agent, parts):
+    """Get parts for a graph_model brick"""
+    parts["G"] = Graph(agent, parts)
+    parts["model"] = build(parts["G"], agent)
+    parts["call"] = parts["model"].call
+    return parts

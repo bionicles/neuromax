@@ -1,42 +1,28 @@
 import tensorflow as tf
 
 from nature import use_dense
-from tools import make_uuid
 
 L = tf.keras.layers
 
-D_MODEL_OPTIONS = [32, 64]
-N_HEADS_OPTIONS = [1, 2]
+D_MODEL = 32
+N_HEADS = 2
 
 
-def use_attention(agent, id, input,
-                  d_model=None, n_heads=None, return_brick=False):
-    id = make_uuid([id, "attention"])
-    attention = MultiHeadAttention(agent, id, d_model=d_model, n_heads=n_heads)
-    parts = dict(attention=attention)
-    call = attention.call
-    return agent.pull_brick(parts)
+def use_attn(parts):
+    return MultiHeadAttention()
 
 
 class MultiHeadAttention(L.Layer):
 
-    def __init__(self, agent, id, d_model=None, n_heads=None):
+    def __init__(self, d_model=D_MODEL, n_heads=N_HEADS):
         super(MultiHeadAttention, self).__init__()
-        self.pull_choices = agent.pull_choices
-        self.pull_numbers = agent.pull_numbers
-        self.agent = agent
-        self.id = id
-        if d_model is None:
-            d_model = self.pull_choices(f"{self.id}_d_model", D_MODEL_OPTIONS)
-        if n_heads is None:
-            n_heads = self.pull_choices(f"{self.id}_n_heads", N_HEADS_OPTIONS)
         self.d_model, self.n_heads = d_model, n_heads
         assert d_model % self.n_heads == 0
         self.depth = d_model // self.n_heads
-        self.wq = use_dense(agent, self.id, None, units=d_model)
-        self.wk = use_dense(agent, self.id, None, units=d_model)
-        self.wv = use_dense(agent, self.id, None, units=d_model)
-        self.dense = use_dense(agent, self.id, None, units=d_model)
+        self.dense = use_dense(d_model)
+        self.wq = use_dense(d_model)
+        self.wk = use_dense(d_model)
+        self.wv = use_dense(d_model)
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (n_heads, depth).

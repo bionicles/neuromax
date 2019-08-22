@@ -1,41 +1,24 @@
 import tensorflow as tf
 
-from nature import use_norm_preact, use_layer, use_conv_2D, use_input
-from tools import make_uuid
+from nature import use_norm, use_layer, use_fn, use_conv_2D
 
 K = tf.keras
 L = K.layers
 
-LAYER_FN = use_conv_2D
-KERNEL_SIZE = 4
-PADDING = "same"
+DEFAULT_LAYER = use_conv_2D
 N_LAYERS = 2
-FILTERS = 4
-UNITS = 32
 
 
-def use_dense_block(
-        agent, id, input, return_brick=False,
-        kernel_size=KERNEL_SIZE, units=UNITS, n_layers=N_LAYERS,
-        layer_fn=LAYER_FN, filters=FILTERS, padding=PADDING):
-    # we update the id
-    id = make_uuid([id, "dense_block"])
+def use_dense_block(parts):
+    layers = []
+    for i in range(N_LAYERS):
+        layer = use_layer(parts.layer_fn, parts.units)
+        layers.append((layer, use_fn(), use_norm()))
 
-    # we build the parts
-    input_layer = use_input(agent, id, input)
-    new_features = []
-    out = None
-    for i in range(n_layers):
-        x = input_layer if out is None else out
-        out = use_norm_preact(agent, f"{id}_{i}", x)
-        out = use_layer(
-            agent, f"{id}_{i}", layer_fn,
-            filters=filters, units=units, input=out)
-        new_features.append(out)
-        input = tf.concat([input, out], axis=-1)
-    out = tf.concat(new_features, axis=-1)
-    model = K.Model(input_layer, out)
-    parts = dict(model=model)
-    # we make the function
-    call = model.call
-    return agent.pull_brick(parts)
+    def call(x):
+        for layer, fn, norm in layers:
+            y = layer(fn(norm(x)))
+            x = tf.concat([x, y], axis=-1)
+        return x
+    parts.call = call
+    return parts

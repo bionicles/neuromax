@@ -1,21 +1,20 @@
 from tensorflow.keras.layers import Layer
-import tensorflow as tf
+
+import nature
+
 
 class Brick(Layer):
     """A callable network module"""
 
-    def __init__(self, agent, id, parts, call, out):
+    def __init__(self, agent, parts):
+        self.agent = agent
+        parts = getattr(nature, f"use_{parts['brick_type']}")(agent, parts)
         for key in parts:
             setattr(self, key, parts[key])
-        self.agent = agent
-        self.parts = parts
-        self.call = call
-        print("out: ", out)
-        self.out = call(out) if tf.is_tensor(out) else None
-        self.id = id
         super(Brick, self).__init__()
+        self.agent.graph[id] = self
 
-    def build(self, input):
+    def build(self):
         pass
 
     def __repr__(self):
@@ -26,11 +25,10 @@ class Brick(Layer):
         for k, v in self.parts.items():
             if isinstance(v, Brick):
                 string = f"  brick: {v.id}"
-            else:
+            elif k is not "id":
                 string = f" {k}:  {v}"
             kv.append(string)
         kv.append("")
-        kv.append(f" out:  {self.out}")
         substring = nl.join([str(x) for x in kv])
         return f"""
 
