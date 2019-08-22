@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from nature import use_flatten_resize_reshape, use_dense_block, use_input
 from nature import use_deconv_2D, use_dense
-from tools import make_uuid, log
+from tools import make_id, log
 
 K = tf.keras
 L, B = K.layers, K.backend

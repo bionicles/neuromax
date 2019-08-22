@@ -1,4 +1,4 @@
-from nature import use_dense
+from .dense import use_dense
 
 
 def use_layer(layer_fn, d_out):

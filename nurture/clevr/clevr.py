@@ -42,7 +42,7 @@ def run_clevr_task(agent, task_id, task_dict):
     onehot_task_id = get_onehot(task_id, list(agent.tasks.keys()))
     dataset = task_dict.dataset.shuffle(10000)
     total_free_energy = 0.
-    priors = agent.priors
+    priors = []#agent.priors
     action_index = -1
     loss = 0.
     for image_tensor, embedded_question, one_hot_answer, question, answer in dataset.take(
