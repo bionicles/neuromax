@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from nature import use_flatten_resize_reshape, use_deconv_2D
+from nature import use_resizer, use_dense_block, use_deconv_2D
 
 K = tf.keras
 L, B = K.layers, K.backend
@@ -8,17 +8,14 @@ L, B = K.layers, K.backend
 LAST_DECODER_FN = "tanh"
 
 
-def use_image_actuator(agent, parts):
+def use_image_actuator(agent):
     # make layers
-    parts.reshape = reshape = use_flatten_resize_reshape(parts.out_spec.shape)
-    parts.dense_block = dense_block = agent.pull_brick("dense_block")
-    deconv = use_deconv_2D(
-        parts.out_spec.shape[-1], fn=LAST_DECODER_FN, padding="same")
+    reshape = use_resizer(agent.image_spec.shape)
+    dense_block = use_dense_block()
+    deconv = use_deconv_2D()
 
-    def call(self, x):
+    def call(x):
         x = reshape(x)
         x = dense_block(x)
-        x = deconv(x)
-        return x
-    parts.call = call
-    return parts
+        return deconv(x)
+    return call

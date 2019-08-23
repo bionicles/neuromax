@@ -1,45 +1,34 @@
 import tensorflow as tf
 
-from nature import use_linear, use_input
-from tools import log
+from nature import use_dense_block, use_linear
 
 K = tf.keras
 L, B = K.layers, K.backend
 
 
 def sample_fn(args):
-    code_mean, code_variance = args
-    epsilon = tf.random.normal(tf.shape(code_variance))
-    sample = code_mean + B.exp(0.5 * code_variance) * epsilon
-    return sample
+    mean, variance = args
+    epsilon = tf.random.normal(tf.shape(variance))
+    return mean + B.exp(0.5 * variance) * epsilon
 
 
-def use_image_sensor(agent, out_spec):
-    log("handle image_sensor specs")
+def use_image_sensor(agent):
     out_spec = agent.code_spec
     in_spec = agent.image_spec
 
-    log("make image_sensor layers")
-    input_layer = input_layer = use_input(agent, in_spec)
-    dense_block = agent.pull_brick("dense_block")
-    code_mean_layer = use_linear(out_spec.size)
-    code_var_layer = use_linear(out_spec.size)
+    dense_block = use_dense_block()
     flatten = L.Flatten()
-    sampler = L.Lambda(sample_fn, name='code')
+    mean_layer = use_linear(out_spec.size)
+    var_layer = use_linear(out_spec.size)
+    sampler = L.Lambda(sample_fn, name='sample')
     reshape = L.Reshape(out_spec.shape)
-
-    log("use image_sensor layers")
-    out = dense_block(input_layer)
-    out = flatten(out)
-    code_mean = code_mean_layer(out_spec.size)
-    code_var = code_var_layer(out_spec.size)
-    sample = sampler([code_mean, code_var])
-    code = reshape(sample)
-
-    log("make model, call, and return call")
-    model = K.Model(input_layer, code)
 
     def call(self, x):
         x = tf.image.resize(x, in_spec.shape)
-        return model(x)
+        x = dense_block(x)
+        x = flatten(x)
+        mean = mean_layer(x)
+        var = var_layer(x)
+        sample = sampler([mean, var])
+        return reshape(sample)
     return call

@@ -1,3 +1,5 @@
-def get_hw(shape, batch_dim=False):
-    """Returns height and width of image shape (no batch dim)"""
-    return (shape[0], shape[1])
+def get_hw(image):
+    if len(image.shape) is 4:
+        return image.shape[1], image.shape[2]
+    else:
+        return image.shape[0], image.shape[1]

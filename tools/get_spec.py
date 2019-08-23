@@ -2,11 +2,11 @@
 from attrdict import AttrDict
 import numpy as np
 
-from tools import get_size, get_onehot
+from tools import get_size
 
 
-def get_spec(format=None, shape=None, size=None, n=None, variables=[],
-             add_coords=None, low=None, high=None):
+def get_spec(shape=None, format=None, n=None, variables=[],
+             low=None, high=None):
     """
     Build an AttrDict for an input or output tensor
 
@@ -21,27 +21,23 @@ def get_spec(format=None, shape=None, size=None, n=None, variables=[],
         high: number for the top of the range of possible values
     """
     spec = AttrDict({})
-    if shape is not None:
+    if shape:
         if format is "onehot":
-            shape = get_onehot(1, variables).shape
-        spec["shape"] = shape
-    if format is not None:
-        spec["format"] = format
-    if n is not None:
-        spec["n"] = n
-    if variables is not None:
-        spec["variables"] = variables
-    if add_coords is not None:
-        spec["add_coords"] = True
-    if low is not None and low is not -np.inf:
-        spec["low"] = low
-    if high is not None and high is not np.inf:
-        spec["high"] = high
-    if size is not None:
-        spec["size"] = size
-    else:
-        try:
-            spec['size'] = get_size(shape)
-        except Exception as e:
-            print("get_spec failed to get size", e)
+            shape = (n,)
+        spec.shape = shape
+    if format:
+        spec.format = format
+    if n:
+        spec.n = n
+    if variables:
+        spec.variables = variables
+    if low and low is not -np.inf:
+        spec.low = low
+    if high and high is not np.inf:
+        spec.high = high
+    spec.rank = len(spec.shape)
+    try:
+        spec['size'] = get_size(shape)
+    except Exception as e:
+        print("get_spec failed to get size", e)
     return spec

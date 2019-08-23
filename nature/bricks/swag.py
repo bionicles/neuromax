@@ -11,7 +11,9 @@ UNITS = 32
 FN = None
 
 
-def use_swag(power=POWER, units=UNITS, fn=None, out_fn=None, out_units=UNITS):
+def use_swag(
+        power=POWER, units=UNITS,
+        fn=None, out_fn=None, out_units=UNITS, reshape=None):
     """
     apply POWER linear layers with UNITS and multiply with last value
     then flatten and mix the outputs with a linear layer with OUT_UNITS
@@ -32,20 +34,25 @@ def use_swag(power=POWER, units=UNITS, fn=None, out_fn=None, out_units=UNITS):
     output_layer = use_linear(units)
     if out_fn:
         out_fn = use_fn(out_fn)
+    if reshape:
+        reshape = L.Reshape(reshape)
 
     def call(x):
-        xs = []
+        y = tf.identity(x)
+        ys = []
         for i, layer in enumerate(layers):
-            x = layer(x)
+            y = layer(y)
             if fn:
-                x = fn(x)
-            if len(xs) > 0:
-                x = multiply([xs[-1], x])
-            xs.append(x)
-        xs = [flatten(o) for o in xs]
-        x = concat(xs)
-        x = output_layer(x)
+                y = fn(y)
+            if len(ys) > 0:
+                y = multiply([ys[-1], y])
+            ys.append(y)
+        ys = [flatten(o) for o in ys]
+        y = concat(ys)
+        y = output_layer(y)
         if out_fn:
-            x = out_fn(x)
-        return x
+            y = out_fn(y)
+        if reshape:
+            y = reshape(y)
+        return y
     return call

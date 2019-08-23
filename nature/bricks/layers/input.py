@@ -1,9 +1,9 @@
-from tensorflow.keras import Input
+import tensorflow as tf
 
 
-def use_input(shape_or_tensor, batch_size=1):
-    if hasattr(shape_or_tensor, "shape"):
-        shape = shape_or_tensor.shape
+def use_input(tensor_or_shape, batch_size=1):
+    if tf.is_tensor(tensor_or_shape):
+        shape = tensor_or_shape.shape
     else:
-        shape = shape_or_tensor
-    return Input(shape[1:], batch_size=batch_size)
+        shape = tensor_or_shape
+    return tf.keras.Input(shape[1:], batch_size=batch_size)

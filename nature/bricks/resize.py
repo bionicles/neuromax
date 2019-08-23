@@ -9,7 +9,7 @@ L = K.layers
 
 def use_resizer(out_shape):
     flatten = L.Flatten()
-    resize = use_linear(get_size(out_shape)),
+    resize = use_linear(get_size(out_shape))
     reshape = L.Reshape(out_shape)
 
     def call(x):

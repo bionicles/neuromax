@@ -11,12 +11,6 @@ SOFT_ARGMAX_BETA = 1e10
 FN = 'lrelu'
 
 
-def wrap_fn(fn, *args, **kwargs):
-    def _fn(x):
-        return fn(x, *args, **kwargs)
-    return _fn
-
-
 def swish(x):
     """
     Searching for Activation Functions
@@ -110,5 +104,7 @@ def clean_activation(activation):
 
 
 def use_fn(fn):
+    if not fn:
+        fn = FN
     fn = clean_activation(fn)
     return L.Activation(fn)
