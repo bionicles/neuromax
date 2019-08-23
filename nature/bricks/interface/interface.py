@@ -12,19 +12,10 @@ SIMPLE_INTERFACES = [
     'box_sensor', 'float_sensor', 'float_actuator']
 
 
-def use_interface(agent, parts, reuse=True):
+def use_interface(agent, in_spec_or_tensor, out_spec_or_tensor=None):
     log("allow specs to be optional")
-    keys = parts.keys()
-
-    if "in_spec" in keys:
-        in_spec = parts["in_spec"]
-    elif "input" in keys:
-        in_spec = get_spec(input)
-    else:
-        in_spec = agent.code_spec
-    log("in_spec", in_spec)
-
-    out_spec = agent.code_spec if "out_spec" in keys else parts["out_spec"]
+    if not out_spec_or_tensor:
+        out_spec = agent.code_spec
     log("out_spec", out_spec)
 
     log("update the id")

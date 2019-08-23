@@ -50,16 +50,12 @@ class Graph:
                             style=STYLE, color="blue", shape="circle",
                             node_type="input", output=None)
             self.G.add_edge("source", input_key)
-            [self.G.add_edge(input_key, box_number)
-             for box_number in range(n)]
         for n, out_spec in enumerate(out_specs):
             output_key = f"output_{n}"
             self.G.add_node(output_key, label=output_key,
                             style=STYLE, color="red", shape="triangle",
                             node_type="output", output=None)
             self.G.add_edge(output_key, "sink")
-            [self.G.add_edge(box_number, output_key)
-             for box_number in range(n_initial_boxes)]
 
     def get_internal_graph(self):
         """Create a graph connecting inputs to outputs with a black box."""
@@ -178,15 +174,12 @@ class Graph:
     def is_blacklisted(self, id):
         log(f"is {id} blacklisted?")
         try:
-            node = self.G.node[id]
-            if node["shape"] != "square":
-                log("yup!")
+            if self.G.node[id]["shape"] != "square":
                 return True
             else:
-                log("nope!")
                 return False
         except Exception as e:
-            log("nope!", e)
+            log(e, color="red")
             return False
 
     def count_boxes(self):

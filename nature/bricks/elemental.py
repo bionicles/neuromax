@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from nature import use_dense
+from nature import use_linear
 
 K = tf.keras
 L = K.layers
@@ -8,28 +8,25 @@ L = K.layers
 UNITS = 128
 
 
-def use_add(agent, parts):
-    assert "units" in parts.keys()
-    parts.dense = dense = use_dense(parts.units)
-    parts.adder = adder = L.Add()
+def use_multiply(units=UNITS):
+    linear1 = use_linear(units)
+    linear2 = use_linear(units)
+    multiplier = L.Multiply()
 
     def call(x):
-        out = dense(x)
-        return adder([x, out])
-    parts.call = call
-    return parts
-
-
-def use_multiply(agent, parts):
-    if "units" not in parts.keys():
-        parts.units = UNITS
-    parts.dense1 = dense1 = use_dense(parts.units)
-    parts.dense2 = dense2 = use_dense(parts.units)
-    parts.multiplier = multiplier = L.Multiply()
-
-    def call(x):
-        o1 = dense1(x)
-        o2 = dense2(x)
+        o1 = linear1(x)
+        o2 = linear2(x)
         return multiplier([o1, o2])
-    parts.call = call
-    return parts
+    return call
+
+
+# commenting out this guy because he's likely to hit shape bugs
+# def use_add(units, tensor):
+#     linear = use_linear(units)
+#     adder = L.Add()
+#
+#     def call(x):
+#         y = linear(x)
+#         y = adder([x, y])
+#         return y
+#     return call

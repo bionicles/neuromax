@@ -1,3 +1,4 @@
+from tensorflow_addons.activations import sparsemax
 import tensorflow as tf
 
 K = tf.keras
@@ -7,31 +8,13 @@ B, L = K.backend, K.layers
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
-FN = 'swish'
+FN = 'lrelu'
 
 
-def use_fn(fn):
-    return L.Activation(clean_activation(fn))
-
-
-def clean_activation(activation):
-    if callable(activation):
-        return activation
-    elif activation == 'soft_argmax':
-        fn = soft_argmax
-    elif activation == 'gaussian':
-        fn = gaussian
-    elif activation == 'swish':
-        fn = swish
-    elif activation == 'lisht':
-        fn = lisht
-    elif activation == 'sin':
-        fn = tf.math.sin
-    elif activation == 'cos':
-        fn = tf.math.cos
-    else:
-        fn = activation
-    return fn
+def wrap_fn(fn, *args, **kwargs):
+    def _fn(x):
+        return fn(x, *args, **kwargs)
+    return _fn
 
 
 def swish(x):
@@ -65,6 +48,13 @@ def hard_tanh(x, min=HARD_MIN, max=HARD_MAX):
         return x
 
 
+def hard_lisht(x, min=HARD_MIN, max=HARD_MAX):
+    if x < min or x > max:
+        return max
+    else:
+        return tf.math.abs(x)
+
+
 def lisht(x):
     """
     LiSHT: Non-Parametric Linearly Scaled Hyperbolic Tangent
@@ -77,14 +67,48 @@ def rrelu(x, min=RRELU_MIN, max=RRELU_MAX):
     return x if x >= 0 else tf.random.uniform(min, max) * x
 
 
-def tanhshrink(x):
+def tanh_shrink(x):
     return x - B.tanh(x)
 
 
-def hardshrink(x, min=HARD_MIN, max=HARD_MAX):
+def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
     if x > max:
         return x
     elif x < min:
         return min
     else:
         return 0
+
+
+FUNCTION_LOOKUP = {
+    'soft_argmax': soft_argmax,
+    'log_softmax': tf.nn.log_softmax,
+    'sparsemax': sparsemax,
+    'hard_lisht': hard_lisht,
+    'hard_shrink': hard_shrink,
+    'tanh_shrink': tanh_shrink,
+    'hard_lisht': hard_lisht,
+    'hard_tanh': hard_tanh,
+    'gaussian': gaussian,
+    'swish': swish,
+    'lisht': lisht,
+    'rrelu': rrelu,
+    'lrelu': tf.nn.leaky_relu,
+    'crelu': tf.nn.crelu,
+    'relu6': tf.nn.relu6,
+    'sin': tf.math.sin,
+    'cos': tf.math.cos,
+}
+
+
+def clean_activation(activation):
+    if callable(activation):
+        return activation
+    else:
+        fn = activation
+    return fn
+
+
+def use_fn(fn):
+    fn = clean_activation(fn)
+    return L.Activation(fn)

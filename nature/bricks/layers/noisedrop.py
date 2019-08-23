@@ -7,7 +7,6 @@ P_DROP = 0.5
 
 class NoiseDrop(tf.keras.layers.Dense):
     def __init__(self, *args, **kwargs):
-        # self.stddev = kwargs.pop('stddev')
         super(NoiseDrop, self).__init__(*args, **kwargs)
 
     @tf.function

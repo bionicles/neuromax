@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from nature import use_dense
+from nature import use_linear
 
 L = tf.keras.layers
 
@@ -19,10 +19,10 @@ class MultiHeadAttention(L.Layer):
         self.d_model, self.n_heads = d_model, n_heads
         assert d_model % self.n_heads == 0
         self.depth = d_model // self.n_heads
-        self.dense = use_dense(d_model)
-        self.wq = use_dense(d_model)
-        self.wk = use_dense(d_model)
-        self.wv = use_dense(d_model)
+        self.dense = use_linear(d_model)
+        self.wq = use_linear(d_model)
+        self.wk = use_linear(d_model)
+        self.wv = use_linear(d_model)
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (n_heads, depth).

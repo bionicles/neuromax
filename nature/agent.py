@@ -4,8 +4,9 @@ import tensorflow as tf
 import numpy as np
 import random
 
-from tools import get_percent, get_spec, add_up, log, make_id
-from nature import Brick
+from tools import get_percent, get_spec, add_up, log
+from nature import use_graph_model
+# from nature import Brick
 
 SWITCH_TO_MAE_LOSS_WHEN_FREE_ENERGY_BELOW = 4.2
 OPTIMIZER = tf.keras.optimizers.SGD(3e-4, clipvalue=0.04)
@@ -43,24 +44,7 @@ class Agent:
         log("pull_model", inputs, outputs)
         in_specs = [get_spec(input) for input in inputs]
         out_specs = [get_spec(output) for output in outputs]
-        parts = AttrDict(
-            brick_type="graph_model",
-            inputs=inputs, in_specs=in_specs,
-            outputs=outputs, out_specs=out_specs)
-        return self.pull_brick(parts, reuse=True)
-
-    def pull_brick(self, brick_type, id, **kwargs):
-        """construct a keras layer from parts and a function to use them
-            https://stackoverflow.com/a/45102583/4898464
-        """
-        log('pull_brick', brick_type, id, kwargs, color="red")
-        if "reuse" in kwargs:
-            if id in self.graph.keys() and kwargs["reuse"]:
-                return self.bricks[id]
-        else:
-            parts = AttrDict(kwargs, brick_type=brick_type, id=id)
-            parts.id = make_id(parts)
-            return Brick(self, parts)
+        return use_graph_model(inputs, in_specs, outputs, out_specs)
 
     @staticmethod
     def unpack(output_roles, outputs):
@@ -254,3 +238,16 @@ class Agent:
             parameter = [method(shape, dtype=dtype) for _ in range(n)]
         self.graph[pkey] = parameter
         return parameter
+
+    # def pull_brick(self, brick_type, **kwargs):
+    #     """construct a keras layer from parts and a function to use them
+    #         https://stackoverflow.com/a/45102583/4898464
+    #     """
+    #     log('pull_brick', brick_type, kwargs, color="red")
+    #     if "reuse" in kwargs:
+    #         if id in self.graph.keys() and kwargs["reuse"]:
+    #             return self.bricks[id]
+    #     else:
+    #         parts = AttrDict(kwargs, brick_type=brick_type)
+    #         parts.id = make_id(parts)
+    #         return Brick(self, parts)

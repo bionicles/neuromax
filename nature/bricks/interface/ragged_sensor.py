@@ -61,4 +61,4 @@ def use_ragged_sensor(agent, id, input, result="out", reuse=False):
         pool_atoms=pool_atoms,
         call_mlp=call_mlp)
 
-    return agent.pull_brick(parts, result, reuse)
+    return parts

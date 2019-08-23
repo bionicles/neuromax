@@ -27,7 +27,7 @@ def log(*args, color="white", debug=DEBUG, delay=0):
         debug: boolean; to print or not. default set in log.py
         delay: number; seconds to pause after printing
     """
-    if debug:
+    if debug or color is "red":
         string = " ".join([getattr(T, color)(str(arg)) for arg in args])
         print(string)
     if delay:

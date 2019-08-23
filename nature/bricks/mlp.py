@@ -1,24 +1,29 @@
 import tensorflow as tf
 
-from nature import use_dense, use_input, swish
+from nature import use_linear, use_input, use_fn
 K = tf.keras
 
-UNITS, FN, LAYERS = 256, swish, 2
+LAYERS, UNITS, FN = 2, 256, None
+UNITS_LIST = [UNITS for _ in range(LAYERS)]
+FN_LIST = [UNITS for _ in range(LAYERS)]
 
 BRICK_TYPE = "mlp"
 
 
-def use_mlp(agent, parts):
-    # we design layers if we didn't get them
-    if parts.layer_list is None:
-        layer_list = [(UNITS, FN) for _ in range(LAYERS)]
-        if parts.last_layer is not None:
-            layer_list[-1] = parts.last_layer
-    # we make parts
-    parts.layers = [use_input(parts.inputs)]
-    for units, fn in layer_list:
-        dense = use_dense(units)
-        parts.layers.append(dense)
-    parts.model = K.Sequential(parts.layers)
-    parts.call = parts.model.call
-    return parts
+def use_mlp(tensor_or_shape, units_list=UNITS_LIST, fn_list=FN_LIST):
+    """
+    make a sequential MLP... default is [256, 256] with no activation
+    Args:
+        tensor_or_shape: tensor, or tuple
+    kwargs:
+        units_list: list of int for units
+        fn_list: list of strings for activations (default none)
+    """
+    layers = [use_input(tensor_or_shape)]
+    for i, units in enumerate(units_list):
+        dense = use_linear(units)
+        layers.append(dense)
+        if fn_list[i]:
+            layers.append(use_fn(fn_list[i]))
+    mlp = K.Sequential(layers)
+    return mlp
