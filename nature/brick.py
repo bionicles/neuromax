@@ -2,8 +2,6 @@ from tensorflow.keras.layers import Layer
 
 import nature
 
-def use_brick(brick_type, d_out):
-
 
 class Brick(Layer):
     """A callable network module"""

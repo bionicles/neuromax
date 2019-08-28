@@ -1,31 +1,34 @@
 from attrdict import AttrDict
-import random
+# import random
 import gym
 
-from tools.get_onehot import log, get_spec
+from tools import log, get_spec
 
 
 def get_spec_for_space(space):
+    log("get_spec_for_space", space, color="red")
     type_name = type(space).__name__
+    log("type_name", type_name, color="red")
     if type_name == "Discrete":
-        return get_spec(format="discrete", n=space.n, shape=(space.n,))
+        spec = get_spec(format="discrete", n=space.n, shape=(space.n,))
     if type_name == "Box":
-        return get_spec(
+        spec = get_spec(
             format="box", shape=space.shape, low=space.low, high=space.high)
-    raise Exception(space, "not Discrete or Box ... get_spec_for_space")
+    log("spec", spec, color="red")
+    return spec
 
 
-def prepare_env():
-    env_list = [spec.id for spec in gym.envs.registry.all()]
-    key = random.choice(env_list)
-    try:
-        env = gym.make(key)
-        in_specs = [get_spec_for_space(env.observation_space)]
-        out_specs = [get_spec_for_space(env.action_space)]
-        return AttrDict(is_data=False, key=key, env=env,
-                        in_specs=in_specs, out_specs=out_specs)
-    except Exception as e:
-        log(e, color="red")
+def prepare_env(agent):
+    log("prepare_env", color="red")
+    # env_list = [spec.id for spec in gym.envs.registry.all()]
+    # key = random.choice(env_list)
+    key = "MountainCar-v0"
+    env = gym.make(key)
+    in_specs = [get_spec_for_space(env.observation_space)]
+    out_specs = [get_spec_for_space(env.action_space)]
+    return AttrDict(
+        is_data=False, key=key, env=env,
+        in_specs=in_specs, out_specs=out_specs)
 
 
 def rescale_boxes(action_samples, task_dict):

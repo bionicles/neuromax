@@ -1,39 +1,46 @@
 import networkx as nx
 import random
 
-from tools import screenshot_graph, safe_sample, log
+from tools import screenshot_graph, safe_sample, log, get_spec
 
 # appearance
 STYLE = "filled"
 # initial
 N_INITIAL_BOXES = 4
 # evolution
-MIN_MUTATIONS, MAX_MUTATIONS = 1, 2
+N_MUTATIONS = 1
 MUTATION_OPTIONS = ["insert_motifs"]
 # regulons ... dat imprecise probability
 MIN_LAYERS, MAX_LAYERS = 1, 3
-MIN_NODES, MAX_NODES = 1, 3
-MIN_P_INSERT, MAX_P_INSERT = 0.5, 0.5
+MIN_NODES, MAX_NODES = 1, 2
+MIN_P_INSERT, MAX_P_INSERT = 0.2, 0.2
 
 
 def add_node(G, id, color, shape, node_type, out=None, spec=None):
+    label = None if color is 'black' else id
     G.add_node(
-        id, label=id,
+        id, label=label,
         style=STYLE, color=color, shape=shape,
         node_type=node_type, out=out, spec=spec)
 
 
 class Graph:
-    def __init__(self, agent, in_specs=None, out_specs=None):
+    def __init__(self, agent, in_specs=None, out_specs=None, inputs=None):
         super(Graph, self).__init__()
         self.agent = agent
         self.get_initial_graph()
         if in_specs and out_specs:
+            self.out_specs = out_specs
+            self.in_specs = in_specs
             self.get_task_graph(in_specs, out_specs)
+            name = "task_model"
         else:
+            self.inputs = inputs
+            self.spec = get_spec(format="code", shape=inputs.shape)
             self.get_internal_graph()
             self.evolve_initial_graph()
-        screenshot_graph(self.G, ".", "G")
+            name = "brick"
+        screenshot_graph(self.G, ".", name)
 
     def get_initial_graph(self):
         self.G = nx.MultiDiGraph()
@@ -57,26 +64,25 @@ class Graph:
         """Create a graph connecting inputs to outs with a black box."""
         for box_number in range(N_INITIAL_BOXES):
             add_node(self.G, box_number, "black", "square", "brick")
-        add_node(self.G, "input", "blue", "circle", "input")
+        add_node(self.G, "input", "blue", "circle", "input", spec=self.spec)
         self.G.add_edge("source", "input")
         [self.G.add_edge("input", box) for box in range(N_INITIAL_BOXES)]
-        add_node(self.G, "out", "red", "triangle", "out")
+        add_node(self.G, "out", "red", "triangle", "out", spec=self.spec)
         self.G.add_edge("out", "sink")
         [self.G.add_edge(box, "out") for box in range(N_INITIAL_BOXES)]
 
     def evolve_initial_graph(self):
-        self.n_mutations = self.pull_numbers("n_mutations",
-                                             MIN_MUTATIONS, MAX_MUTATIONS)
+        self.n_mutations = N_MUTATIONS
         for mutation_number in range(self.n_mutations):
-            mutation_name = self.pull_choices("mutations", MUTATION_OPTIONS, 1)
+            mutation_name = random.choice(MUTATION_OPTIONS)
             getattr(Graph, mutation_name)(self)
 
     def get_regulon(self, parent=None, layers=None):
         """Build a subgraph to replace a node."""
-        num_layers = safe_sample(MIN_LAYERS, MAX_LAYERS)
+        n_layers = safe_sample(MIN_LAYERS, MAX_LAYERS)
         M = nx.MultiDiGraph()
         ids = []
-        for layer_number in range(num_layers):
+        for layer_number in range(n_layers):
             n_nodes = safe_sample(MIN_NODES, MAX_NODES)
             # log(f"add layer {layer_number} with {n_nodes} nodes")
             ids_of_nodes_in_this_layer = []
@@ -86,7 +92,7 @@ class Graph:
                 else:
                     node_id = f"{layer_number}.{node_number}"
                 # log(f"add node {node_id}")
-                add_node(M, node_id, "square", "black", "brick")
+                add_node(M, node_id, "black", "square", "brick")
                 ids_of_nodes_in_this_layer.append(node_id)
             ids.append(ids_of_nodes_in_this_layer)
         for predecessor_layer_number, predecessor_node_ids in enumerate(ids):
@@ -148,4 +154,5 @@ class Graph:
     def count_boxes(self):
         return len(
             [node for node in list(self.G.nodes(data=True))
-             if node[1]["shape"] == "square"])
+             if node[1]["shape"] == "square"]
+            )

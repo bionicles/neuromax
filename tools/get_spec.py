@@ -2,7 +2,7 @@
 from attrdict import AttrDict
 import numpy as np
 
-from tools import get_size
+from .get_size import get_size
 
 
 def get_spec(shape=None, format=None, n=None, variables=[],
@@ -21,9 +21,9 @@ def get_spec(shape=None, format=None, n=None, variables=[],
         high: number for the top of the range of possible values
     """
     spec = AttrDict({})
+    if format is "onehot":
+        shape = (n,)
     if shape:
-        if format is "onehot":
-            shape = (n,)
         spec.shape = shape
     if format:
         spec.format = format
@@ -31,10 +31,10 @@ def get_spec(shape=None, format=None, n=None, variables=[],
         spec.n = n
     if variables:
         spec.variables = variables
-    if low and low is not -np.inf:
-        spec.low = low
-    if high and high is not np.inf:
+    if high is not None and high is not np.inf:
         spec.high = high
+    if low is not None and low is not -np.inf:
+        spec.low = low
     spec.rank = len(spec.shape)
     try:
         spec['size'] = get_size(shape)

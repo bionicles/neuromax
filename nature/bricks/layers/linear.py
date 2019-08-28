@@ -1,14 +1,14 @@
 import tensorflow as tf
 
-from nature import get_l1_l2, get_chaos
+from nature import get_l1_l2, get_init
 
 K = tf.keras
 L = K.layers
 
-INITIALIZER = get_chaos
+INITIALIZER = get_init
 REGULARIZER = get_l1_l2
 LAYER_CLASS = L.Dense  # NoiseDrop
-UNITS = 128
+UNITS = 256
 
 
 def use_linear(units=UNITS, regularizer=REGULARIZER, initializer=INITIALIZER):
@@ -25,4 +25,4 @@ def use_linear(units=UNITS, regularizer=REGULARIZER, initializer=INITIALIZER):
             activity_regularizer=regularizer(),
             bias_regularizer=regularizer(),
             kernel_initializer=initializer(),
-            bias_initializer=initializer(bias=True))
+            bias_initializer=initializer())

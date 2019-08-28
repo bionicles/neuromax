@@ -3,10 +3,15 @@ import tensorflow as tf
 
 initializers = tf.keras.initializers
 
+DIST = "glorot"
+PHI = 1.61803398875
+MEAN = 0.
 
-def get_init(he=False):
-    """get glorot_uniform unless kwarg he=True"""
-    if he is True:
+
+def get_init(dist=DIST):
+    if dist is "truncated":
+        return initializers.TruncatedNormal(mean=MEAN, stddev=PHI)
+    elif dist is "he_uniform":
         return initializers.he_uniform()
     else:
         return initializers.glorot_uniform()

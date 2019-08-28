@@ -9,7 +9,6 @@ LAST_DECODER_FN = "tanh"
 
 
 def use_image_actuator(agent):
-    # make layers
     reshape = use_resizer(agent.image_spec.shape)
     dense_block = use_dense_block()
     deconv = use_deconv_2D()

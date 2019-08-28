@@ -8,7 +8,7 @@ L = K.layers
 DEFAULT_LAYER = use_conv_2D
 N_LAYERS = 2
 UNITS = 2
-FN = "lrelu"
+FN = "mish"
 
 
 def use_dense_block(

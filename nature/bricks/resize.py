@@ -7,7 +7,7 @@ K = tf.keras
 L = K.layers
 
 
-def use_resizer(out_shape):
+def use_resizer(out_shape, norm_preact=True):
     flatten = L.Flatten()
     resize = use_linear(get_size(out_shape))
     reshape = L.Reshape(out_shape)

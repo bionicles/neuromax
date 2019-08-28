@@ -5,9 +5,11 @@ from tools.get_path import get_path
 K = tf.keras
 
 SUMMARIZE = False
+FOLDER = "."
 
 
-def show_model(model, folder, name, extension, summarize=SUMMARIZE):
+def show_model(
+        model, name, folder=FOLDER, extension="png", summarize=SUMMARIZE):
     """summarize and plot a keras model"""
     if summarize:
         model.summary()

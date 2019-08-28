@@ -1,5 +1,4 @@
 import tensorflow as tf
-
 K = tf.keras
 B, L = K.backend, K.layers
 
@@ -26,13 +25,12 @@ def generalized_logistic(
     numerator = k - a
     exponential_term = B.exp(-b * (x - m))
     denominator = (c + q * exponential_term ** (1/v))
-    y = a + numerator / denominator
-    return y
+    return a + numerator / denominator
 
 
-class GeneralizedLogistic(L.Layer):
+class Logistic(L.Layer):
     def __init__(self):
-        super(GeneralizedLogistic, self).__init__()
+        super(Logistic, self).__init__()
 
     def build(self, input_shape):
         self.lower_asymptote = tf.Variable(
@@ -59,5 +57,4 @@ class GeneralizedLogistic(L.Layer):
                 q=self.is_related_to_value_y_zero,
                 c=self.is_added_to_exponential_term,
                 m=self.start_time,
-                v=self.location_of_max_growth,
-                )
+                v=self.location_of_max_growth)

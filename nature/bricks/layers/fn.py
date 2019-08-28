@@ -1,5 +1,6 @@
 from tensorflow_addons.activations import sparsemax
 import tensorflow as tf
+import random
 
 K = tf.keras
 
@@ -8,7 +9,7 @@ B, L = K.backend, K.layers
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
-FN = 'lrelu'
+FN = 'mish'
 
 
 def swish(x):
@@ -16,7 +17,15 @@ def swish(x):
     Searching for Activation Functions
     https://arxiv.org/abs/1710.05941
     """
-    return (B.sigmoid(x) * x)
+    return (x * B.sigmoid(x))
+
+
+def mish(x):
+    """
+    Mish: A Self Regularized Non-Monotonic Neural Activation Function
+    https://arxiv.org/abs/1908.08681v1
+    """
+    return (x * B.tanh(B.softplus(x)))
 
 
 def soft_argmax(x, beta=SOFT_ARGMAX_BETA):
@@ -74,9 +83,15 @@ def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
         return 0
 
 
-FUNCTION_LOOKUP = {
+FN_LOOKUP = {
     'soft_argmax': soft_argmax,
     'log_softmax': tf.nn.log_softmax,
+    'softmax': B.softmax,
+    'softplus': B.softplus,
+    'linear': lambda x: x,
+    'sigmoid': B.sigmoid,
+    'hard_sigmoid': B.hard_sigmoid,
+    'softsign': B.softsign,
     'sparsemax': sparsemax,
     'hard_lisht': hard_lisht,
     'hard_shrink': hard_shrink,
@@ -85,26 +100,51 @@ FUNCTION_LOOKUP = {
     'hard_tanh': hard_tanh,
     'gaussian': gaussian,
     'swish': swish,
+    'mish': mish,
     'lisht': lisht,
     'rrelu': rrelu,
+    'relu': B.relu,
     'lrelu': tf.nn.leaky_relu,
     'crelu': tf.nn.crelu,
     'relu6': tf.nn.relu6,
+    'selu': tf.nn.selu,
+    'elu': B.elu,
     'sin': tf.math.sin,
+    'sinh': tf.math.sinh,
+    'asinh': tf.math.asinh,
     'cos': tf.math.cos,
+    'acos': tf.math.acos,
+    'acosh': tf.math.acosh,
+    'tan': tf.math.tan,
+    'tanh': B.tanh,
+    'atan': tf.math.atan,
+    'atanh': tf.math.atanh,
+    'abs': B.abs,
+    'exp': B.exp,
+    'expm1': tf.math.expm1,
+    'square': B.square,
+    'sign': B.sign,
+    'sqrt': B.sqrt,
+    'log': B.log,
+    'digamma': tf.math.digamma,
+    'lgamma': tf.math.lgamma,
+    'reciprocal': tf.math.reciprocal,
+    'rsqrt': tf.math.rsqrt,
 }
+
+
+def random_fn():
+    return FN_LOOKUP[random.choice(FN_LOOKUP.keys())],
 
 
 def clean_activation(activation):
     if callable(activation):
         return activation
     else:
-        fn = activation
+        fn = FN_LOOKUP[activation]
     return fn
 
 
-def use_fn(fn):
-    if not fn:
-        fn = FN
-    fn = clean_activation(fn)
-    return L.Activation(fn)
+def use_fn(key=FN):
+    fn = clean_activation(key)
+    return L.Activation(fn, name=key)

@@ -1,9 +1,9 @@
 import tensorflow as tf
-from nature import get_l1_l2, get_chaos
+from nature import get_l1_l2, get_init
 K, L = tf.keras, tf.keras.layers
 
 REGULARIZER = get_l1_l2
-INITIALIZER = get_chaos
+INITIALIZER = get_init
 
 ONE_D_LAYER_CLASS = L.SeparableConv1D
 ONE_D_KERNEL_SIZE = 1
@@ -32,7 +32,7 @@ def use_conv_1D(
         activity_regularizer=regularizer(),
         bias_regularizer=regularizer(),
         kernel_initializer=initializer(),
-        bias_initializer=initializer(bias=True))
+        bias_initializer=initializer())
 
 
 def use_conv_2D(
@@ -47,7 +47,7 @@ def use_conv_2D(
         activity_regularizer=regularizer(),
         bias_regularizer=regularizer(),
         kernel_initializer=initializer(),
-        bias_initializer=initializer(bias=True))
+        bias_initializer=initializer())
 
 
 def use_deconv_2D(
@@ -62,4 +62,4 @@ def use_deconv_2D(
         activity_regularizer=regularizer(),
         bias_regularizer=regularizer(),
         kernel_initializer=initializer(),
-        bias_initializer=initializer(bias=True))
+        bias_initializer=initializer())

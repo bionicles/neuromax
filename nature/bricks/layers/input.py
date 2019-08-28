@@ -1,9 +1,11 @@
 import tensorflow as tf
 
 
-def use_input(tensor_or_shape, batch_size=1):
+def use_input(tensor_or_shape, batch_size=1, drop_batch_dim=False):
     if tf.is_tensor(tensor_or_shape):
         shape = tensor_or_shape.shape
     else:
         shape = tensor_or_shape
-    return tf.keras.Input(shape[1:], batch_size=batch_size)
+    if drop_batch_dim:
+        shape = shape[1:]
+    return tf.keras.Input(shape, batch_size=batch_size, dtype=tf.float32)

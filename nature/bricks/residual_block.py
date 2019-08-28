@@ -8,7 +8,7 @@ L = K.layers
 LAYER_FN = use_conv_2D
 UNITS = 32
 N_LAYERS = 1
-FN = "lrelu"
+FN = "tanh"
 
 
 def use_residual_block(
@@ -24,7 +24,7 @@ def use_residual_block(
     layers = []
     for i in range(n_layers):
         layer = use_layer(layer_fn, units_or_filters)
-        layers.append(use_norm(), use_fn(fn), layer)
+        layers.append((use_norm(), use_fn(fn), layer))
     adder = L.Add()
 
     def call(x):
