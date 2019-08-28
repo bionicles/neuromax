@@ -16,5 +16,5 @@ archive/runs/
 *.mol
 runs/
 *.vscode
-nurture/clevr/CLEVR_v1.0
 *.mp4
+*.json
