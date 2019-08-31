@@ -1,7 +1,7 @@
 import tensorflow as tf
 import networkx as nx
 
-from nature import Brick, get_output, add_node, mutate
+from nature import Brick, get_output, add_node, mutate, Resizer
 from tools import screenshot_graph, get_spec
 
 L = tf.keras.layers
