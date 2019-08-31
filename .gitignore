@@ -18,3 +18,4 @@ runs/
 *.vscode
 *.mp4
 *.json
+nature/tasks/clevr/CLEVR_v1.0
