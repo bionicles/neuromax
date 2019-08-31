@@ -24,6 +24,7 @@ def prepare_data(agent):
     data_key, loss_fn = DEFAULT_DATASET, agent.classifier_loss
     data, info = tfds.load(data_key, split="train", with_info=True)
     data = data.batch(agent.batch_size)
+    data = data.prefetch(2)
     features = info.features
 
     out_spec = get_spec(n=features["label"].num_classes, format="onehot")

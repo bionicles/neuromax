@@ -1,4 +1,3 @@
-from tools.screenshot_graph import screenshot_graph
 from tools.concat_coords import concat_coords
 from tools.map_attrdict import map_attrdict
 from tools.safe_sample import safe_sample

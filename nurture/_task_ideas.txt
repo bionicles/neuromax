@@ -5,6 +5,9 @@ TLDR: try Gardener's multiple intelligences x Pearl's ladder of causation
 grounded language learning:
 http://www.denizyuret.com/2018/12/grounded-language-learning-datasets.html
 
+salesforce common sense explanations (CoS-3)
+superGLUE
+
 molecular:
 crystals -> https://github.com/materialsvirtuallab/megnet
 quantum -> datasets/xyz: https://ndownloader.figshare.com/files/3195389

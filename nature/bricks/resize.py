@@ -1,23 +1,22 @@
 import tensorflow as tf
 
-from nature import use_linear
+from nature import Linear, Brick
 from tools import get_size
 
 K = tf.keras
 L = K.layers
 
 
-def use_resizer(out_shape, norm_preact=True):
+def Resizer(agent, out_shape, norm_preact=True):
     flatten = L.Flatten()
-    resize = use_linear(get_size(out_shape))
+    resize = Linear(agent, get_size(out_shape))
     reshape = L.Reshape(out_shape)
 
-    def call(x):
+    def call(self, x):
         x = flatten(x)
         x = resize(x)
-        x = reshape(x)
-        return x
-    return call
+        return reshape(x)
+    return Brick(flatten, resize, reshape, call, agent)
 
 
 # def use_resizer(out_shape):

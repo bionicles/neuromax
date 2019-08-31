@@ -2,6 +2,8 @@ from tensorflow_addons.activations import sparsemax
 import tensorflow as tf
 import random
 
+from nature import Logistic, SReLU
+
 K = tf.keras
 
 B, L = K.backend, K.layers
@@ -9,7 +11,7 @@ B, L = K.backend, K.layers
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
-FN = 'mish'
+DEFAULT = 'mish'
 
 
 def swish(x):
@@ -18,6 +20,14 @@ def swish(x):
     https://arxiv.org/abs/1710.05941
     """
     return (x * B.sigmoid(x))
+
+
+def hard_swish(x):
+    """
+    Searching for MobileNetV3
+    https://arxiv.org/abs/1905.02244
+    """
+    return (x * B.hard_sigmoid(x))
 
 
 def mish(x):
@@ -86,7 +96,7 @@ def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
 FN_LOOKUP = {
     'soft_argmax': soft_argmax,
     'log_softmax': tf.nn.log_softmax,
-    'softmax': B.softmax,
+    'softmax': 'softmax',
     'softplus': B.softplus,
     'linear': lambda x: x,
     'sigmoid': B.sigmoid,
@@ -100,6 +110,7 @@ FN_LOOKUP = {
     'hard_tanh': hard_tanh,
     'gaussian': gaussian,
     'swish': swish,
+    'hard_swish': hard_swish,
     'mish': mish,
     'lisht': lisht,
     'rrelu': rrelu,
@@ -132,6 +143,12 @@ FN_LOOKUP = {
     'rsqrt': tf.math.rsqrt,
 }
 
+LAYERS = {
+    'prelu': L.PReLU,
+    'logistic': Logistic,
+    'srelu': SReLU
+}
+
 
 def random_fn():
     return FN_LOOKUP[random.choice(FN_LOOKUP.keys())],
@@ -145,6 +162,5 @@ def clean_activation(activation):
     return fn
 
 
-def use_fn(key=FN):
-    fn = clean_activation(key)
-    return L.Activation(fn, name=key)
+def Fn(key=DEFAULT):
+    return L.Activation(clean_activation(key.lower()), name=key)

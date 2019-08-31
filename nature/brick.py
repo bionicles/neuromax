@@ -1,21 +1,22 @@
 from tensorflow.keras.layers import Layer
 
-import nature
+from tools import package
 
 
 class Brick(Layer):
-    """A callable network module"""
 
-    def __init__(self, agent, parts):
-        self.agent = agent
-        parts = getattr(nature, f"use_{parts['brick_type']}")(agent, parts)
+    def __init__(self, *parts):
+        parts = package(parts)
+        assert "agent" in parts.keys()
+        assert "call" in parts.keys()
+        super(Brick, self).__init__()
         for key in parts:
             setattr(self, key, parts[key])
-        super(Brick, self).__init__()
-        self.agent.graph[id] = self
+        self.agent.bricks[id] = self
+        return self
 
     def build(self):
-        pass
+        self.built = True
 
     def __repr__(self):
         nl = '\n'

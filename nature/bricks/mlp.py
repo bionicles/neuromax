@@ -1,32 +1,32 @@
 import tensorflow as tf
 
-from nature import use_linear, use_fn
+from nature import Linear, Fn, Brick
+
 K = tf.keras
 
 LAYERS, UNITS, FN = 2, 256, None
-UNITS = [UNITS for _ in range(LAYERS)]
-FNS = [FN for _ in range(LAYERS)]
+UNITS_LIST = [UNITS for _ in range(LAYERS)]
+FNS_LIST = [FN for _ in range(LAYERS)]
 
 
-def use_mlp(units=UNITS, fns=FNS):
+def MLP(agent, units_list=UNITS_LIST, fns_list=FNS_LIST):
     """
     make a sequential MLP... default is [256, 256] with no activation
     Args:
         tensor_or_shape: tensor, or tuple
     kwargs:
-        units: list of int for units
-        fns: list of strings for activations (default None)
+        units_list: list of int for units
+        fns_list: list of strings for activations (default None)
     """
     layers = []
-    for i, units in enumerate(units):
-        dense = use_linear(units)
+    for i, units in enumerate(units_list):
+        dense = Linear(units=units)
         layers.append(dense)
-        if fns[i]:
-            layers.append(use_fn(fns[i]))
+        if fns_list[i]:
+            layers.append(Fn(fns_list[i]))
 
-    def call(x):
-        y = x
+    def call(self, x):
         for layer in layers:
-            y = layer(y)
-        return y
-    return call
+            x = layer(x)
+        return x
+    return Brick(units_list, fns_list, layers, call, agent)

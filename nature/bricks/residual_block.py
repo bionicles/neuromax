@@ -1,17 +1,18 @@
 import tensorflow as tf
 
-from nature import use_norm, use_fn, use_layer, use_conv_2D
+from nature import Norm, Fn, Layer, Conv2D, Brick
 
 K = tf.keras
 L = K.layers
 
-LAYER_FN = use_conv_2D
+LAYER_FN = Conv2D
 UNITS = 32
 N_LAYERS = 1
 FN = "tanh"
 
 
-def use_residual_block(
+def ResidualBlock(
+        agent,
         units_or_filters=UNITS, n_layers=N_LAYERS, layer_fn=LAYER_FN, fn=FN):
     """
     Get a residual block
@@ -23,13 +24,13 @@ def use_residual_block(
     """
     layers = []
     for i in range(n_layers):
-        layer = use_layer(layer_fn, units_or_filters)
-        layers.append((use_norm(), use_fn(fn), layer))
+        layer = Layer(layer_fn, units_or_filters)
+        layers.append((Norm(), Fn(fn), layer))
     adder = L.Add()
 
-    def call(x):
+    def call(self, x):
         y = tf.identity(x)
         for norm, fn, layer in layers:
             y = layer(y)
         return adder([x, y])
-    return call
+    return Brick(layers, adder, call, agent)

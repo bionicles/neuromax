@@ -19,23 +19,23 @@ class MultiHeadAttention(L.Layer):
         self.d_model, self.n_heads = d_model, n_heads
         assert d_model % self.n_heads == 0
         self.depth = d_model // self.n_heads
-        self.dense = use_linear(d_model)
-        self.wq = use_linear(d_model)
-        self.wk = use_linear(d_model)
-        self.wv = use_linear(d_model)
+        self.dense = use_linear(units=d_model)
+        self.wq = use_linear(units=d_model)
+        self.wk = use_linear(units=d_model)
+        self.wv = use_linear(units=d_model)
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (n_heads, depth).
-        Transpose the result such that the shape is (batch_size, n_heads, seq_len, depth)
+        Transpose to (batch_size, n_heads, seq_len, depth)
         """
         x = tf.reshape(x, (batch_size, -1, self.n_heads, self.depth))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, atoms):
-        batch_size = tf.shape(atoms)[0]
-        q = self.wq(atoms)  # (batch_size, seq_len, d_model)
-        k = self.wk(atoms)  # (batch_size, seq_len, d_model)
-        v = self.wv(atoms)  # (batch_size, seq_len, d_model)
+    def call(self, sequence):
+        batch_size = tf.shape(sequence)[0]
+        q = self.wq(sequence)  # (batch_size, seq_len, d_model)
+        k = self.wk(sequence)  # (batch_size, seq_len, d_model)
+        v = self.wv(sequence)  # (batch_size, seq_len, d_model)
         q = self.split_heads(q, batch_size)  # (batch_size, n_heads, seq_len_q, depth)
         k = self.split_heads(k, batch_size)  # (batch_size, n_heads, seq_len_k, depth)
         v = self.split_heads(v, batch_size)  # (batch_size, n_heads, seq_len_v, depth)

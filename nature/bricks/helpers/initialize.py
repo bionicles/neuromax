@@ -8,7 +8,7 @@ PHI = 1.61803398875
 MEAN = 0.
 
 
-def get_init(dist=DIST):
+def Init(dist=DIST):
     if dist is "truncated":
         return initializers.TruncatedNormal(mean=MEAN, stddev=PHI)
     elif dist is "he_uniform":

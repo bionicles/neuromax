@@ -1,18 +1,19 @@
 import tensorflow as tf
 
-from nature import use_norm, use_layer, use_fn, use_conv_2D
+from nature import Norm, Layer, Fn, Conv2D, Brick
 
 K = tf.keras
 L = K.layers
 
-DEFAULT_LAYER = use_conv_2D
+DEFAULT_LAYER = Conv2D
 N_LAYERS = 2
 UNITS = 2
 FN = "mish"
 
 
-def use_dense_block(
-        layer_fn=DEFAULT_LAYER, n_layers=N_LAYERS, units_or_filters=UNITS,
+def DenseBlock(
+        agent, layer_class=DEFAULT_LAYER,
+        n_layers=N_LAYERS, units_or_filters=UNITS,
         fn=FN):
     """
     Get a residual block
@@ -24,14 +25,14 @@ def use_dense_block(
     """
     layers = []
     for i in range(N_LAYERS):
-        layer = use_layer(layer_fn, units_or_filters)
-        layers.append((layer, use_fn(fn), use_norm()))
+        layer = Layer(layer_class, units_or_filters)
+        layers.append((layer, Fn(fn), Norm()))
 
-    def call(x):
+    def call(self, x):
         for layer, fn, norm in layers:
             y = norm(x)
             y = fn(x)
             y = layer(x)
             x = tf.concat([x, y], axis=-1)
         return x
-    return call
+    return Brick(layers, call, agent=agent)

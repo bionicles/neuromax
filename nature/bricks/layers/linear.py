@@ -1,17 +1,17 @@
 import tensorflow as tf
 
-from nature import get_l1_l2, get_init
+from nature import L1L2, Init
 
 K = tf.keras
 L = K.layers
 
-INITIALIZER = get_init
-REGULARIZER = get_l1_l2
+INITIALIZER = Init
+REGULARIZER = L1L2
 LAYER_CLASS = L.Dense  # NoiseDrop
 UNITS = 256
 
 
-def use_linear(units=UNITS, regularizer=REGULARIZER, initializer=INITIALIZER):
+def Linear(units=UNITS, regularizer=REGULARIZER, initializer=INITIALIZER):
     """
     Get a dense layer with no activation (use_fn does that)
     kwargs:

@@ -1,10 +1,10 @@
-from nature import use_norm, use_fn
+from nature import Norm, Fn, Brick
 
 
-def use_norm_preact(key=None):
-    norm = use_norm()
-    fn = use_fn(key=key) if key else use_fn()
+def NormPreact(agent, key=None):
+    norm = Norm()
+    fn = Fn(key=key) if key else Fn()
 
-    def call(x):
+    def call(self, x):
         return fn(norm(x))
-    return call
+    return Brick(norm, fn, call, agent)

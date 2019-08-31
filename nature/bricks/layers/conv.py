@@ -1,9 +1,9 @@
 import tensorflow as tf
-from nature import get_l1_l2, get_init
+from nature import L1L2, Init
 K, L = tf.keras, tf.keras.layers
 
-REGULARIZER = get_l1_l2
-INITIALIZER = get_init
+REGULARIZER = L1L2
+INITIALIZER = Init
 
 ONE_D_LAYER_CLASS = L.SeparableConv1D
 ONE_D_KERNEL_SIZE = 1
@@ -21,7 +21,7 @@ DECONV_TWO_D_PADDING = "same"
 DECONV_TWO_D_FILTERS = 4
 
 
-def use_conv_1D(
+def Conv1D(
         filters=ONE_D_FILTERS,
         layer_class=ONE_D_LAYER_CLASS, kernel_size=ONE_D_KERNEL_SIZE,
         padding=ONE_D_PADDING,
@@ -35,7 +35,7 @@ def use_conv_1D(
         bias_initializer=initializer())
 
 
-def use_conv_2D(
+def Conv2D(
         filters=CONV_TWO_D_FILTERS,
         layer_class=CONV_TWO_D_LAYER_CLASS,
         kernel_size=CONV_TWO_D_KERNEL_SIZE,
@@ -50,7 +50,7 @@ def use_conv_2D(
         bias_initializer=initializer())
 
 
-def use_deconv_2D(
+def DConv2D(
         filters=DECONV_TWO_D_FILTERS,
         layer_class=DECONV_TWO_D_LAYER_CLASS,
         kernel_size=DECONV_TWO_D_KERNEL_SIZE,

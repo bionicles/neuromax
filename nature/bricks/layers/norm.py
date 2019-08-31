@@ -4,7 +4,7 @@ from tensorflow.keras.layers import BatchNormalization
 BATCH = False
 
 
-def use_norm():
+def Norm():
     if BATCH:
         return BatchNormalization()
     return InstanceNormalization()

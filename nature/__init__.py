@@ -1,30 +1,44 @@
 # order matters!
 
-from nature.bricks.helpers.regularize import get_l1_l2
-from nature.bricks.helpers.initialize import get_init
+from nature.brick import Brick
 
-from nature.bricks.layers.conv import use_conv_1D, use_conv_2D, use_deconv_2D
-from nature.bricks.layers.linear import use_linear
-from nature.bricks.layers.fn import use_fn
-from nature.bricks.layers.layer import use_layer
-from nature.bricks.layers.input import use_input
-from nature.bricks.resize import use_resizer
-from nature.bricks.layers.norm import use_norm
+from nature.bricks.helpers.regularize import L1L2
+from nature.bricks.helpers.initialize import Init
 
-from nature.bricks.residual_block import use_residual_block
-from nature.bricks.elemental import use_multiply
-from nature.bricks.dense_block import use_dense_block
-from nature.bricks.norm_preact import use_norm_preact
-from nature.bricks.mlp import use_mlp
-from nature.bricks.swag import use_swag
-from nature.bricks.graph import Graph
-from nature.bricks.graph_model import use_graph_model
+from nature.bricks.layers.conv import Conv1D, Conv2D, DConv2D
+from nature.bricks.layers.linear import Linear
+from nature.bricks.layers.fn import Fn
+from nature.bricks.layers.layer import Layer
+from nature.bricks.layers.input import Input
+from nature.bricks.layers.norm import Norm
 
-from nature.bricks.interface.classify import add_classifier
-from nature.bricks.interface.ragged_actuator import use_ragged_actuator
-from nature.bricks.interface.ragged_sensor import use_ragged_sensor
-from nature.bricks.interface.image_actuator import use_image_actuator
-from nature.bricks.interface.image_sensor import use_image_sensor
-from nature.bricks.interface.interface import use_coder, use_actuator
+from nature.bricks.resize import Resizer
+from nature.bricks.residual_block import ResidualBlock
+from nature.bricks.elemental import Multiply
+from nature.bricks.dense_block import DenseBlock
+from nature.bricks.norm_preact import NormPreact
+from nature.bricks.mlp import MLP
+from nature.bricks.swag import SWAG
+
+from nature.bricks.interfaces.classifier import Classifier
+from nature.bricks.interfaces.ragged_actuator import RaggedActuator
+from nature.bricks.interfaces.ragged_sensor import RaggedSensor
+from nature.bricks.interfaces.image_actuator import ImageActuator
+from nature.bricks.interfaces.image_sensor import ImageSensor
+from nature.bricks.interfaces.interface import Coder, Actuator
+
+
+from nature.bricks.graph.helpers.count import count
+from nature.bricks.graph.helpers.add_node import add_node
+from nature.bricks.graph.helpers.screenshot_graph import screenshot_graph
+
+from nature.bricks.graph.evolve.mutate import mutate
+from nature.bricks.graph.evolve.insert import insert_motif, insert_motifs
+from nature.bricks.graph.evolve.regulon import Regulon
+
+from nature.bricks.graph._output import get_output
+from nature.bricks.graph._brick import GraphBrick
+from nature.bricks.graph._task import TaskModel
+
 
 from nature.agent import Agent

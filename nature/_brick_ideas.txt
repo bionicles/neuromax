@@ -4,32 +4,21 @@ deformable conv https://tensorlayer.readthedocs.io/en/latest/_modules/tensorlaye
 capsules
 reservoirs # Echo State Network: https://github.com/cameronosmith/Echo-State-Network/blob/master/EchoStateNetwork.py
 differentiable neural dictionary https://github.com/mjacar/pytorch-nec/blob/master/dnd.py
-add, subtract, multiply, divide
-PRELU/RRELU
 mixed convolutions
-replay buffer (duh) -- just using a list right now
 tied-weight autoencoder?
 pooling (ugh)
 noise?
-optimization problems https://arxiv.org/pdf/1703.00443.pdf
+optimization problems https://arxiv.org/pdf/1703.00443.pdf optimizers - lookahead https://github.com/bojone/keras_lookahead#lookahead-optimizer-for-keras https://arxiv.org/abs/1907.08610
 neural ode
 infinite set convolutions (recursion or np.indices)
-subpixel conv
-look at multiply layers ... like attention
 maxout
 RNNs could go back in
 could make the graphmodel a rnn cell to handle recurrent state ...
 # Graph Conv: https://github.com/CyberZHG/keras-gcn/blob/master/keras_gcn/layers.py / https://github.com/tkipf/keras-gcn/blob/master/kegra/layers/graph.py
 # Polymorphic: https://github.com/dip-scd/PolymorphicDense/blob/master/src/polymorphic_dense.py
-# MOE: https://github.com/eminorhan/mixture-of-experts/blob/master/DenseMoE.py
 # NALU: https://arxiv.org/pdf/1808.00508.pdf
 # MDN: https://github.com/cpmpercussion/keras-mdn-layer/blob/master/mdn/__init__.py
-clockwork RNN https://github.com/flandolfi/clockwork-rnn/blob/master/cwrnn.py https://arxiv.org/pdf/1402.3511.pdf
-SWAG https://arxiv.org/abs/1811.11813 y = Dense()([x, x^2, ..., x^N])
 flow models
-sensors
-actuators
-optimizers - lookahead https://github.com/bojone/keras_lookahead#lookahead-optimizer-for-keras https://arxiv.org/abs/1907.08610
 quantizer
 # https://toolz.readthedocs.io/en/latest/api.html#dicttoolz might be fun
 differentiable neural computer
@@ -38,9 +27,21 @@ pixelSnail
 pixelCNN
 bilinear https://pytorch.org/docs/stable/nn.html#torch.nn.Bilinear
 spatial_transformer
-elemental operations
 shared layers in interfaces
 tfp layers
 tfp distributions -- see helpers.add_distribution
 tfp bijectors ?
 convolution over distributions https://towardsdatascience.com/differentiable-convolution-of-probability-distributions-with-tensorflow-79c1dd769b46
+
+add, subtract, multiply, divide
+# MOE: https://github.com/eminorhan/mixture-of-experts/blob/master/DenseMoE.py
+subpixel conv
+look at multiply layers ... like attention
+clockwork RNN https://github.com/flandolfi/clockwork-rnn/blob/master/cwrnn.py https://arxiv.org/pdf/1402.3511.pdf
+
+replay buffer (duh) -- just using a list right now
+SWAG https://arxiv.org/abs/1811.11813 y = Dense()([x, x^2, ..., x^N])
+sensors
+actuators
+elemental operations
+PRELU/RRELU

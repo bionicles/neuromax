@@ -1,7 +1,7 @@
 import networkx as nx
 import os
 
-from tools.log import log
+from tools import log
 
 
 def screenshot_graph(G, folderpath, filename):

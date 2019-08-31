@@ -27,12 +27,13 @@ import tensorflow as tf
 class CWRNNCell(Layer):
     """Cell class for CWRNN
     Based off SimpleRNNCell from Keras
-    Made by Dean Reading, 2018
 
-    # Arguments
+    # args
         units: Positive integer, dimensionality of the output space.
         clock_periods: A list of the clock periods for each 'module'.
             In the paper, it's [1,2,4,8,16].
+
+    # kwargs
         activation: Activation function to use
             (see [activations](../activations.md)).
             If you pass None, no activation is applied
@@ -123,13 +124,13 @@ class CWRNNCell(Layer):
 
         # Fields added for CWRNN
         self.clock_numPeriods = len(clock_periods)
-        assert units % self.clock_numPeriods == 0, ("CWRNN requires the units to be " +
-                                                "a multiple of the number of periods; " +
-                                                "units %% len(clock_periods) must be 0.")
+        assert units % self.clock_numPeriods == 0, (
+            "CWRNN requires the units to be " +
+            "a multiple of the number of periods; " +
+            "units %% len(clock_periods) must be 0.")
         self.connection_mask = None
         self.clock_periods = np.asarray(sorted(clock_periods))
         self.split_method = split_method
-
 
     def build(self, input_shape):
         self.kernel = self.add_weight(shape=(input_shape[-1], self.units),

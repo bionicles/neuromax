@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from nature import use_linear
+from nature import Linear, Brick
 
 K = tf.keras
 L = K.layers
@@ -8,16 +8,16 @@ L = K.layers
 UNITS = 128
 
 
-def use_multiply(units=UNITS):
-    linear1 = use_linear(units)
-    linear2 = use_linear(units)
+def Multiply(agent, units=UNITS):
+    linear1 = Linear(units)
+    linear2 = Linear(units)
     multiplier = L.Multiply()
 
-    def call(x):
+    def call(self, x):
         o1 = linear1(x)
         o2 = linear2(x)
         return multiplier([o1, o2])
-    return call
+    return Brick(linear1, linear2, multiplier, call, agent)
 
 
 # commenting out this guy because he's likely to hit shape bugs
