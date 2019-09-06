@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from nature import Resizer, DenseBlock, DConv2D, Brick
+from nature import Resizer, DenseBlock, DConv2D
 
 K = tf.keras
 L, B = K.layers, K.backend
@@ -8,13 +8,14 @@ L, B = K.layers, K.backend
 LAST_DECODER_FN = "tanh"
 
 
-def ImageActuator(agent):
-    reshape = Resizer(agent, agent.image_spec.shape)
-    dense_block = DenseBlock()
-    deconv = DConv2D()
+class ImageActuator(L.Layer):
+
+    def __init__(self, agent):
+        self.reshape = Resizer(agent, agent.image_spec.shape)
+        self.dense_block = DenseBlock()
+        self.deconv = DConv2D()
 
     def call(self, x):
-        x = reshape(x)
-        x = dense_block(x)
-        return deconv(x)
-    return Brick(reshape, dense_block, deconv, call, agent)
+        x = self.reshape(x)
+        x = self.dense_block(x)
+        return self.deconv(x)

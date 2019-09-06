@@ -22,7 +22,7 @@ def prepare_env(agent):
     log("prepare_env", color="red")
     # env_list = [spec.id for spec in gym.envs.registry.all()]
     # key = random.choice(env_list)
-    key = "MountainCar-v0"
+    key = "MountainCarContinuous-v0"
     env = gym.make(key)
     in_specs = [get_spec_for_space(env.observation_space)]
     out_specs = [get_spec_for_space(env.action_space)]

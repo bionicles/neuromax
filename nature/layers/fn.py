@@ -2,7 +2,7 @@ from tensorflow_addons.activations import sparsemax
 import tensorflow as tf
 import random
 
-from nature import Logistic, SReLU
+# from nature import Logistic, SReLU
 
 K = tf.keras
 
@@ -145,8 +145,8 @@ FN_LOOKUP = {
 
 LAYERS = {
     'prelu': L.PReLU,
-    'logistic': Logistic,
-    'srelu': SReLU
+    # 'logistic': Logistic,
+    # 'srelu': SReLU
 }
 
 

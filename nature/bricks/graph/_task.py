@@ -1,15 +1,16 @@
 import tensorflow as tf
 import networkx as nx
 
-from nature import Brick, add_node, get_output
-from tools import screenshot_graph, show_model
+from nature import add_node, get_output, screenshot_graph
+from tools import show_model
 
 K = tf.keras
+L = K.layers
 
 N_INITIAL_BOXES = 1
 
 
-def Graph(in_specs, out_specs):
+def TaskGraph(in_specs, out_specs):
     G = nx.MultiDiGraph()
     add_node(G, "source", "gold", "cylinder", "source")
     add_node(G, "sink", "gold", "cylinder", "sink")
@@ -36,9 +37,8 @@ def Model(G, agent):
 
 
 def TaskModel(agent, in_specs, out_specs):
-    G = Graph(in_specs, out_specs)
+    G = TaskGraph(in_specs, out_specs)
     screenshot_graph(G, ".", 'brick')
     model = Model(G, agent)
     show_model(model, "task_model")
-    call = model.call
-    return Brick(agent, in_specs, out_specs, G, model, call)
+    return G, model

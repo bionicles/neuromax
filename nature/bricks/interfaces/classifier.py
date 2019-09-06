@@ -1,22 +1,28 @@
-from nature import Norm, Fn, Multiply, Resizer, Brick
+import tensorflow as tf
+
+from nature import Norm, Fn, Linear, Resizer
+
+L = tf.keras.layers
 
 
-def Classifier(agent, spec):
-    m1 = Multiply()
-    m2 = Multiply()
-    n1 = Norm()
-    n2 = Norm()
-    n3 = Norm()
-    n4 = Norm()
-    resizer = Resizer(agent, spec.shape)
-    if spec.format is "discrete":
-        classifier = Fn(key='soft_argmax')
-    elif spec.format is 'onehot':
-        classifier = Fn(key='softmax')
+class Classifier(L.Layer):
+
+    def __init__(self, spec):
+        super(Classifier, self).__init__()
+        self.m1 = Linear()
+        self.m2 = Linear()
+        self.n1 = Norm()
+        self.n2 = Norm()
+        self.n3 = Norm()
+        self.n4 = Norm()
+        self.resizer = Resizer(spec.shape)
+        if spec.format is "discrete":
+            self.classifier = Fn(key='soft_argmax')
+        elif spec.format is 'onehot':
+            self.classifier = Fn(key='softmax')
 
     def call(self, x):
-        x = m1(n1(x))
-        x = m2(n2(x))
-        x = resizer(n3(x))
-        return classifier(n4(x))
-    return Brick(m1, m2, n1, n2, n3, n4, resizer, classifier, call, agent)
+        x = self.m1(self.n1(x))
+        x = self.m2(self.n2(x))
+        x = self.resizer(self.n3(x))
+        return self.classifier(self.n4(x))

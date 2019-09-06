@@ -6,6 +6,7 @@ from .log import log
 
 
 def get_size(shape):
+    log(shape, color='yellow')
     if isinstance(shape, int):
         return shape
     if None in shape:

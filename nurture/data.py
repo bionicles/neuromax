@@ -1,6 +1,7 @@
 import tensorflow_datasets as tfds
 from attrdict import AttrDict
 from tensorflow import cast, float32, expand_dims
+from tensorflow.image import resize
 
 from tools import get_spec, log, get_onehot
 
@@ -30,15 +31,17 @@ def prepare_data(agent):
     out_spec = get_spec(n=features["label"].num_classes, format="onehot")
     in_specs, out_specs = [agent.image_spec], [out_spec]
     options = list(range(10))
+    hw = (agent.image_spec.shape[0], agent.image_spec.shape[1])
 
     def unpack(element):
         image, label = element['image'], element['label']
         image = cast(image, float32)
+        image = resize(image, hw)
         label = get_onehot(int(label), options)
         label = cast(label, float32)
         label = expand_dims(label, 0)
         return image, label
-    data_env = DataEnv(data, unpack, loss_fn)
+    data_env = DataEnv(agent, data, unpack, loss_fn)
     log("data_env", data_env, color="red")
     return AttrDict(
         in_specs=in_specs, out_specs=out_specs,
@@ -47,7 +50,8 @@ def prepare_data(agent):
 
 class DataEnv:
 
-    def __init__(self, dataset, unpack, loss_fn):
+    def __init__(self, agent, dataset, unpack, loss_fn):
+        self.agent = agent
         self.dataset = dataset
         self.iter = self.dataset.__iter__()
         self.loss_fn = loss_fn

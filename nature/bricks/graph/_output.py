@@ -1,7 +1,8 @@
 # graph_model.py - bion
 import tensorflow as tf
 
-from nature import Input, Coder, GraphBrick, ResidualBlock, Actuator, Linear
+from nature import Input, Predictor, ResBlock, Actuator, Linear
+from tools import log
 
 K = tf.keras
 L = K.layers
@@ -9,15 +10,16 @@ L = K.layers
 
 def get_output(G, agent, id, task_model=False):
     node = G.node[id]
+    log('get_output', id, node, f"task_model={task_model}", color="red")
     if node["shape"] is "cylinder":
         return
     if node["output"] is not None:
         return node["output"]
     node_type = node["node_type"]
-    if task_model and node_type is "input":
+    if node_type is "input" and task_model:
         node['input'] = input = output = Input(
             node["spec"]["shape"], batch_size=agent.batch_size)
-        node['coder'] = coder = Coder(agent, node['spec'])
+        node['coder'] = coder = Predictor(agent, node['spec'])
         output = coder(input)
     else:
         inputs = [get_output(G, agent, parent_id, task_model=task_model)
@@ -26,12 +28,12 @@ def get_output(G, agent, id, task_model=False):
         brick = None
         if node_type is 'brick':
             if task_model:
+                from nature import GraphBrick
                 brick = GraphBrick(agent, inputs=inputs)
+                output = brick(inputs)
             else:
                 d_out = inputs.shape[-1]
-                brick = ResidualBlock(
-                    agent,
-                    units_or_filters=d_out, layer_fn=Linear)
+                brick = ResBlock(units_or_filters=d_out, layer_fn=Linear)
                 output = brick(inputs)
                 output = L.Concatenate(-1)([inputs, output])
         if node_type is "output":

@@ -4,7 +4,7 @@ from tools.get_path import get_path
 
 K = tf.keras
 
-SUMMARIZE = False
+SUMMARIZE = True
 FOLDER = "."
 
 

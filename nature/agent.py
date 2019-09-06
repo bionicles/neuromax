@@ -3,7 +3,7 @@ from keras_radam.training import RAdamOptimizer
 from random import choice
 import tensorflow as tf
 
-from tools import get_percent, get_spec, add_up, log
+from tools import get_spec, log
 from nurture import prepare_env, prepare_data
 from nature import TaskModel
 
@@ -28,28 +28,25 @@ class Agent:
         self.optimizer, self.batch_size = OPTIMIZER, BATCH
         self.classifier_loss = CLASSIFIER_LOSS
         self.regresser_loss = REGRESSER_LOSS
-        self.replay = []
-        self.train()
+        self.n_steps = 0
+        self.practice()
 
-    def train(self):
+    def practice(self):
         for session_number in range(SESSIONS):
-            self.step = 0
             self.task = choice(TASK_PREPPERS)(self)
-            self.task.model = TaskModel(
-                self, in_specs=self.task.in_specs, out_specs=self.task.out_specs)
+            self.task.graph, self.task.model = TaskModel(
+                self,
+                in_specs=self.task.in_specs, out_specs=self.task.out_specs)
+            log("practice on", self.task, debug=True, color="blue")
             for episode_number in range(EPISODES):
-                with tf.device('/gpu:0'):
-                    self.run_episode()
+                self.run_episode()
 
-    @tf.function
     def run_episode(self):
         observation = self.clean_observation(self.task.env.reset())
         done = False
         while not done:
             with tf.GradientTape() as tape:
                 outputs = self.task.model(observation)
-                if self.task.out_specs[0].format is "discrete":
-                    outputs = int(outputs.numpy().item(0))
                 observation, reward, done, _ = self.task.env.step(outputs)
                 observation = self.clean_observation(observation)
                 if not tf.is_tensor(reward):
@@ -62,35 +59,32 @@ class Agent:
             sum_of_losses = tf.math.reduce_sum(losses)
             tf.print(self.step, sum_of_losses)
             tf.summary.scalar("sum of losses", sum_of_losses)
-            self.step = self.step + 1
-            # memory = [observation, outputs, losses, new_observation]
-            # self.replay.append(memory)
-            # observation = new_observation
-
-            # log("", debug=True)
-            # self.n_steps = self.n_steps + 1
-            # log(f" step: {self.n_steps} --- task: {self.task.key}", debug=True)
-            # n_gradients = sum([1 if v is not None else 0 for v in gradients])
-            # n_variables = len(self.task.model.trainable_variables)
-            # percent = get_percent(n_variables, n_gradients)
-            # log(f" {percent} of variables have gradients", debug=True)
-            # try:
-            #     loss = add_up(loss)
-            # except Exception as e:
-            #     log('exception adding up loss', e)
-            #     loss = loss.numpy().item(0)
-            # free_energy = add_up(losses)
-            # percent = get_percent(free_energy, loss)
-            # log(f" {percent} task loss at {round(loss, 4)}", debug=True)
-            # log(f" {round(free_energy, 4)} free energy", debug=True)
+            self.n_steps = self.n_steps + 1
 
     def clean_observation(self, observation):
         if observation is None:
             return observation
-        if not tf.is_tensor(observation):
-            observation = tf.convert_to_tensor(observation, dtype=DTYPE)
+        # if not tf.is_tensor(observation):
+        #     observation = tf.convert_to_tensor(observation, dtype=DTYPE)
         if observation.dtype is not DTYPE:
             observation = tf.cast(observation, DTYPE)
         if observation.shape[0] is not self.batch_size:
             observation = tf.expand_dims(observation, 0)
         return observation
+
+    # def show_result(self, loss, losses, gradients):
+    #     log("", debug=True)
+    #     log(f" step: {self.n_steps} --- task: {self.task.key}", debug=True)
+    #     n_gradients = sum([1 if v is not None else 0 for v in gradients])
+    #     n_variables = len(self.task.model.trainable_variables)
+    #     percent = get_percent(n_variables, n_gradients)
+    #     log(f" {percent} of variables have gradients", debug=True)
+    #     try:
+    #         loss = add_up(loss)
+    #     except Exception as e:
+    #         log('exception adding up loss', e)
+    #         loss = loss.numpy().item(0)
+    #     free_energy = add_up(losses)
+    #     percent = get_percent(free_energy, loss)
+    #     log(f" {percent} task loss at {round(loss, 4)}", debug=True)
+    #     log(f" {round(free_energy, 4)} free energy", debug=True)
