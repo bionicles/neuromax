@@ -25,14 +25,14 @@ class ResBlock(L.Layer):
             fn: string name of the activation
         """
         super(ResBlock, self).__init__()
-        self.layers = []
-        for i in range(n_layers):
-            layer = Layer(layer_fn, units_or_filters)
-            self.layers.append((Norm(), Fn(fn), layer))
+        self.norm = Norm()
+        self.fn = Fn(fn)
+        self.layer = Layer(layer_fn, units_or_filters)
         self.adder = L.Add()
 
     def call(self, x):
-        y = tf.identity(x)
-        for norm, fn, layer in self.layers:
-            y = layer(y)
-        return self.adder([x, y])
+        x = self.norm(x)
+        y = self.fn(x)
+        y = self.layer(y)
+        y = self.adder([x, y])
+        return y

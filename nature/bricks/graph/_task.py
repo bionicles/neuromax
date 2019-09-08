@@ -2,7 +2,7 @@ import tensorflow as tf
 import networkx as nx
 
 from nature import add_node, get_output, screenshot_graph
-from tools import show_model
+from tools import show_model, log
 
 K = tf.keras
 L = K.layers
@@ -33,6 +33,7 @@ def Model(G, agent):
     outputs = [get_output(G, agent, id, task_model=True)
                for id in list(G.predecessors("sink"))]
     inputs = [G.node[id]['input'] for id in list(G.successors('source'))]
+    log('outputs', outputs, color="green", debug=True)
     return K.Model(inputs, outputs)
 
 

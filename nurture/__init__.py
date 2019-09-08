@@ -1,4 +1,4 @@
-from nurture.data import prepare_data
+from nurture.data import get_images
 from nurture.gym import prepare_env
 
 # from nurture.clevr.clevr import read_clevr_dataset, run_clevr_task

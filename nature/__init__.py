@@ -18,12 +18,11 @@ from nature.bricks.resize import Resizer
 from nature.bricks.mlp import MLP
 
 from nature.bricks.interfaces.classifier import Classifier
-from nature.bricks.interfaces.coordinator import Coordinator
+from nature.bricks.interfaces.coords_1D import ConcatCoords1D
+from nature.bricks.interfaces.coords_2D import ConcatCoords2D
 from nature.bricks.interfaces.predictor import Predictor
 from nature.bricks.interfaces.ragged_actuator import RaggedActuator
-# from nature.bricks.interfaces.ragged_sensor import RaggedSensor
 from nature.bricks.interfaces.image_actuator import ImageActuator
-# from nature.bricks.interfaces.image_sensor import ImageSensor
 from nature.bricks.interfaces.actuator import Actuator
 
 

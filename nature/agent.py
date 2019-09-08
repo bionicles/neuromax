@@ -1,16 +1,16 @@
 # agent.py - handle multitask AI
-from keras_radam.training import RAdamOptimizer
+# from keras_radam.training import RAdamOptimizer
 from random import choice
 import tensorflow as tf
 
-from tools import get_spec, log
-from nurture import prepare_env, prepare_data
 from nature import TaskModel
+from nurture import get_images
+from tools import get_spec
 
 CLASSIFIER_LOSS = tf.losses.categorical_crossentropy
+OPTIMIZER = tf.keras.optimizers.SGD()
 REGRESSER_LOSS = tf.losses.MSLE
-TASK_PREPPERS = [prepare_env, prepare_data]
-OPTIMIZER = RAdamOptimizer()
+TASK_PREPPERS = [get_images]
 DTYPE = tf.float32
 
 BATCH, ATOMS, CHANNELS = 1, 4, 4
@@ -26,51 +26,56 @@ class Agent:
         self.code_spec = get_spec(shape=(ATOMS, CHANNELS), format="code")
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
         self.optimizer, self.batch_size = OPTIMIZER, BATCH
-        self.classifier_loss = CLASSIFIER_LOSS
-        self.regresser_loss = REGRESSER_LOSS
-        self.n_steps = 0
+        self.hw = (IMAGE_SHAPE[0], IMAGE_SHAPE[1])
         self.practice()
 
     def practice(self):
-        for session_number in range(SESSIONS):
-            self.task = choice(TASK_PREPPERS)(self)
-            self.task.graph, self.task.model = TaskModel(
-                self,
-                in_specs=self.task.in_specs, out_specs=self.task.out_specs)
-            log("practice on", self.task, debug=True, color="blue")
-            for episode_number in range(EPISODES):
-                self.run_episode()
+        task = choice(TASK_PREPPERS)(self)
+        task.graph, task.model = TaskModel(
+            self, in_specs=task.in_specs, out_specs=task.out_specs)
+        with tf.device("/gpu:0"):
+            self.run_data_session(task.data, task.model, task.loss)
 
-    def run_episode(self):
-        observation = self.clean_observation(self.task.env.reset())
-        done = False
-        while not done:
+    @tf.function
+    def run_data_session(self, data, model, loss_fn):
+        for step, (image, label) in data.enumerate():
             with tf.GradientTape() as tape:
-                outputs = self.task.model(observation)
-                observation, reward, done, _ = self.task.env.step(outputs)
-                observation = self.clean_observation(observation)
-                if not tf.is_tensor(reward):
-                    reward = tf.convert_to_tensor(reward)
-                losses = [-reward] + self.task.model.losses
-            gradients = tape.gradient(
-                losses, self.task.model.trainable_variables)
+                prediction = model(image)
+                loss = [*model.losses, loss_fn(label, prediction)]
+            gradients = tape.gradient(loss, model.trainable_variables)
             self.optimizer.apply_gradients(
-                zip(gradients, self.task.model.trainable_variables))
-            sum_of_losses = tf.math.reduce_sum(losses)
-            tf.print(self.step, sum_of_losses)
-            tf.summary.scalar("sum of losses", sum_of_losses)
-            self.n_steps = self.n_steps + 1
+                zip(gradients, model.trainable_variables))
+            tf.print(step, loss)
 
-    def clean_observation(self, observation):
-        if observation is None:
-            return observation
-        # if not tf.is_tensor(observation):
-        #     observation = tf.convert_to_tensor(observation, dtype=DTYPE)
-        if observation.dtype is not DTYPE:
-            observation = tf.cast(observation, DTYPE)
-        if observation.shape[0] is not self.batch_size:
-            observation = tf.expand_dims(observation, 0)
-        return observation
+    # @tf.function
+    # def run_env_episode(self):
+    #     observation = self.task.env.reset()
+    #     done = False
+    #     while not done:
+    #         with tf.GradientTape() as tape:
+    #             outputs = self.task.model(observation)
+    #             print("outputs", outputs)
+    #             observation, reward, done, _ = self.task.env.step(outputs)
+    #             losses = -reward
+    #         gradients = tape.gradient(
+    #             losses, self.task.model.trainable_variables)
+    #         self.optimizer.apply_gradients(
+    #             zip(gradients, self.task.model.trainable_variables))
+    #         sum_of_losses = tf.math.reduce_sum(losses)
+    #         tf.print(self.step, sum_of_losses)
+    #         tf.summary.scalar("sum of losses", sum_of_losses)
+    #         self.n_steps = self.n_steps + 1
+
+    # def clean_observation(self, observation):
+    #     if observation is None:
+    #         return observation
+    #     if not tf.is_tensor(observation):
+    #         observation = tf.convert_to_tensor(observation, dtype=DTYPE)
+    #     if observation.dtype is not DTYPE:
+    #         observation = tf.cast(observation, DTYPE)
+    #     if observation.shape[0] is not self.batch_size:
+    #         observation = tf.expand_dims(observation, 0)
+    #     return observation
 
     # def show_result(self, loss, losses, gradients):
     #     log("", debug=True)

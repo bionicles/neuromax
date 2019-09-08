@@ -9,20 +9,16 @@ class Classifier(L.Layer):
 
     def __init__(self, spec):
         super(Classifier, self).__init__()
-        self.m1 = Linear()
-        self.m2 = Linear()
-        self.n1 = Norm()
-        self.n2 = Norm()
-        self.n3 = Norm()
-        self.n4 = Norm()
+        self.linear1 = Linear()
+        self.norm1 = Norm()
+        self.norm2 = Norm()
+        self.norm3 = Norm()
         self.resizer = Resizer(spec.shape)
-        if spec.format is "discrete":
-            self.classifier = Fn(key='soft_argmax')
-        elif spec.format is 'onehot':
-            self.classifier = Fn(key='softmax')
+        self.softmax = Fn(key='softmax')
 
+    @tf.function
     def call(self, x):
-        x = self.m1(self.n1(x))
-        x = self.m2(self.n2(x))
-        x = self.resizer(self.n3(x))
-        return self.classifier(self.n4(x))
+        x = self.linear1(self.norm1(x))
+        x = self.resizer(self.norm2(x))
+        x = self.softmax(self.norm3(x))
+        return x

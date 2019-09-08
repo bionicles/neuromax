@@ -27,15 +27,15 @@ def get_output(G, agent, id, task_model=False):
         inputs = L.Concatenate(-1)(inputs) if len(inputs) > 1 else inputs[0]
         brick = None
         if node_type is 'brick':
-            if task_model:
-                from nature import GraphBrick
-                brick = GraphBrick(agent, inputs=inputs)
-                output = brick(inputs)
-            else:
-                d_out = inputs.shape[-1]
-                brick = ResBlock(units_or_filters=d_out, layer_fn=Linear)
-                output = brick(inputs)
-                output = L.Concatenate(-1)([inputs, output])
+            # if task_model:
+            #     from nature import GraphBrick
+            #     brick = GraphBrick(agent, inputs=inputs)
+            #     output = brick(inputs)
+            # else:
+            d_out = inputs.shape[-1]
+            brick = ResBlock(units_or_filters=d_out, layer_fn=Linear)
+            output = brick(inputs)
+            output = L.Concatenate(-1)([inputs, output])
         if node_type is "output":
             brick = Actuator(agent, node['spec'])
             output = brick(inputs)

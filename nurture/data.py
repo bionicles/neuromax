@@ -1,9 +1,10 @@
+import tensorflow as tf
 import tensorflow_datasets as tfds
 from attrdict import AttrDict
 from tensorflow import cast, float32, expand_dims
 from tensorflow.image import resize
 
-from tools import get_spec, log, get_onehot
+from tools import get_spec
 
 DEFAULT_DATASET = "mnist"
 
@@ -20,49 +21,19 @@ blacklist = [
     "so2sat", "stanford_dogs", "sun397"]
 
 
-def prepare_data(agent):
-    log("prepare_data", color="red")
-    data_key, loss_fn = DEFAULT_DATASET, agent.classifier_loss
-    data, info = tfds.load(data_key, split="train", with_info=True)
-    data = data.batch(agent.batch_size)
-    data = data.prefetch(2)
-    features = info.features
-
-    out_spec = get_spec(n=features["label"].num_classes, format="onehot")
-    in_specs, out_specs = [agent.image_spec], [out_spec]
-    options = list(range(10))
-    hw = (agent.image_spec.shape[0], agent.image_spec.shape[1])
+def get_images(agent, key=DEFAULT_DATASET):
+    data, info = tfds.load(key, split="train", with_info=True)
+    n_classes = info.features["label"].num_classes
 
     def unpack(element):
         image, label = element['image'], element['label']
-        image = cast(image, float32)
-        image = resize(image, hw)
-        label = get_onehot(int(label), options)
-        label = cast(label, float32)
+        image = resize(cast(image, float32), agent.hw)
+        label = cast(tf.one_hot(label, n_classes), float32)
         label = expand_dims(label, 0)
         return image, label
-    data_env = DataEnv(agent, data, unpack, loss_fn)
-    log("data_env", data_env, color="red")
-    return AttrDict(
-        in_specs=in_specs, out_specs=out_specs,
-        env=data_env, key=data_key, is_data=True)
-
-
-class DataEnv:
-
-    def __init__(self, agent, dataset, unpack, loss_fn):
-        self.agent = agent
-        self.dataset = dataset
-        self.iter = self.dataset.__iter__()
-        self.loss_fn = loss_fn
-        self.unpack = unpack
-
-    def reset(self):
-        element = self.iter.next()
-        inputs, self.y_true = self.unpack(element)
-        return inputs
-
-    def step(self, y_pred):
-        log("DataEnv.step y_true", self.y_true, "y_pred", y_pred)
-        loss = self.loss_fn(self.y_true, y_pred)
-        return None, -loss, True, None
+    data = data.map(unpack)
+    data = data.batch(1)
+    data = data.prefetch(tf.data.experimental.AUTOTUNE)
+    out_specs = [get_spec(n=n_classes, format="onehot")]
+    in_specs = [agent.image_spec]
+    return AttrDict(key=key, data=data, in_specs=in_specs, out_specs=out_specs)
