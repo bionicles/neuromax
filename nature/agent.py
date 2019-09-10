@@ -1,32 +1,35 @@
 # agent.py - handle multitask AI
-# from keras_radam.training import RAdamOptimizer
 from random import choice
 import tensorflow as tf
 
-from nature import TaskModel
+from tools import get_spec, tile_for_batch
+from nature import TaskModel, SGD
 from nurture import get_images
-from tools import get_spec
 
-CLASSIFIER_LOSS = tf.losses.categorical_crossentropy
-OPTIMIZER = tf.keras.optimizers.SGD()
-REGRESSER_LOSS = tf.losses.MSLE
+REGRESSER_LOSS = tf.losses.MeanSquaredLogarithmicError()
+CLASSIFIER_LOSS = tf.losses.CategoricalCrossentropy()
 TASK_PREPPERS = [get_images]
 DTYPE = tf.float32
+OPTIMIZER = SGD()
 
-BATCH, ATOMS, CHANNELS = 1, 4, 4
-IMAGE_SHAPE = (32, 32, 1)
-
-SESSIONS, EPISODES = 42, 42
-
+IMAGE_SHAPE = (16, 16, 1)
+LOSS_SHAPE = (2, 2, 1)
+CODE_SHAPE = (512, 4)
+BATCH = 2
 
 class Agent:
     """Entity which solves tasks using models made of bricks"""
 
     def __init__(self):
-        self.code_spec = get_spec(shape=(ATOMS, CHANNELS), format="code")
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
-        self.optimizer, self.batch_size = OPTIMIZER, BATCH
+        self.code_spec = get_spec(shape=CODE_SHAPE, format="code")
+        self.loss_spec = get_spec(shape=LOSS_SHAPE, format="loss")
         self.hw = (IMAGE_SHAPE[0], IMAGE_SHAPE[1])
+        self.classifier_loss = CLASSIFIER_LOSS
+        self.regresser_loss = REGRESSER_LOSS
+        self.loss_ones = tf.ones(LOSS_SHAPE)
+        self.optimizer = OPTIMIZER
+        self.batch = BATCH
         self.practice()
 
     def practice(self):
@@ -38,14 +41,22 @@ class Agent:
 
     @tf.function
     def run_data_session(self, data, model, loss_fn):
-        for step, (image, label) in data.enumerate():
+        prior_loss = 2.3
+        for step, (image, y_true) in data.enumerate():
+            prior_loss = self.loss_ones * prior_loss
+            prior_loss = tile_for_batch(self.batch, prior_loss)
             with tf.GradientTape() as tape:
-                prediction = model(image)
-                loss = [*model.losses, loss_fn(label, prediction)]
-            gradients = tape.gradient(loss, model.trainable_variables)
+                tape.watch(image)
+                tape.watch(prior_loss)
+                y_pred = model([image, prior_loss])
+                loss = loss_fn(y_true, y_pred)
+                losses = [loss, model.losses]
+            gradients = tape.gradient(losses, model.trainable_variables)
             self.optimizer.apply_gradients(
                 zip(gradients, model.trainable_variables))
-            tf.print(step, loss)
+            prior_loss = tf.math.reduce_sum(loss)
+            tf.print(step, prior_loss)
+
 
     # @tf.function
     # def run_env_episode(self):

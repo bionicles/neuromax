@@ -5,11 +5,12 @@ https://raw.githubusercontent.com/eminorhan/mixture-of-experts/master/Convolutio
 """
 import numpy as np
 import tensorflow as tf
-from keras import backend as K
-from keras import activations, initializers, regularizers, constraints
-from keras.initializers import RandomNormal
-from keras.engine.topology import Layer, InputSpec
-from keras.utils import conv_utils
+
+K = tf.keras.backend
+from tensorflow.keras import activations, initializers, regularizers, constraints
+from tensorflow.keras.initializers import RandomNormal
+from tensorflow.keras.engine.topology import Layer, InputSpec
+from tensorflow.keras.utils import conv_utils
 
 
 class _ConvMoE(Layer):

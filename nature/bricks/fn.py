@@ -2,18 +2,18 @@ from tensorflow_addons.activations import sparsemax
 import tensorflow as tf
 import random
 
-# from nature import Logistic, SReLU
+from nature import Logistic, Linear
+from tools import make_id
 
 K = tf.keras
-
 B, L = K.backend, K.layers
 
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
-DEFAULT = 'mish'
+DEFAULT = 'logistic'
 
-
+@tf.function
 def swish(x):
     """
     Searching for Activation Functions
@@ -22,6 +22,7 @@ def swish(x):
     return (x * B.sigmoid(x))
 
 
+@tf.function
 def hard_swish(x):
     """
     Searching for MobileNetV3
@@ -29,7 +30,7 @@ def hard_swish(x):
     """
     return (x * B.hard_sigmoid(x))
 
-
+@tf.function
 def mish(x):
     """
     Mish: A Self Regularized Non-Monotonic Neural Activation Function
@@ -51,16 +52,16 @@ def soft_argmax(x, beta=SOFT_ARGMAX_BETA):
 def gaussian(x):
     return B.exp(-B.pow(x, 2))
 
-
+@tf.function
 def hard_tanh(x, min=HARD_MIN, max=HARD_MAX):
     if x > max:
-        return max
+        return max * tf.ones_like(x)
     elif x < min:
-        return min
+        return min * tf.ones_like(x)
     else:
         return x
 
-
+@tf.function
 def hard_lisht(x, min=HARD_MIN, max=HARD_MAX):
     if x < min or x > max:
         return max
@@ -94,11 +95,11 @@ def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
 
 
 FN_LOOKUP = {
+    'identity': tf.identity,
     'soft_argmax': soft_argmax,
     'log_softmax': tf.nn.log_softmax,
     'softmax': 'softmax',
     'softplus': B.softplus,
-    'linear': lambda x: x,
     'sigmoid': B.sigmoid,
     'hard_sigmoid': B.hard_sigmoid,
     'softsign': B.softsign,
@@ -145,8 +146,8 @@ FN_LOOKUP = {
 
 LAYERS = {
     'prelu': L.PReLU,
-    # 'logistic': Logistic,
-    # 'srelu': SReLU
+    'logistic': Logistic,
+    'linear': Linear
 }
 
 
@@ -154,13 +155,15 @@ def random_fn():
     return FN_LOOKUP[random.choice(FN_LOOKUP.keys())],
 
 
-def clean_activation(activation):
-    if callable(activation):
-        return activation
-    else:
-        fn = FN_LOOKUP[activation]
-    return fn
+def clean_activation(key):
+    if callable(key):
+        return key
+    return FN_LOOKUP[key]
 
 
 def Fn(key=DEFAULT):
-    return L.Activation(clean_activation(key.lower()), name=key)
+    if key is None:
+        key = 'identity'
+    if key in LAYERS.keys():
+        return LAYERS[key]()
+    return L.Activation(clean_activation(key.lower()), name=make_id(key))

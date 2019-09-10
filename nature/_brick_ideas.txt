@@ -1,3 +1,5 @@
+dynamic filter network
+hypernetworks
 Merge brick that's gonna take N tensors and figure out how to merge them
 brick injector
 deformable conv https://tensorlayer.readthedocs.io/en/latest/_modules/tensorlayer/layers/convolution/deformable_conv.html#DeformableConv2d
@@ -10,7 +12,6 @@ pooling (ugh)
 noise?
 optimization problems https://arxiv.org/pdf/1703.00443.pdf optimizers - lookahead https://github.com/bojone/keras_lookahead#lookahead-optimizer-for-keras https://arxiv.org/abs/1907.08610
 neural ode
-infinite set convolutions (recursion or np.indices)
 maxout
 RNNs could go back in
 could make the graphmodel a rnn cell to handle recurrent state ...
@@ -22,7 +23,6 @@ flow models
 quantizer
 # https://toolz.readthedocs.io/en/latest/api.html#dicttoolz might be fun
 differentiable neural computer
-subpixel conv
 pixelSnail
 pixelCNN
 bilinear https://pytorch.org/docs/stable/nn.html#torch.nn.Bilinear
@@ -32,14 +32,19 @@ tfp layers
 tfp distributions -- see helpers.add_distribution
 tfp bijectors ?
 convolution over distributions https://towardsdatascience.com/differentiable-convolution-of-probability-distributions-with-tensorflow-79c1dd769b46
+replay buffer (duh) -- just using a list ?
 
+IN PROGRESS:
+set convolutions (recursion or np.indices)
 add, subtract, multiply, divide
 # MOE: https://github.com/eminorhan/mixture-of-experts/blob/master/DenseMoE.py
 subpixel conv
-look at multiply layers ... like attention
 clockwork RNN https://github.com/flandolfi/clockwork-rnn/blob/master/cwrnn.py https://arxiv.org/pdf/1402.3511.pdf
 
-replay buffer (duh) -- just using a list right now
+DONE:
+quadratic
+all-attention (not multi-head tho)
+predictor
 SWAG https://arxiv.org/abs/1811.11813 y = Dense()([x, x^2, ..., x^N])
 sensors
 actuators

@@ -1,4 +1,7 @@
 import tensorflow as tf
+
+from nature import L1L2
+
 K = tf.keras
 B, L = K.backend, K.layers
 
@@ -12,6 +15,9 @@ IS_RELATED_TO_VALUE_Y_ZERO = 1.
 IS_ADDED_TO_EXPONENTIAL_TERM = 1.
 
 
+ones = K.initializers.ones
+
+@tf.function
 def generalized_logistic(
         x,
         a=LOWER_ASYMPTOTE,
@@ -33,20 +39,20 @@ class Logistic(L.Layer):
         super(Logistic, self).__init__()
 
     def build(self, input_shape):
-        self.lower_asymptote = tf.Variable(
-            0., trainable=True)
-        self.upper_asymptote_aka_carrying_capacity = tf.Variable(
-            1., trainable=True)
-        self.growth_rate = tf.Variable(
-            1., trainable=True)
-        self.is_related_to_value_y_zero = tf.Variable(
-            1., trainable=True)
-        self.is_added_to_exponential_term = tf.Variable(
-            1., trainable=True)
-        self.start_time = tf.Variable(
-            1., trainable=True)
-        self.location_of_max_growth = tf.Variable(
-            1., trainable=True)
+        self.lower_asymptote = self.add_weight(
+            initializer=tf.zeros, trainable=True)
+        self.upper_asymptote_aka_carrying_capacity = self.add_weight(
+            initializer=ones(), trainable=True)
+        self.growth_rate = self.add_weight(
+            initializer=ones(), trainable=True)
+        self.is_related_to_value_y_zero = self.add_weight(
+            initializer=ones(), trainable=True)
+        self.is_added_to_exponential_term = self.add_weight(
+            initializer=ones(), trainable=True)
+        self.start_time = self.add_weight(
+            initializer=ones(), trainable=True)
+        self.location_of_max_growth = self.add_weight(
+            initializer=ones(), trainable=True)
 
     def call(self, x):
         return generalized_logistic(

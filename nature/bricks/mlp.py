@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from nature import Linear, Fn
+from nature import FC, Fn
 
 K = tf.keras
 L = K.layers
@@ -23,8 +23,8 @@ class MLP(L.Layer):
         super(MLP, self).__init__()
         self.layers = []
         for i, units in enumerate(units_list):
-            dense = Linear(units=units)
-            self.layers.append(dense)
+            fc = FC(units=units)
+            self.layers.append(fc)
             if fns_list[i]:
                 self.layers.append(Fn(fns_list[i]))
         self.built = True

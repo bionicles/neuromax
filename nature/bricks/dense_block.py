@@ -1,40 +1,42 @@
 import tensorflow as tf
+import random
 
-from nature import Norm, Layer, Fn, Conv2D
+from tools import pipe
+import nature
 
 K = tf.keras
 L = K.layers
 
-DEFAULT_LAYER = Conv2D
-N_LAYERS = 2
-UNITS = 2
-FN = "mish"
+LAYER_FN = [nature.AllAttention, nature.Quadratic, nature.FC, nature.Conv1D]
+N_LAYERS = random.randint(1, 2)
+UNITS = 8
 
 
 class DenseBlock(L.Layer):
-    def __init__(
-            self, layer_class=DEFAULT_LAYER,
-            n_layers=N_LAYERS, units_or_filters=UNITS,
-            fn=FN):
+    def __init__(self, layer_fn=LAYER_FN, units=UNITS):
         """
-        Get a residual block
-        kwargs:
-            n_layers: number of times to apply this layer
-            layer_fn: the layer you'd like to use
-            units_or_filters: dimensionality of the layer
-            fn: activation to use
+        layer_fn: callable returning layer to use
+        units: int growth rate of the channels
         """
         super(DenseBlock, self).__init__()
         self.layers = []
-        for i in range(N_LAYERS):
-            layer = Layer(layer_class, units_or_filters)
-            self.layers.append((layer, Fn(fn), Norm()))
+        for n in range(N_LAYERS):
+            if isinstance(layer_fn, list):
+                layer_fn = random.choice(LAYER_FN)
+            else:
+                layer_fn = layer_fn
+            norm_preact = nature.NormPreact()
+            setattr(self, f"norm_preact_{n}", norm_preact)
+            layer = nature.Layer(
+                units, layer_fn=layer_fn, keepdim=False)
+            setattr(self, f"layer_{n}", layer)
+            self.layers.append(pipe(norm_preact, layer))
         self.built = True
 
+    @tf.function
     def call(self, x):
-        for layer, fn, norm in self.layers:
-            y = norm(x)
-            y = fn(x)
-            y = layer(x)
-            x = tf.concat([x, y], axis=-1)
-        return x
+        y = tf.identity(x)
+        for layer in self.layers:
+            y = layer(y)
+            y = tf.concat([x, y], axis=-1)
+        return y

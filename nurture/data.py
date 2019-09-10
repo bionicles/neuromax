@@ -29,11 +29,13 @@ def get_images(agent, key=DEFAULT_DATASET):
         image, label = element['image'], element['label']
         image = resize(cast(image, float32), agent.hw)
         label = cast(tf.one_hot(label, n_classes), float32)
-        label = expand_dims(label, 0)
         return image, label
     data = data.map(unpack)
-    data = data.batch(1)
+    data = data.batch(agent.batch)
+    data = data.repeat(5)
     data = data.prefetch(tf.data.experimental.AUTOTUNE)
     out_specs = [get_spec(n=n_classes, format="onehot")]
-    in_specs = [agent.image_spec]
-    return AttrDict(key=key, data=data, in_specs=in_specs, out_specs=out_specs)
+    in_specs = [agent.image_spec, agent.loss_spec]
+    return AttrDict(
+        key=key, data=data, loss=agent.classifier_loss,
+        in_specs=in_specs, out_specs=out_specs)

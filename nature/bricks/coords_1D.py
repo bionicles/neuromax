@@ -14,7 +14,9 @@ class ConcatCoords1D(L.Layer):
     def call(self, x):
         shape = tf.shape(x)
         coords = tf.range(shape[1])
-        coords = tile_for_batch(shape[0], coords)
+        coords = tf.expand_dims(coords, 0)
+        coords = tf.expand_dims(coords, -1)
+        coords = tf.tile(coords, [shape[0], 1, 1])
         coords = tf.cast(coords, tf.float32)
         coords = normalize(coords)
         return tf.concat([x, coords], -1)

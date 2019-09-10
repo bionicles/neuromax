@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from tools.get_path import get_path
+from tools import get_path, log
 
 K = tf.keras
 
@@ -13,4 +13,6 @@ def show_model(
     """summarize and plot a keras model"""
     if summarize:
         model.summary()
-    K.utils.plot_model(model, get_path(folder, name, extension))
+    path = get_path(folder, name, extension)
+    log(f"SCREENSHOT, {path}")
+    K.utils.plot_model(model, path)

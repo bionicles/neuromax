@@ -7,7 +7,7 @@ INITIALIZER = Init
 
 ONE_D_LAYER_CLASS = L.SeparableConv1D
 ONE_D_KERNEL_SIZE = 1
-ONE_D_PADDING = None
+ONE_D_PADDING = "same"
 ONE_D_FILTERS = 16
 
 CONV_TWO_D_LAYER_CLASS = L.SeparableConv2D
@@ -22,12 +22,12 @@ DECONV_TWO_D_FILTERS = 4
 
 
 def Conv1D(
-        filters=ONE_D_FILTERS,
+        units=ONE_D_FILTERS,
         layer_class=ONE_D_LAYER_CLASS, kernel_size=ONE_D_KERNEL_SIZE,
         padding=ONE_D_PADDING,
         regularizer=REGULARIZER, initializer=INITIALIZER):
     return layer_class(
-        filters=filters, kernel_size=kernel_size, padding=padding,
+        filters=units, kernel_size=kernel_size, padding=padding,
         kernel_regularizer=regularizer(),
         activity_regularizer=regularizer(),
         bias_regularizer=regularizer(),
@@ -36,13 +36,13 @@ def Conv1D(
 
 
 def Conv2D(
-        filters=CONV_TWO_D_FILTERS,
+        units=CONV_TWO_D_FILTERS,
         layer_class=CONV_TWO_D_LAYER_CLASS,
         kernel_size=CONV_TWO_D_KERNEL_SIZE,
         padding=CONV_TWO_D_PADDING,
         regularizer=REGULARIZER, initializer=INITIALIZER):
     return layer_class(
-        filters=filters, kernel_size=kernel_size, padding=padding,
+        filters=units, kernel_size=kernel_size, padding=padding,
         kernel_regularizer=regularizer(),
         activity_regularizer=regularizer(),
         bias_regularizer=regularizer(),
@@ -51,13 +51,13 @@ def Conv2D(
 
 
 def DConv2D(
-        filters=DECONV_TWO_D_FILTERS,
+        units=DECONV_TWO_D_FILTERS,
         layer_class=DECONV_TWO_D_LAYER_CLASS,
         kernel_size=DECONV_TWO_D_KERNEL_SIZE,
         padding=DECONV_TWO_D_PADDING,
         regularizer=REGULARIZER, initializer=INITIALIZER):
     return layer_class(
-        filters=filters, kernel_size=kernel_size, padding=padding,
+        filters=units, kernel_size=kernel_size, padding=padding,
         kernel_regularizer=regularizer(),
         activity_regularizer=regularizer(),
         bias_regularizer=regularizer(),

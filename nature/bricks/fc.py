@@ -8,16 +8,14 @@ L = K.layers
 INITIALIZER = Init
 REGULARIZER = L1L2
 LAYER_CLASS = L.Dense  # NoiseDrop
-UNITS = 256
+UNITS = 2048
 
 
-def Linear(units=UNITS, regularizer=REGULARIZER, initializer=INITIALIZER):
+def FC(units=UNITS, regularizer=REGULARIZER, initializer=INITIALIZER):
     """
-    Get a dense layer with no activation (use_fn does that)
-    kwargs:
-        units: int for the number of units
-        regularizer: callable to provide the regularizer
-        initializer: callable to provide the kernel and bias
+    units: int for the number of units
+    regularizer: callable to provide the regularizer
+    initializer: callable to provide the kernel and bias
     """
     return L.Dense(
             units=units,
