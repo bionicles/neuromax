@@ -1,15 +1,13 @@
-from nature import FC, AllAttention, Quadratic
+import nature
 
+LAYER_FN = nature.NoiseDrop
+UNITS = 8
 
-def Layer(units_or_filters, layer_fn=None, keepdim=False):
+def Layer(units=UNITS, layer_fn=LAYER_FN):
     """
     get a layer with a desired output dimension
-    args:
-        layer_fn: callable to build the layer
-        units_or_filters: int for linear units or dense filters
+
+    units_or_filters: int for linear units or dense filters
+    layer_fn: callable to build the layer
     """
-    if layer_fn is AllAttention:
-        return layer_fn(keepdim=keepdim)
-    if layer_fn is None:
-        layer_fn = FC
-    return layer_fn(units=units_or_filters)
+    return layer_fn(units=units)

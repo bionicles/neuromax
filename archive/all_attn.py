@@ -3,9 +3,9 @@ import nature
 
 L = tf.keras.layers
 
-LAYER = nature.Quadratic
+LAYER = nature.NoiseDrop
 MEMORY_SIZE = 512
-D_MODEL = 4
+D_MODEL = 8
 
 class AllAttention(L.Layer):
     def __init__(self, keepdim=True):
@@ -25,7 +25,7 @@ class AllAttention(L.Layer):
         self.reshape = L.Reshape((-1, d_in))
         self.concat = L.Concatenate(1)
         self.memory = self.add_weight(
-                shape=(1, MEMORY_SIZE, D_MODEL), initializer='glorot_normal',
+                shape=(1, MEMORY_SIZE, D_MODEL), initializer=nature.Init(),
                 regularizer=nature.L1L2(), trainable=True)
         self.built = True
 
@@ -34,6 +34,7 @@ class AllAttention(L.Layer):
         x = self.reshape(x)
         seq_len = tf.shape(x)[1]
         memory = tf.tile(self.memory, [self.batch_size, 1, 1])
+        memory = tf.nn.dropout(memory, 0.5)
         q, k = self.wq(x), self.wk(x)
         q = self.concat([q, memory])
         k = self.concat([k, memory])
@@ -43,4 +44,8 @@ class AllAttention(L.Layer):
         return y
 
     def compute_output_shape(self, shape):
+        if not self.keepdim:
+            shape = list(shape)
+            shape[-1] = D_MODEL
+            return tuple(shape)
         return shape

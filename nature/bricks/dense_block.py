@@ -7,7 +7,7 @@ import nature
 K = tf.keras
 L = K.layers
 
-LAYER_FN = [nature.AllAttention, nature.Quadratic, nature.FC, nature.Conv1D]
+LAYER_FN = [nature.Attention, nature.SWAG, nature.NoiseDrop, nature.Conv1D]
 N_LAYERS = random.randint(1, 2)
 UNITS = 8
 

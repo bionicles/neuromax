@@ -1,3 +1,4 @@
+WANN
 dynamic filter network
 hypernetworks
 Merge brick that's gonna take N tensors and figure out how to merge them
@@ -10,7 +11,8 @@ mixed convolutions
 tied-weight autoencoder?
 pooling (ugh)
 noise?
-optimization problems https://arxiv.org/pdf/1703.00443.pdf optimizers - lookahead https://github.com/bojone/keras_lookahead#lookahead-optimizer-for-keras https://arxiv.org/abs/1907.08610
+optimization problems https://arxiv.org/pdf/1703.00443.pdf
+optimizers - lookahead https://github.com/bojone/keras_lookahead#lookahead-optimizer-for-keras https://arxiv.org/abs/1907.08610
 neural ode
 maxout
 RNNs could go back in
@@ -35,18 +37,21 @@ convolution over distributions https://towardsdatascience.com/differentiable-con
 replay buffer (duh) -- just using a list ?
 
 IN PROGRESS:
+recirculation
+overparameterized 1d
+quadratic
 set convolutions (recursion or np.indices)
 add, subtract, multiply, divide
 # MOE: https://github.com/eminorhan/mixture-of-experts/blob/master/DenseMoE.py
 subpixel conv
 clockwork RNN https://github.com/flandolfi/clockwork-rnn/blob/master/cwrnn.py https://arxiv.org/pdf/1402.3511.pdf
+SWAG https://arxiv.org/abs/1811.11813 y = Dense()([x, x^2, ..., x^N])
+predictor
 
 DONE:
-quadratic
+logistic, linear activations
+inverse activation
+noise dropconnect dense
+quadratic (replace with swag!)
 all-attention (not multi-head tho)
-predictor
-SWAG https://arxiv.org/abs/1811.11813 y = Dense()([x, x^2, ..., x^N])
-sensors
-actuators
-elemental operations
 PRELU/RRELU

@@ -2,7 +2,7 @@ from tensorflow_addons.activations import sparsemax
 import tensorflow as tf
 import random
 
-from nature import Logistic, Linear
+from nature import Polynomial, Logistic, Linear, PSwish, PolySwish
 from tools import make_id
 
 K = tf.keras
@@ -11,7 +11,7 @@ B, L = K.backend, K.layers
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
-DEFAULT = 'logistic'
+DEFAULT = 'tanh'
 
 @tf.function
 def swish(x):
@@ -96,6 +96,7 @@ def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
 
 FN_LOOKUP = {
     'identity': tf.identity,
+    'inverse': lambda x: -x,
     'soft_argmax': soft_argmax,
     'log_softmax': tf.nn.log_softmax,
     'softmax': 'softmax',
@@ -145,8 +146,11 @@ FN_LOOKUP = {
 }
 
 LAYERS = {
-    'prelu': L.PReLU,
+    'polynomial': Polynomial,
+    'polyswish': PolySwish,
+    'pswish': PSwish,
     'logistic': Logistic,
+    'prelu': L.PReLU,
     'linear': Linear
 }
 

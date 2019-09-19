@@ -7,6 +7,6 @@ def Actuator(agent, spec):
     elif spec.rank is 4:
         return ImageActuator(agent)
     elif spec.format in ['discrete', 'onehot']:
-        return Classifier(spec)
+        return Classifier(spec.shape)
     else:
         return Resizer(spec.shape)

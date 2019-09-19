@@ -1,21 +1,27 @@
 import tensorflow as tf
 
-from nature import Norm, Fn, Resizer
+from tools import get_size
+import nature
 
 L = tf.keras.layers
 
 
 class Classifier(L.Layer):
 
-    def __init__(self, spec):
+    def __init__(self, shape):
         super(Classifier, self).__init__()
-        self.norm = Norm()
-        self.resizer = Resizer(spec.shape)
-        self.softmax = Fn(key='softmax')
+        self.out = L.Dense(units=get_size(shape))
+        self.fn = nature.Fn(key='softmax')
+        self.resize = nature.Resizer(shape)
+        self.norm_1 = nature.Norm()
         self.built = True
 
     @tf.function
     def call(self, x):
-        x = self.resizer(self.norm(x))
-        x = self.softmax(x)
+        x = self.norm_1(x)
+        x = self.resize(x)
+        x = x - tf.math.reduce_max(x, axis=1, keepdims=True)
+        x = x / tf.math.reduce_sum(x, axis=1, keepdims=True)
+        x = self.out(x)
+        x = self.fn(x)
         return x

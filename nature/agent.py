@@ -1,26 +1,32 @@
 # agent.py - handle multitask AI
+import tensorflow_addons as tfa
 from random import choice
 import tensorflow as tf
 
-from tools import get_spec, tile_for_batch
-from nature import TaskModel, SGD
+from tools import get_spec, tile_for_batch, get_uniform
+from nature import TaskModel, Radam
 from nurture import get_images
 
-REGRESSER_LOSS = tf.losses.MeanSquaredLogarithmicError()
-CLASSIFIER_LOSS = tf.losses.CategoricalCrossentropy()
+REGRESSER_LOSS = tf.keras.losses.MeanSquaredLogarithmicError(
+    reduction=tf.keras.losses.Reduction.NONE
+)
+CLASSIFIER_LOSS = tf.keras.losses.CategoricalCrossentropy(
+    reduction=tf.keras.losses.Reduction.NONE
+)
 TASK_PREPPERS = [get_images]
 DTYPE = tf.float32
-OPTIMIZER = SGD()
+OPTIMIZER = Radam()
 
 IMAGE_SHAPE = (16, 16, 1)
 LOSS_SHAPE = (2, 2, 1)
-CODE_SHAPE = (512, 4)
-BATCH = 2
+CODE_SHAPE = (128, 4)
+BATCH = 4
 
 class Agent:
     """Entity which solves tasks using models made of bricks"""
 
     def __init__(self):
+        # TODO: simplify ... do we need specs ?
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
         self.code_spec = get_spec(shape=CODE_SHAPE, format="code")
         self.loss_spec = get_spec(shape=LOSS_SHAPE, format="loss")
@@ -37,25 +43,29 @@ class Agent:
         task.graph, task.model = TaskModel(
             self, in_specs=task.in_specs, out_specs=task.out_specs)
         with tf.device("/gpu:0"):
-            self.run_data_session(task.data, task.model, task.loss)
+            self.run_data_session(task)
 
     @tf.function
-    def run_data_session(self, data, model, loss_fn):
+    def run_data_session(self, task):
         prior_loss = 2.3
-        for step, (image, y_true) in data.enumerate():
+        y_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
+        prior_image = get_uniform(self.image_spec.shape, batch=self.batch)
+        for step, (image, y_true) in task.data.enumerate():
             prior_loss = self.loss_ones * prior_loss
             prior_loss = tile_for_batch(self.batch, prior_loss)
             with tf.GradientTape() as tape:
                 tape.watch(image)
                 tape.watch(prior_loss)
-                y_pred = model([image, prior_loss])
-                loss = loss_fn(y_true, y_pred)
-                losses = [loss, model.losses]
-            gradients = tape.gradient(losses, model.trainable_variables)
+                y_pred = task.model([image, prior_image, y_pred, prior_loss])
+                loss = task.loss(y_true, y_pred)
+                losses = [loss, task.model.losses]
+            gradients = tape.gradient(losses, task.model.trainable_variables)
             self.optimizer.apply_gradients(
-                zip(gradients, model.trainable_variables))
-            prior_loss = tf.math.reduce_sum(loss)
-            tf.print(step, prior_loss)
+                zip(gradients, task.model.trainable_variables))
+            prior_loss = tf.math.reduce_mean(loss)
+            prior_image = image
+            tf.print(step, prior_loss, y_pred[0])
+            # tf.print(tf.shape(y_true), tf.shape(y_pred))
 
 
     # @tf.function

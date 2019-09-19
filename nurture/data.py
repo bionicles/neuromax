@@ -35,7 +35,7 @@ def get_images(agent, key=DEFAULT_DATASET):
     data = data.repeat(5)
     data = data.prefetch(tf.data.experimental.AUTOTUNE)
     out_specs = [get_spec(n=n_classes, format="onehot")]
-    in_specs = [agent.image_spec, agent.loss_spec]
+    in_specs = [agent.image_spec, agent.image_spec, out_specs[0], agent.loss_spec]
     return AttrDict(
         key=key, data=data, loss=agent.classifier_loss,
         in_specs=in_specs, out_specs=out_specs)

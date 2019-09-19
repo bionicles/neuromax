@@ -3,14 +3,17 @@ import tensorflow as tf
 
 initializers = tf.keras.initializers
 
-DIST = "glorot"
-PHI = 1.61803398875
+DIST = "truncated"
+PHI = 1.61803398875 * 0.8
+# PHI = 2.952
 MEAN = 0.
 
 
 def Init(dist=DIST):
-    if dist is "truncated":
+    if dist is "chaos":
         return initializers.TruncatedNormal(mean=MEAN, stddev=PHI)
+    if dist is "truncated":
+        return initializers.TruncatedNormal()
     elif dist is "he_uniform":
         return initializers.he_uniform()
     else:
