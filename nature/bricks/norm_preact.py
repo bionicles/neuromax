@@ -1,19 +1,19 @@
 import tensorflow as tf
+import nature
 
-from nature import Norm, Fn, PSwish
-
+L = tf.keras.layers
+NORM = nature.Norm
+CHANNELWISE = False
 DEFAULT = "tanh"
 
-class NormPreact(tf.keras.layers.Layer):
-    def __init__(self, key=DEFAULT):
+class NormPreact(L.Layer):
+    def __init__(self, key=DEFAULT, channelwise=CHANNELWISE):
         super(NormPreact, self).__init__()
-        self.norm = Norm()
-        if key is "pswish":
-            self.norm2 = Norm()
-            self.pswish = PSwish()
-            self.fn = lambda x: self.norm2(self.pswish(x))
-        else:
-            self.fn = Fn(key=key)
+        layer_fn = nature.Channelwise if channelwise else nature.Fn
+        self.fn = layer_fn(key=key)
+        self.norm = NORM()
+        self.built = True
 
+    @tf.function
     def call(self, x):
         return self.fn(self.norm(x))

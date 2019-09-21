@@ -6,18 +6,16 @@
 # https://arxiv.org/abs/1709.02540
 
 import tensorflow as tf
-
-from tools import next_power_of_two_past
-from nature import NoiseDrop, Norm
+import nature
 
 L = tf.keras.layers
-
-LAYER = NoiseDrop
+LAYER = nature.NoiseDrop
+NORM = nature.NoOp
 UNITS = 4
 
-def get_units(size):
+def get_units(shape):
+    size = tf.math.reduce_prod(shape)
     return size + 4
-    # return size * size + 2
 
 class OP_FC(L.Layer):
 
@@ -27,12 +25,10 @@ class OP_FC(L.Layer):
         self.units = units
 
     def build(self, shape):
-        size = tf.math.reduce_prod(shape)
-        units = get_units(size)
-        self.layer_1 = self.layer_fn(units=units)
-        self.norm_1 = Norm()
+        self.layer_1 = self.layer_fn(units=get_units(shape))
         self.layer_2 = self.layer_fn(units=self.units)
-        self.norm_2 = Norm()
+        self.norm_1 = NORM()
+        self.norm_2 = NORM()
         self.built = True
 
     @tf.function

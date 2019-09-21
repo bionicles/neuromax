@@ -2,7 +2,7 @@ from tensorflow_addons.activations import sparsemax
 import tensorflow as tf
 import random
 
-from nature import Polynomial, Logistic, Linear, PSwish, PolySwish
+from nature import Polynomial, Logistic, Linear, PSwish, PolySwish, LogisticMap
 from tools import make_id
 
 K = tf.keras
@@ -93,7 +93,6 @@ def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
     else:
         return 0
 
-
 FN_LOOKUP = {
     'identity': tf.identity,
     'inverse': lambda x: -x,
@@ -146,12 +145,13 @@ FN_LOOKUP = {
 }
 
 LAYERS = {
+    'logistic_map': LogisticMap,
     'polynomial': Polynomial,
     'polyswish': PolySwish,
     'pswish': PSwish,
     'logistic': Logistic,
     'prelu': L.PReLU,
-    'linear': Linear
+    'linear': Linear,
 }
 
 

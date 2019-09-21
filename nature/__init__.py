@@ -3,6 +3,7 @@ from nature.bricks.optimizer import SGD, Adam, Nadam, Radam
 
 from nature.bricks.built_in.regularize import L1L2, Regularizer
 from nature.bricks.built_in.drop import Drop
+from nature.bricks.chaos import EdgeOfChaos
 from nature.bricks.built_in.initialize import Init
 from nature.bricks.built_in.input import Input
 from nature.bricks.built_in.conv_1D import Conv1D
@@ -17,7 +18,9 @@ from nature.bricks.activations.linear import Linear
 from nature.bricks.activations.logistic import Logistic
 from nature.bricks.activations.polynomial import Polynomial
 from nature.bricks.activations.pswish import PSwish, PolySwish
+from nature.bricks.activations.logistic_map import LogisticMap
 from nature.bricks.activations.fn import Fn
+from nature.bricks.activations.no_op import NoOp
 from nature.bricks.activations.channelwise import Channelwise
 from nature.bricks.add_norm import AddNorm
 from nature.bricks.norm_preact import NormPreact
@@ -30,6 +33,7 @@ from nature.bricks.slim import Slim
 # from nature.bricks.mixture import Mixture
 from nature.bricks.attention import Attention
 
+from nature.bricks.wide_deep import WideDeep
 from nature.bricks.transformer import Transformer
 from nature.bricks.recirculator import Recirculator
 from nature.bricks.residual_block import ResBlock

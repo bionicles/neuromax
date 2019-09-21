@@ -1,12 +1,11 @@
 import tensorflow as tf
+import nature
 
-from nature import NoiseDrop, Norm
 from tools import pipe
-
 K = tf.keras
-L, BE = K.layers, K.backend
 
-LAYER = NoiseDrop
+L, BE = K.layers, K.backend
+LAYER = nature.Layer
 UNITS = 16
 
 
@@ -24,7 +23,7 @@ class Quadratic(L.Layer):
         self.B = self.layer(units=units)
         self.square = L.Lambda(BE.square)
         self.multiply = L.Multiply()
-        self.norm = Norm()
+        self.norm = NORM()
         self.built = True
 
     @tf.function

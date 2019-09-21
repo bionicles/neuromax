@@ -8,11 +8,9 @@ from nature import TaskModel, Radam
 from nurture import get_images
 
 REGRESSER_LOSS = tf.keras.losses.MeanSquaredLogarithmicError(
-    reduction=tf.keras.losses.Reduction.NONE
-)
+    reduction=tf.keras.losses.Reduction.NONE)
 CLASSIFIER_LOSS = tf.keras.losses.CategoricalCrossentropy(
-    reduction=tf.keras.losses.Reduction.NONE
-)
+    reduction=tf.keras.losses.Reduction.NONE)
 TASK_PREPPERS = [get_images]
 DTYPE = tf.float32
 OPTIMIZER = Radam()
@@ -20,7 +18,7 @@ OPTIMIZER = Radam()
 IMAGE_SHAPE = (16, 16, 1)
 LOSS_SHAPE = (2, 2, 1)
 CODE_SHAPE = (128, 4)
-BATCH = 4
+BATCH = 5
 
 class Agent:
     """Entity which solves tasks using models made of bricks"""
@@ -65,7 +63,6 @@ class Agent:
             prior_loss = tf.math.reduce_mean(loss)
             prior_image = image
             tf.print(step, prior_loss, y_pred[0])
-            # tf.print(tf.shape(y_true), tf.shape(y_pred))
 
 
     # @tf.function

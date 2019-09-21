@@ -9,12 +9,22 @@ L = tf.keras.layers
 
 MERGE_SENSORS_WITH = tf.identity
 
+bricks = [
+    lambda units: nature.Fn(key=None),
+    nature.Recirculator,
+    nature.Slim,
+    nature.SWAG,
+    nature.Transformer,
+    nature.OP_1D,
+    nature.WideDeep,
+    nature.MLP,
+]
 
 def pick_brick():
     return random.choice([nature.Chain, nature.Stack])
 
 
-def get_output(G, agent, id):
+def get_output(G, AI, id):
     node = G.node[id]
     log('get_output', id, node, color="red")
     if node["shape"] is "cylinder":
@@ -24,32 +34,22 @@ def get_output(G, agent, id):
     node_type = node["node_type"]
     brick = MERGE_SENSORS_WITH
     if node_type is "input":
-        shape = node["spec"]["shape"]
-        node['input'] = inputs = nature.Input(shape, batch_size=agent.batch)
-        brick = nature.Sensor(agent.code_spec.shape[-1])
+        spec = node['spec']
+        shape = spec["shape"]
+        node['input'] = inputs = nature.Input(shape, batch_size=AI.batch)
+        brick = nature.Sensor(AI, spec)
     else:
-        inputs = [get_output(G, agent, p) for p in list(G.predecessors(id))]
+        inputs = [get_output(G, AI, p) for p in list(G.predecessors(id))]
         if len(inputs) > 1:
             axis = 1
             inputs = L.Concatenate(axis)(inputs)
         else:
             inputs = inputs[0]
         if node_type is 'brick':
-            if id is 0:
-                brick = nature.Fn(key=None)
-            else:
-                BRICK = pick_brick()
-                if id is 1:
-                    BRICK = nature.Slim
-                if id is 2:
-                    BRICK = nature.Transformer
-                if id is 3:
-                    BRICK = nature.Recirculator
-                if id is 4:
-                    BRICK = nature.SWAG
-                brick = BRICK(units=agent.code_spec.shape[-1])
+            brick_class = bricks[id] if id <= len(bricks) else pick_brick()
+            brick = brick_class(units=AI.code_spec.shape[-1])
         if node_type is "output":
-            brick = nature.Actuator(agent, node['spec'])
+            brick = nature.Actuator(AI, node['spec'])
     output = brick(inputs)
     node["output"] = output
     node["brick"] = brick

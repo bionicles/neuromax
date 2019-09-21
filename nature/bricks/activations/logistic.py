@@ -53,7 +53,9 @@ class Logistic(L.Layer):
             initializer=ones(), trainable=True)
         self.location_of_max_growth = self.add_weight(
             initializer=ones(), trainable=True)
+        self.built = True
 
+    @tf.function
     def call(self, x):
         return generalized_logistic(
                 x,

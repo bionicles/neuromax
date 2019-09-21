@@ -2,10 +2,10 @@ import tensorflow as tf
 import nature
 
 L = tf.keras.layers
-
 LAYER = nature.Layer
 
 class Transformer(L.Layer):
+    
     def __init__(self, units=None):
         super(Transformer, self).__init__()
         self.units = units
@@ -18,6 +18,7 @@ class Transformer(L.Layer):
         self.add_norm_2 = nature.AddNorm()
         self.built = True
 
+    @tf.function
     def call(self, x):
         y = self.attention(x)
         y = self.add_norm_1([x, y])

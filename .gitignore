@@ -19,3 +19,5 @@ runs/
 *.mp4
 *.json
 nature/tasks/clevr/CLEVR_v1.0
+!graph.png
+!model.png

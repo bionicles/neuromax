@@ -5,7 +5,7 @@ from nature import FC, Fn
 K = tf.keras
 L = K.layers
 
-LAYERS, UNITS, FN = 2, 256, None
+LAYERS, UNITS, FN = 2, 128, None
 UNITS_LIST = [UNITS for _ in range(LAYERS)]
 FNS_LIST = [FN for _ in range(LAYERS)]
 
@@ -19,8 +19,10 @@ class MLP(L.Layer):
         fns_list: list of strings for activations (default None)
     """
 
-    def __init__(self, units_list=UNITS_LIST, fns_list=FNS_LIST):
+    def __init__(self, units=None, units_list=UNITS_LIST, fns_list=FNS_LIST):
         super(MLP, self).__init__()
+        if units:
+            units_list[-1] = units
         self.layers = []
         for i, units in enumerate(units_list):
             fc = FC(units=units)
@@ -29,6 +31,7 @@ class MLP(L.Layer):
                 self.layers.append(Fn(fns_list[i]))
         self.built = True
 
+    @tf.function
     def call(self, x):
         for layer in self.layers:
             x = layer(x)

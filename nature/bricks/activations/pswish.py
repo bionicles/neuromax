@@ -6,31 +6,19 @@ L = tf.keras.layers
 
 
 class PSwish(L.Layer):
-    def __init__(self, channelwise=False):
+    def __init__(self, layer_fn=Linear):
         super(PSwish, self).__init__()
-        self.logistic = Logistic()
-        self.linear = Linear()
         self.multiply = L.Multiply()
+        self.logistic = Logistic()
+        self.linear_or_polynomial = layer_fn()
         self.built = True
 
     @tf.function
     def call(self, x):
-        one = self.linear(x)
-        two = self.logistic(one)
-        y = self.multiply([one, two])
-        return y
+        one = self.linear_or_polynomial(x)
+        two = self.logistic(x)
+        return self.multiply([one, two])
 
 
-class PolySwish(L.Layer):
-    def __init__(self, channelwise=False):
-        super(PolySwish, self).__init__()
-        self.logistic = Logistic()
-        self.poly = Polynomial()
-        self.multiply = L.Multiply()
-        self.built = True
-
-    @tf.function
-    def call(self, x):
-        y = self.logistic(self.poly(x))
-        y = self.multiply([x, y])
-        return y
+def PolySwish():
+    return PSwish(layer_fn=Polynomial)

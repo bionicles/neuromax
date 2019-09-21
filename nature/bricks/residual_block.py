@@ -1,13 +1,11 @@
 import tensorflow as tf
 import random
-
 from tools import make_id
 import nature
 
 L = tf.keras.layers
-
 OPTIONS = [nature.Recirculator]
-N = 1
+N = 2
 
 class ResBlock(L.Layer):
 
@@ -30,8 +28,6 @@ class ResBlock(L.Layer):
             super(ResBlock, self).__setattr__(f"np_{n}", norm_preact)
             super(ResBlock, self).__setattr__(f"l_{n}", layer)
             self.layers.append((norm_preact, layer))
-        # self.norm_preact_2 = nature.NormPreact()
-        # self.layer_2 = self.layer_fn(units=shape[-1])
         self.add_norm = nature.AddNorm()
         self.built = True
 
@@ -40,10 +36,6 @@ class ResBlock(L.Layer):
         y = tf.identity(x)
         for np, l in self.layers:
             y = l(np(y))
-        # y = self.norm_preact_1(y)
-        # y = self.layer_1(y)
-        # y = self.norm_preact_2(y)
-        # y = self.layer_2(y)
         y = tf.reshape(y, tf.shape(x))
         y = self.add_norm([x, y])
         return y

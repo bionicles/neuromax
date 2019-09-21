@@ -7,7 +7,7 @@ from tools import safe_sample, show_model, log
 K = tf.keras
 L = K.layers
 
-MIN_STACKS, MAX_STACKS = 5, 5  
+MIN_STACKS, MAX_STACKS = 7, 7 
 
 
 def TaskGraph(in_specs, out_specs):
