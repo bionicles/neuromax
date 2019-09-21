@@ -16,7 +16,7 @@ DTYPE = tf.float32
 OPTIMIZER = Radam()
 
 IMAGE_SHAPE = (16, 16, 1)
-LOSS_SHAPE = (2, 2, 1)
+LOSS_SHAPE = (1, 1)
 CODE_SHAPE = (128, 4)
 BATCH = 5
 
