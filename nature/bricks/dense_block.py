@@ -8,35 +8,30 @@ K = tf.keras
 L = K.layers
 
 LAYER_FN = [nature.Attention, nature.SWAG, nature.NoiseDrop, nature.Conv1D]
-N_LAYERS = random.randint(1, 2)
-UNITS = 8
+N_LAYERS = 2
+UNITS = 4
 
 
 class DenseBlock(L.Layer):
+
     def __init__(self, layer_fn=LAYER_FN, units=UNITS):
-        """
-        layer_fn: callable returning layer to use
-        units: int growth rate of the channels
-        """
         super(DenseBlock, self).__init__()
+        self.concat = L.Concatenate(-1)
+        self.units = units
         self.layers = []
         for n in range(N_LAYERS):
             if isinstance(layer_fn, list):
                 layer_fn = random.choice(LAYER_FN)
-            else:
-                layer_fn = layer_fn
-            norm_preact = nature.NormPreact()
-            setattr(self, f"norm_preact_{n}", norm_preact)
-            layer = nature.Layer(
-                units, layer_fn=layer_fn, keepdim=False)
-            setattr(self, f"layer_{n}", layer)
-            self.layers.append(pipe(norm_preact, layer))
+            np = nature.NormPreact()
+            super(DenseBlock, self).__setattr__(f"np_{n}", np)
+            layer = nature.Layer(units, layer_fn=layer_fn)
+            super(DenseBlock, self).__setattr__(f"layer_{n}", layer)
+            self.layers.append(pipe(np, layer))
         self.built = True
 
     @tf.function
     def call(self, x):
-        y = tf.identity(x)
+        y = x
         for layer in self.layers:
-            y = layer(y)
-            y = tf.concat([x, y], axis=-1)
+            y = self.concat([y, layer(y)])
         return y

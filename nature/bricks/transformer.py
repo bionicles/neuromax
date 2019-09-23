@@ -4,8 +4,9 @@ import nature
 L = tf.keras.layers
 LAYER = nature.Layer
 
+
 class Transformer(L.Layer):
-    
+
     def __init__(self, units=None):
         super(Transformer, self).__init__()
         self.units = units

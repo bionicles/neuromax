@@ -1,7 +1,7 @@
 # https://github.com/titu1994/keras-coordconv/blob/master/coord.py
 import tensorflow as tf
 
-from tools import tile_for_batch, normalize, log
+from tools import normalize, log
 
 K, L, B = tf.keras, tf.keras.layers, tf.keras.backend
 
@@ -16,6 +16,7 @@ def Coordinator(shape):
         return ConcatCoords4D()
     else:
         raise Exception(f"{shape} not supported by coordinator")
+
 
 class ConcatCoords2D(L.Layer):
     def __init__(self):
@@ -33,6 +34,7 @@ class ConcatCoords2D(L.Layer):
         output_shape.append(1)
         output_shape[-1] = output_shape[-1] + 1
         return tuple(output_shape)
+
 
 class ConcatCoords3D(L.Layer):
     def __init__(self):
@@ -54,6 +56,7 @@ class ConcatCoords3D(L.Layer):
         output_shape = list(input_shape)
         output_shape[-1] = output_shape[-1] + 1
         return tuple(output_shape)
+
 
 class ConcatCoords4D(L.Layer):
     def __init__(self):

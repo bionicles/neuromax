@@ -1,5 +1,4 @@
 # agent.py - handle multitask AI
-import tensorflow_addons as tfa
 from random import choice
 import tensorflow as tf
 
@@ -16,9 +15,10 @@ DTYPE = tf.float32
 OPTIMIZER = Radam()
 
 IMAGE_SHAPE = (16, 16, 1)
-LOSS_SHAPE = (1, 1)
-CODE_SHAPE = (128, 4)
+LOSS_SHAPE = (2, 2, 1)
+CODE_SHAPE = (128, 8)
 BATCH = 5
+
 
 class Agent:
     """Entity which solves tasks using models made of bricks"""
@@ -28,7 +28,6 @@ class Agent:
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
         self.code_spec = get_spec(shape=CODE_SHAPE, format="code")
         self.loss_spec = get_spec(shape=LOSS_SHAPE, format="loss")
-        self.hw = (IMAGE_SHAPE[0], IMAGE_SHAPE[1])
         self.classifier_loss = CLASSIFIER_LOSS
         self.regresser_loss = REGRESSER_LOSS
         self.loss_ones = tf.ones(LOSS_SHAPE)

@@ -2,6 +2,7 @@ import tensorflow as tf
 from tools import tile_for_batch
 
 L = tf.keras.layers
+UNITS = 4
 
 
 def Integral(units=UNITS):

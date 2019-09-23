@@ -4,7 +4,8 @@ import nature
 L = tf.keras.layers
 NORM = nature.Norm
 CHANNELWISE = False
-DEFAULT = "tanh"
+DEFAULT = "lisht"
+
 
 class NormPreact(L.Layer):
     def __init__(self, key=DEFAULT, channelwise=CHANNELWISE):

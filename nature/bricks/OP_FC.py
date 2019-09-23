@@ -13,9 +13,11 @@ LAYER = nature.NoiseDrop
 NORM = nature.NoOp
 UNITS = 4
 
+
 def get_units(shape):
     size = tf.math.reduce_prod(shape)
     return size + 4
+
 
 class OP_FC(L.Layer):
 

@@ -11,7 +11,8 @@ B, L = K.backend, K.layers
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
-DEFAULT = 'tanh'
+DEFAULT = 'lisht'
+
 
 @tf.function
 def swish(x):
@@ -29,6 +30,7 @@ def hard_swish(x):
     https://arxiv.org/abs/1905.02244
     """
     return (x * B.hard_sigmoid(x))
+
 
 @tf.function
 def mish(x):
@@ -52,6 +54,7 @@ def soft_argmax(x, beta=SOFT_ARGMAX_BETA):
 def gaussian(x):
     return B.exp(-B.pow(x, 2))
 
+
 @tf.function
 def hard_tanh(x, min=HARD_MIN, max=HARD_MAX):
     if x > max:
@@ -61,6 +64,7 @@ def hard_tanh(x, min=HARD_MIN, max=HARD_MAX):
     else:
         return x
 
+
 @tf.function
 def hard_lisht(x, min=HARD_MIN, max=HARD_MAX):
     if x < min or x > max:
@@ -69,6 +73,7 @@ def hard_lisht(x, min=HARD_MIN, max=HARD_MAX):
         return tf.math.abs(x)
 
 
+@tf.function
 def lisht(x):
     """
     LiSHT: Non-Parametric Linearly Scaled Hyperbolic Tangent
@@ -92,6 +97,7 @@ def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
         return min
     else:
         return 0
+
 
 FN_LOOKUP = {
     'identity': tf.identity,

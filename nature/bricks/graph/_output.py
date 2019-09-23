@@ -6,8 +6,7 @@ from tools import log
 import nature
 
 L = tf.keras.layers
-
-MERGE_SENSORS_WITH = tf.identity
+MERGE_WITH = L.BatchNormalization
 
 bricks = [
     lambda units: nature.Fn(key=None),
@@ -19,6 +18,7 @@ bricks = [
     nature.WideDeep,
     nature.MLP,
 ]
+
 
 def pick_brick():
     return random.choice([nature.Chain, nature.Stack])
@@ -32,7 +32,7 @@ def get_output(G, AI, id):
     if node["output"] is not None:
         return node["output"]
     node_type = node["node_type"]
-    brick = MERGE_SENSORS_WITH
+    brick = None
     if node_type is "input":
         spec = node['spec']
         shape = spec["shape"]
@@ -50,6 +50,8 @@ def get_output(G, AI, id):
             brick = brick_class(units=AI.code_spec.shape[-1])
         if node_type is "output":
             brick = nature.Actuator(AI, node['spec'])
+    if not brick:
+        brick = MERGE_WITH()
     output = brick(inputs)
     node["output"] = output
     node["brick"] = brick

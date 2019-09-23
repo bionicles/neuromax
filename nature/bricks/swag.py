@@ -8,6 +8,7 @@ KEY = 'logistic_map'
 UNITS = 32
 POWER = 4
 
+
 class SWAG(L.Layer):
 
     def __init__(self, power=POWER, layer_fn=LAYER, units=UNITS):

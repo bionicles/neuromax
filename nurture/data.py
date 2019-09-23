@@ -1,8 +1,6 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from attrdict import AttrDict
-from tensorflow import cast, float32, expand_dims
-from tensorflow.image import resize
 
 from tools import get_spec
 
@@ -27,8 +25,9 @@ def get_images(agent, key=DEFAULT_DATASET):
 
     def unpack(element):
         image, label = element['image'], element['label']
-        image = resize(cast(image, float32), agent.hw)
-        label = cast(tf.one_hot(label, n_classes), float32)
+        hw = (agent.image_spec.shape[0], agent.image_spec.shape[1])
+        image = tf.image.resize(tf.cast(image, tf.float32), hw)
+        label = tf.cast(tf.one_hot(label, n_classes), tf.float32)
         return image, label
     data = data.map(unpack)
     data = data.batch(agent.batch)

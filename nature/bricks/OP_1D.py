@@ -8,9 +8,11 @@ L = tf.keras.layers
 NORM = Norm
 UNITS = 4
 
-def GET_UNITS(shape):
+
+def get_units(shape):
     d_in = shape[-1]
     return next_power_of_two_past(d_in * d_in + 4)
+
 
 class OP_1D(L.Layer):
 
@@ -19,7 +21,7 @@ class OP_1D(L.Layer):
         self.d_out = units
 
     def build(self, shape):
-        self.layer_1 = Conv1D(units=GET_UNITS(shape))
+        self.layer_1 = Conv1D(units=get_units(shape))
         self.layer_2 = Conv1D(units=self.d_out)
         self.norm_1 = NORM()
         self.norm_2 = NORM()

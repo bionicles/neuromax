@@ -1,13 +1,10 @@
 import tensorflow as tf
 import networkx as nx
-
 from nature import add_node, get_output, screenshot_graph
 from tools import safe_sample, show_model, log
 
-K = tf.keras
-L = K.layers
-
-MIN_STACKS, MAX_STACKS = 7, 7 
+K, L = tf.keras, tf.keras.layers
+MIN_STACKS, MAX_STACKS = 7, 7
 
 
 def TaskGraph(in_specs, out_specs):

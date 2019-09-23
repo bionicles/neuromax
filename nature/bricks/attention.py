@@ -10,6 +10,7 @@ N_HEADS = 2
 P_DROP = 0.5
 UNITS = None
 
+
 class Attention(L.Layer):
 
     def __init__(
@@ -19,7 +20,7 @@ class Attention(L.Layer):
             n_heads=N_HEADS,
             units=UNITS,
             p_drop=P_DROP
-        ):
+            ):
         super(Attention, self).__init__()
         self.d_model, self.n_heads = d_model, n_heads
         assert d_model % self.n_heads == 0
@@ -40,7 +41,7 @@ class Attention(L.Layer):
         self.channel_changer = None
         if self.d_model is not shape[-1] or self.units is not None:
             units = self.units if self.units else shape[-1]
-            self.channel_changer = LAYER(units=shape[-1])
+            self.channel_changer = LAYER(units=units)
         self.built = True
 
     def split_heads(self, x, batch_size):

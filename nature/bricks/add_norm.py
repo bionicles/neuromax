@@ -4,6 +4,7 @@ import nature
 L = tf.keras.layers
 NORM = nature.Norm
 
+
 class AddNorm(L.Layer):
 
     def __init__(self):
