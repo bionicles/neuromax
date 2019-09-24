@@ -19,22 +19,22 @@ blacklist = [
     "so2sat", "stanford_dogs", "sun397"]
 
 
-def get_images(agent, key=DEFAULT_DATASET):
+def get_images(AI, key=DEFAULT_DATASET):
     data, info = tfds.load(key, split="train", with_info=True)
+    hw = (AI.image_spec.shape[0], AI.image_spec.shape[1])
     n_classes = info.features["label"].num_classes
 
     def unpack(element):
         image, label = element['image'], element['label']
-        hw = (agent.image_spec.shape[0], agent.image_spec.shape[1])
         image = tf.image.resize(tf.cast(image, tf.float32), hw)
         label = tf.cast(tf.one_hot(label, n_classes), tf.float32)
         return image, label
     data = data.map(unpack)
-    data = data.batch(agent.batch)
+    data = data.batch(AI.batch)
     data = data.repeat(5)
     data = data.prefetch(tf.data.experimental.AUTOTUNE)
-    out_specs = [get_spec(n=n_classes, format="onehot")]
-    in_specs = [agent.image_spec, agent.image_spec, out_specs[0], agent.loss_spec]
+    out_specs = [get_spec(n=n_classes, format="onehot"), AI.loss_spec]
+    in_specs = [AI.image_spec, AI.image_spec, out_specs[0], AI.loss_spec]
     return AttrDict(
-        key=key, data=data, loss=agent.classifier_loss,
+        key=key, data=data, loss=AI.classifier_loss,
         in_specs=in_specs, out_specs=out_specs)

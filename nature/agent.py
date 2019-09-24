@@ -2,7 +2,7 @@
 from random import choice
 import tensorflow as tf
 
-from tools import get_spec, tile_for_batch, get_uniform
+from tools import get_spec, get_uniform
 from nature import TaskModel, Radam
 from nurture import get_images
 
@@ -15,8 +15,8 @@ DTYPE = tf.float32
 OPTIMIZER = Radam()
 
 IMAGE_SHAPE = (16, 16, 1)
-LOSS_SHAPE = (2, 2, 1)
-CODE_SHAPE = (128, 8)
+CODE_SHAPE = (8, 4)
+LOSS_SHAPE = (1,)
 BATCH = 5
 
 
@@ -24,13 +24,12 @@ class Agent:
     """Entity which solves tasks using models made of bricks"""
 
     def __init__(self):
-        # TODO: simplify ... do we need specs ?
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
         self.code_spec = get_spec(shape=CODE_SHAPE, format="code")
         self.loss_spec = get_spec(shape=LOSS_SHAPE, format="loss")
+        self.loss_ones = tf.ones((BATCH, *LOSS_SHAPE))
         self.classifier_loss = CLASSIFIER_LOSS
         self.regresser_loss = REGRESSER_LOSS
-        self.loss_ones = tf.ones(LOSS_SHAPE)
         self.optimizer = OPTIMIZER
         self.batch = BATCH
         self.practice()
@@ -44,25 +43,30 @@ class Agent:
 
     @tf.function
     def run_data_session(self, task):
-        prior_loss = 2.3
-        y_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
         prior_image = get_uniform(self.image_spec.shape, batch=self.batch)
+        y_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
+        model, loss = task.model, task.loss
+        prior_loss = 2.3
         for step, (image, y_true) in task.data.enumerate():
             prior_loss = self.loss_ones * prior_loss
-            prior_loss = tile_for_batch(self.batch, prior_loss)
             with tf.GradientTape() as tape:
-                tape.watch(image)
-                tape.watch(prior_loss)
-                y_pred = task.model([image, prior_image, y_pred, prior_loss])
-                loss = task.loss(y_true, y_pred)
-                losses = [loss, task.model.losses]
-            gradients = tape.gradient(losses, task.model.trainable_variables)
+                tape.watch([image, prior_image, y_pred, prior_loss])
+                outputs = model([image, prior_image, y_pred, prior_loss])
+                y_pred, value_pred, criticism = outputs
+                class_loss = loss(y_true, y_pred)
+                class_loss = tf.expand_dims(class_loss, -1)
+                value_loss = self.regresser_loss(class_loss, value_pred)
+                critic_loss = self.regresser_loss(class_loss, criticism)
+                losses = [class_loss, value_loss, critic_loss, model.losses]
+            grads = tape.gradient(losses, model.trainable_variables)
             self.optimizer.apply_gradients(
-                zip(gradients, task.model.trainable_variables))
-            prior_loss = tf.math.reduce_mean(loss)
+                zip(grads, model.trainable_variables))
+            value_pred = tf.math.reduce_mean(value_pred)
+            criticism = tf.math.reduce_mean(criticism)
+            prior_loss = tf.math.reduce_mean(class_loss)
+            tf.print(step, prior_loss, value_pred, criticism)
             prior_image = image
-            tf.print(step, prior_loss, y_pred[0])
-
+        return "fuck"
 
     # @tf.function
     # def run_env_episode(self):

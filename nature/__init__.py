@@ -39,6 +39,7 @@ from nature.bricks.recirculator import Recirculator
 from nature.bricks.residual_block import ResBlock
 from nature.bricks.dense_block import DenseBlock
 from nature.bricks.resize import Resizer
+from nature.bricks.merge import Merge
 from nature.bricks.mlp import MLP
 from nature.bricks.classifier import Classifier
 from nature.bricks.coords import Coordinator
@@ -48,6 +49,7 @@ from nature.bricks.image_actuator import ImageActuator
 from nature.bricks.actuator import Actuator
 from nature.bricks.stack import Stack
 from nature.bricks.chain import Chain
+from nature.bricks.brick import Brick
 
 from nature.bricks.graph.helpers.count import count
 from nature.bricks.graph.helpers.is_blacklisted import is_blacklisted

@@ -1,21 +1,23 @@
 from keras_radam.training import RAdamOptimizer
 import tensorflow as tf
 
-K = tf.keras
+
+Opt = tf.keras.optimizers
+CLIPVALUE = 0.2
 WARMUP = False
 
 
 def SGD():
-    return K.optimizers.SGD(
+    return Opt.SGD(
         learning_rate=3e-4, momentum=0.96, nesterov=True, clipvalue=0.01)
 
 
 def Adam():
-    return K.optimizers.Adam(learning_rate=3e-4, amsgrad=True, clipvalue=0.04)
+    return Opt.Adam(learning_rate=3e-4, amsgrad=True, clipvalue=0.04)
 
 
 def Nadam():
-    return K.optimizers.Nadam(learning_rate=3e-4, clipvalue=0.04)
+    return Opt.Nadam(learning_rate=3e-4, clipvalue=0.04)
 
 
 def Radam():

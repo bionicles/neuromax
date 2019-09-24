@@ -9,7 +9,7 @@ from tools.safe_sample import safe_sample
 from tools.get_percent import get_percent
 from tools.noise_like import noise_like
 from tools.get_path import get_path
-from tools.show_model import show_model
+from tools.plot_model import plot_model
 from tools.map_sets import map_sets_tf
 from tools.normalize import normalize
 from tools.get_spec import get_spec

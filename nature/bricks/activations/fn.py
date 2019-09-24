@@ -11,7 +11,7 @@ B, L = K.backend, K.layers
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
-DEFAULT = 'lisht'
+DEFAULT = 'tanh'
 
 
 @tf.function

@@ -9,13 +9,14 @@ L = K.layers
 
 LAYER_FN = [nature.Attention, nature.SWAG, nature.NoiseDrop, nature.Conv1D]
 N_LAYERS = 2
-UNITS = 4
+UNITS = 8
 
 
 class DenseBlock(L.Layer):
 
     def __init__(self, layer_fn=LAYER_FN, units=UNITS):
         super(DenseBlock, self).__init__()
+        self.d_increase = UNITS * N_LAYERS
         self.concat = L.Concatenate(-1)
         self.units = units
         self.layers = []
