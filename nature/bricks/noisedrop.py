@@ -1,10 +1,9 @@
 import tensorflow as tf
-
 from nature import Init, L1L2
 
-ACTIVATION = None
 INITIALIZER = Init
 REGULARIZER = L1L2
+ACTIVATION = None
 STDDEV = 0.04
 P_DROP = 0.5
 UNITS = 16
@@ -18,8 +17,7 @@ def NoiseDrop(
         bias_initializer=INITIALIZER,
         activation=ACTIVATION,
         units=UNITS,
-        **kwargs
-        ):
+        **kwargs):
     return _NoiseDrop(
             units=units,
             activation=activation,
@@ -28,8 +26,8 @@ def NoiseDrop(
             bias_regularizer=bias_regularizer(),
             kernel_initializer=kernel_initializer(),
             bias_initializer=bias_initializer(dist='truncated'),
-            **kwargs
-            )
+            **kwargs)
+
 
 class _NoiseDrop(tf.keras.layers.Dense):
     def __init__(self, *args, **kwargs):

@@ -15,21 +15,18 @@ Conventions:
 
 from collections import namedtuple, OrderedDict
 from tensorflow.python.util import nest
-import tensorflow_probability as tfp
 import tensorflow as tf
 
 from nature.bricks.dnc.memory import Memory, EPSILON
 
 K = tf.keras
 L = K.layers
-tfpl = tfp.layers
 
+DTYPE = tf.float32
 CONTROLLER_UNITS = 256
+NUM_READ_HEADS = 4
 MEMORY_SIZE = 256
 WORD_SIZE = 64
-NUM_READ_HEADS = 4
-TFP_LAYER = tfpl.DenseFlipout
-DTYPE = tf.float32
 
 
 class DNC_Cell(L.Layer):
@@ -65,7 +62,7 @@ class DNC_Cell(L.Layer):
         "read_modes"])
 
     def __init__(self, agent, brick_id, output_size, controller_units=CONTROLLER_UNITS, memory_size=MEMORY_SIZE,
-                 word_size=WORD_SIZE, num_read_heads=NUM_READ_HEADS, tfp_layer=TFP_LAYER, **kwargs):
+                 word_size=WORD_SIZE, num_read_heads=NUM_READ_HEADS, **kwargs):
         super().__init__(name='DNC_Cell', **kwargs)
         self.agent = agent
         self.brick_id = brick_id
@@ -80,14 +77,9 @@ class DNC_Cell(L.Layer):
         self._interface_vector_size += 5 * self.num_read_heads + 3
         self._clip = 20.0
         self._controller = L.LSTMCell(units=controller_units)
-        if tfp_layer:
-            self._controller_to_interface_dense = tfp_layer(
-                self._interface_vector_size, name='controller_to_interface')
-            self._final_output_dense = tfp_layer(self._output_size)
-        else:
-            self._controller_to_interface_dense = L.Dense(
-                self._interface_vector_size, name='controller_to_interface')
-            self._final_output_dense = L.Dense(self._output_size)
+        self._controller_to_interface_dense = L.Dense(
+            self._interface_vector_size, name='controller_to_interface')
+        self._final_output_dense = L.Dense(self._output_size)
         self._memory = Memory(memory_size, word_size, num_read_heads)
 
     def _parse_interface_vector(self, interface_vector):
@@ -126,9 +118,10 @@ class DNC_Cell(L.Layer):
         interface = self._parse_interface_vector(interface)
         # update_memory
         read_vectors, memory_state = self._memory(interface, prev_dnc_state.memory_state)
-        state = DNC_Cell.state(memory_state=memory_state,
-                          controller_state=controller_state,
-                          read_vectors=read_vectors)
+        state = DNC_Cell.state(
+            memory_state=memory_state,
+            controller_state=controller_state,
+            read_vectors=read_vectors)
         # join_outputs
         read_vectors_flat = self._flatten_read_vectors(read_vectors)
         final_output = tf.concat([controller_output, read_vectors_flat], 1)

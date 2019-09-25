@@ -4,19 +4,22 @@ import tensorflow as tf
 
 from tools import get_spec, get_uniform
 from nature import TaskModel, Radam
+reduce_mean = tf.math.reduce_mean
 from nurture import get_images
 
 REGRESSER_LOSS = tf.keras.losses.MeanSquaredLogarithmicError(
     reduction=tf.keras.losses.Reduction.NONE)
 CLASSIFIER_LOSS = tf.keras.losses.CategoricalCrossentropy(
     reduction=tf.keras.losses.Reduction.NONE)
+MAE = tf.keras.losses.MeanAbsoluteError(
+    reduction=tf.keras.losses.Reduction.NONE)
 TASK_PREPPERS = [get_images]
-DTYPE = tf.float32
 OPTIMIZER = Radam()
+DTYPE = tf.float32
 
 IMAGE_SHAPE = (16, 16, 1)
-CODE_SHAPE = (8, 4)
-LOSS_SHAPE = (1,)
+CODE_SHAPE = (8, 8)
+LOSS_SHAPE = (3,)
 BATCH = 5
 
 
@@ -27,7 +30,6 @@ class Agent:
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
         self.code_spec = get_spec(shape=CODE_SHAPE, format="code")
         self.loss_spec = get_spec(shape=LOSS_SHAPE, format="loss")
-        self.loss_ones = tf.ones((BATCH, *LOSS_SHAPE))
         self.classifier_loss = CLASSIFIER_LOSS
         self.regresser_loss = REGRESSER_LOSS
         self.optimizer = OPTIMIZER
@@ -45,27 +47,34 @@ class Agent:
     def run_data_session(self, task):
         prior_image = get_uniform(self.image_spec.shape, batch=self.batch)
         y_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
+        prior_loss = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
+        value_pred = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
+        criticism = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
         model, loss = task.model, task.loss
-        prior_loss = 2.3
         for step, (image, y_true) in task.data.enumerate():
-            prior_loss = self.loss_ones * prior_loss
             with tf.GradientTape() as tape:
-                tape.watch([image, prior_image, y_pred, prior_loss])
-                outputs = model([image, prior_image, y_pred, prior_loss])
+                tape.watch([
+                    image, prior_image, y_pred,
+                    value_pred, criticism, prior_loss])
+                outputs = model([
+                    image, prior_image, y_pred,
+                    value_pred, criticism, prior_loss])
                 y_pred, value_pred, criticism = outputs
-                class_loss = loss(y_true, y_pred)
-                class_loss = tf.expand_dims(class_loss, -1)
-                value_loss = self.regresser_loss(class_loss, value_pred)
-                critic_loss = self.regresser_loss(class_loss, criticism)
+                class_loss = tf.expand_dims(loss(y_true, y_pred), -1)
+                value_loss = MAE(class_loss, value_pred)
+                critic_loss = MAE(class_loss, criticism)
                 losses = [class_loss, value_loss, critic_loss, model.losses]
             grads = tape.gradient(losses, model.trainable_variables)
             self.optimizer.apply_gradients(
                 zip(grads, model.trainable_variables))
-            value_pred = tf.math.reduce_mean(value_pred)
-            criticism = tf.math.reduce_mean(criticism)
-            prior_loss = tf.math.reduce_mean(class_loss)
-            tf.print(step, prior_loss, value_pred, criticism)
+            critic_loss = tf.expand_dims(critic_loss, -1)
+            value_loss = tf.expand_dims(value_loss, -1)
+            prior_loss = tf.concat([class_loss, value_loss, critic_loss], -1)
             prior_image = image
+            tf.print(
+                step, reduce_mean(class_loss),
+                "value:", reduce_mean(value_pred), reduce_mean(value_loss),
+                "critic:", reduce_mean(criticism), reduce_mean(critic_loss))
         return "fuck"
 
     # @tf.function

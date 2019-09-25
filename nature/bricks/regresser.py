@@ -12,6 +12,7 @@ class Regresser(L.Layer):
         self.out_shape = out_shape
 
     def build(self, shape):
+        self.mlp = nature.MLP()
         ensemble_shape = list(self.out_shape)
         ensemble_shape.append(ENSEMBLE_SIZE)
         self.resize = nature.Resizer(self.ensemble_shape)
@@ -19,6 +20,7 @@ class Regresser(L.Layer):
 
     @tf.function
     def call(self, x):
+        x = self.mlp(x)
         x = self.resize(x)
         x = self.reduce_mean(x, axis=-1)
         return x

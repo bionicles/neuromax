@@ -1,11 +1,11 @@
 import tensorflow as tf
 
-from nature import FC, Fn
+from nature import Layer, Fn
 
 K = tf.keras
 L = K.layers
 
-LAYERS, UNITS, FN = 2, 128, None
+LAYERS, UNITS, FN = 2, 8, 'mish'
 UNITS_LIST = [UNITS for _ in range(LAYERS)]
 FNS_LIST = [FN for _ in range(LAYERS)]
 
@@ -25,10 +25,13 @@ class MLP(L.Layer):
             units_list[-1] = units
         self.layers = []
         for i, units in enumerate(units_list):
-            fc = FC(units=units)
+            fc = Layer(units=units)
+            super(MLP, self).__setattr__(f'fc_{i}', fc)
             self.layers.append(fc)
             if fns_list[i]:
-                self.layers.append(Fn(fns_list[i]))
+                fn = Fn(key=fns_list[i])
+                super(MLP, self).__setattr__(f'fn_{i}', fn)
+                self.layers.append(fn)
         self.built = True
 
     @tf.function

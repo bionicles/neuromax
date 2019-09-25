@@ -1,6 +1,6 @@
 import nature
 
-LAYER_FN = nature.FC
+LAYER_FN = nature.NoiseDrop
 UNITS = 8
 
 
