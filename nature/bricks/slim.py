@@ -6,7 +6,7 @@ import nature
 L = tf.keras.layers
 LAYER = nature.Layer
 NORM = nature.NoOp
-N = 8
+N = 16
 
 
 class Slim(L.Layer):

@@ -2,7 +2,7 @@ import tensorflow as tf
 import nature
 
 LAYER_FN = nature.Layer
-N_LOOPS, UNITS = 2, 8
+N_LOOPS, UNITS = 4, 16
 
 
 class Recirculator(tf.keras.layers.Layer):

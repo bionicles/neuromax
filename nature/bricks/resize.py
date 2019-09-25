@@ -22,6 +22,7 @@ class Resizer(L.Layer):
         x = self.flatten(x)
         x = self.resize(x)
         x = self.reshape(x)
+        x = self.fn(x)
         return x
 
     def compute_output_shape(self, shape):

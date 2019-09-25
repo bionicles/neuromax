@@ -4,8 +4,8 @@ import tensorflow as tf
 
 from tools import get_spec, get_uniform
 from nature import TaskModel, Radam
-reduce_mean = tf.math.reduce_mean
 from nurture import get_images
+reduce_mean = tf.math.reduce_mean
 
 REGRESSER_LOSS = tf.keras.losses.MeanSquaredLogarithmicError(
     reduction=tf.keras.losses.Reduction.NONE)
@@ -18,7 +18,7 @@ OPTIMIZER = Radam()
 DTYPE = tf.float32
 
 IMAGE_SHAPE = (16, 16, 1)
-CODE_SHAPE = (8, 8)
+CODE_SHAPE = (32, 8)
 LOSS_SHAPE = (3,)
 BATCH = 5
 

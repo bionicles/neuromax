@@ -1,9 +1,7 @@
 import tensorflow as tf
 import nature
 
-from tools import pipe
 K = tf.keras
-
 L, BE = K.layers, K.backend
 LAYER = nature.Layer
 UNITS = 16
@@ -23,7 +21,6 @@ class Quadratic(L.Layer):
         self.B = self.layer(units=units)
         self.square = L.Lambda(BE.square)
         self.multiply = L.Multiply()
-        self.norm = NORM()
         self.built = True
 
     @tf.function
@@ -32,5 +29,4 @@ class Quadratic(L.Layer):
         g = self.G(x)
         b = self.B(self.square(x))
         y = self.multiply([r, g]) + b
-        y = self.norm(y)
         return y

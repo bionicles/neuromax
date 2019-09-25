@@ -4,9 +4,9 @@ import nature
 L = tf.keras.layers
 LAYER = nature.Layer
 NORM = nature.Norm
-KEY = 'logistic_map'
+KEY = 'mish'
 UNITS = 32
-POWER = 4
+POWER = 5
 
 
 class SWAG(L.Layer):

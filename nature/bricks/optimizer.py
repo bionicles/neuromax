@@ -1,28 +1,39 @@
 from keras_radam.training import RAdamOptimizer
+# from tensorflow_addons.optimizers import Lookahead
 import tensorflow as tf
 
-
 Opt = tf.keras.optimizers
-CLIPVALUE = 0.2
-WARMUP = False
+WARMUP = True
+LOOK = True
+
+
+def look(opt):
+    # if not LOOK:
+    return opt
+    # return Lookahead(opt, sync_period=6, slow_step_size=0.5)
 
 
 def SGD():
-    return Opt.SGD(
+    opt = Opt.SGD(
         learning_rate=3e-4, momentum=0.96, nesterov=True, clipvalue=0.01)
+    return look(opt)
 
 
 def Adam():
-    return Opt.Adam(learning_rate=3e-4, amsgrad=True, clipvalue=0.04)
+    opt = Opt.Adam(learning_rate=3e-4, amsgrad=True, clipvalue=0.04)
+    return look(opt)
 
 
 def Nadam():
-    return Opt.Nadam(learning_rate=3e-4, clipvalue=0.04)
+    opt = Opt.Nadam(learning_rate=3e-4, clipvalue=0.04)
+    return look(opt)
 
 
 def Radam():
     if WARMUP:
-        return RAdamOptimizer(
-            total_steps=999, warmup_proportion=0.04, min_lr=1e-6, amsgrad=True)
+        opt = RAdamOptimizer(
+            learning_rate=1e-3, min_lr=1e-5,
+            total_steps=100000, warmup_proportion=0.01, amsgrad=True)
     else:
-        return RAdamOptimizer(amsgrad=True)
+        opt = RAdamOptimizer(amsgrad=True)
+    return look(opt)

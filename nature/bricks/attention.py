@@ -5,8 +5,8 @@ L = tf.keras.layers
 
 LAYER = nature.Layer
 MEMORY_SIZE = 512
-D_MODEL = 8
-N_HEADS = 2
+D_MODEL = 16
+N_HEADS = 4
 P_DROP = 0.5
 UNITS = None
 

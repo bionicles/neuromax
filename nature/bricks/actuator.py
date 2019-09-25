@@ -9,7 +9,4 @@ def Actuator(agent, spec):
     elif spec.format in ['discrete', 'onehot']:
         return Classifier(spec.shape)
     else:
-        fn = None
-        if spec.format is 'loss':
-            fn = "polyswish"
-        return Resizer(spec.shape, fn=fn)
+        return Resizer(spec.shape)

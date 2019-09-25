@@ -29,18 +29,19 @@ from nature.bricks.OP_1D import OP_1D
 from nature.bricks.OP_FC import OP_FC
 from nature.bricks.swag import SWAG
 from nature.bricks.slim import Slim
-# from nature.bricks.sandwich import Sandwich
-# from nature.bricks.mixture import Mixture
 from nature.bricks.attention import Attention
 
-from nature.bricks.wide_deep import WideDeep
+from nature.bricks.integral import Integral
+from nature.bricks.derivative import Derivative
 from nature.bricks.transformer import Transformer
 from nature.bricks.recirculator import Recirculator
 from nature.bricks.residual_block import ResBlock
 from nature.bricks.dense_block import DenseBlock
 from nature.bricks.resize import Resizer
 from nature.bricks.merge import Merge
+from nature.bricks.delta import Delta
 from nature.bricks.mlp import MLP
+from nature.bricks.pid import PID
 from nature.bricks.classifier import Classifier
 from nature.bricks.coords import Coordinator
 from nature.bricks.sensor import Sensor
