@@ -22,7 +22,7 @@ def Conv2D(
     return layer_class(
         filters=units, kernel_size=kernel_size, padding=padding,
         kernel_regularizer=regularizer(),
-        activity_regularizer=regularizer(),
+        # activity_regularizer=regularizer(),
         bias_regularizer=regularizer(),
         kernel_initializer=initializer(),
         bias_initializer=initializer())

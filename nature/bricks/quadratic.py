@@ -10,7 +10,7 @@ UNITS = 16
 class Quadratic(L.Layer):
 
     def __init__(self, units=UNITS, layer=LAYER):
-        super(Quadratic, self).__init__()
+        super().__init__()
         self.layer = layer
         self.units = units
 
@@ -21,7 +21,7 @@ class Quadratic(L.Layer):
         self.B = self.layer(units=units)
         self.square = L.Lambda(BE.square)
         self.multiply = L.Multiply()
-        self.built = True
+        super().build(shape)
 
     @tf.function
     def call(self, x):

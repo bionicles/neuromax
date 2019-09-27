@@ -1,23 +1,19 @@
 import tensorflow as tf
-from tools import tile_for_batch
 L = tf.keras.layers
 
 
 class Integral(L.Layer):
 
     def __init__(self, *args, **kwargs):
-        super(Integral, self).__init__()
+        super().__init__()
 
     def build(self, shape):
-        self.state = tf.zeros(shape)
-        self.batch = shape[0]
-        self.built = True
+        self.state = self.add_weight("state", shape, trainable=False)
+        super().build(shape)
 
     @tf.function
     def call(self, x):
-        mean = tf.math.reduce_mean(x, axis=0)
-        mean = tile_for_batch(self.batch, mean)
-        self.state = self.state + mean
+        self.state.assign_add(x)
         return self.state
 
 #

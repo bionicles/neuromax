@@ -8,14 +8,14 @@ K = tf.keras
 L = K.layers
 
 LAYER_FN = [nature.Attention, nature.SWAG, nature.NoiseDrop, nature.Conv1D]
-N_LAYERS = 2
-UNITS = 8
+N_LAYERS = 3
+UNITS = 4
 
 
 class DenseBlock(L.Layer):
 
     def __init__(self, layer_fn=LAYER_FN, units=UNITS):
-        super(DenseBlock, self).__init__()
+        super().__init__()
         self.d_increase = UNITS * N_LAYERS
         self.concat = L.Concatenate(-1)
         self.units = units
@@ -24,9 +24,9 @@ class DenseBlock(L.Layer):
             if isinstance(layer_fn, list):
                 layer_fn = random.choice(LAYER_FN)
             np = nature.NormPreact()
-            super(DenseBlock, self).__setattr__(f"np_{n}", np)
+            super().__setattr__(f"np_{n}", np)
             layer = nature.Layer(units, layer_fn=layer_fn)
-            super(DenseBlock, self).__setattr__(f"layer_{n}", layer)
+            super().__setattr__(f"layer_{n}", layer)
             self.layers.append(pipe(np, layer))
         self.built = True
 

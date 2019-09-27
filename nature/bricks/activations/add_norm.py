@@ -15,6 +15,4 @@ class AddNorm(L.Layer):
 
     @tf.function
     def call(self, x):
-        x = self.add(x)
-        x = self.norm(x)
-        return x
+        return self.norm(self.add(x))

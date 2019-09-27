@@ -69,7 +69,7 @@ class ConcatCoords4D(L.Layer):
         hw = tf.stack(tf.meshgrid(h, w, indexing='ij'), axis=-1)
         hw = tf.expand_dims(hw, 0)
         self.hw = tf.tile(hw, [shape[0], 1, 1, 1])
-        self.built = True
+        super().build(shape)
 
     @tf.function
     def call(self, x):

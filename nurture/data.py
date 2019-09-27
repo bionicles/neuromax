@@ -33,10 +33,8 @@ def get_images(AI, key=DEFAULT_DATASET):
     data = data.batch(AI.batch)
     data = data.repeat(10)
     data = data.prefetch(tf.data.experimental.AUTOTUNE)
-    out_specs = [get_spec(n=n_classes, format="onehot"), AI.loss_spec]
-    in_specs = [
-        AI.image_spec, AI.image_spec, out_specs[0],
-        AI.loss_spec, AI.loss_spec, AI.loss_spec]
+    out_specs = [get_spec(n=n_classes, format="onehot")]
+    in_specs = [AI.image_spec]
     return AttrDict(
         key=key, data=data, loss=AI.classifier_loss,
         in_specs=in_specs, out_specs=out_specs)

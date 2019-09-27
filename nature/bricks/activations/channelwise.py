@@ -1,25 +1,28 @@
 import tensorflow as tf
+from nature import Fn
 
-from nature import Fn, Norm
-
-K = tf.keras
-L = K.layers
+L = tf.keras.layers
 
 KEY = "logistic"
+
 
 class Channelwise(L.Layer):
 
     def __init__(self, key=KEY):
-        super(Channelwise, self).__init__()
-        self.key = key
+        super().__init__()
+        self.keys = key
 
     def build(self, shape):
         d_in = shape[-1]
+        if isinstance(self.keys, str):
+            self.keys = [self.keys] * d_in
+        else:
+            assert len(self.keys) is d_in
         self.split = L.Lambda(lambda x: tf.split(x, d_in, -1))
         self.fns = []
         for k in range(d_in):
-            fn = Fn(key=self.key)
-            setattr(self, f"fn_{k}", fn)
+            fn = Fn(key=self.keys[k])
+            super().__setattr__(self, f"fn_{k}", fn)
             self.fns.append((k, fn))
         self.concat = L.Concatenate(-1)
         self.built = True

@@ -14,7 +14,15 @@ SOFT_ARGMAX_BETA = 1e10
 DEFAULT = 'mish'
 
 
-@tf.function
+@tf.function(experimental_relax_shapes=True)
+def logistic_map(x):
+    r = tf.random.uniform((), minval=3.57, maxval=4.)
+    min = tf.math.reduce_min(x)
+    x = (x - min) / (tf.math.reduce_max(x) - min)
+    return r * x * (1. - x)
+
+
+@tf.function(experimental_relax_shapes=True)
 def swish(x):
     """
     Searching for Activation Functions
@@ -23,7 +31,7 @@ def swish(x):
     return (x * B.sigmoid(x))
 
 
-@tf.function
+@tf.function(experimental_relax_shapes=True)
 def hard_swish(x):
     """
     Searching for MobileNetV3
@@ -32,7 +40,7 @@ def hard_swish(x):
     return (x * B.hard_sigmoid(x))
 
 
-@tf.function
+@tf.function(experimental_relax_shapes=True)
 def mish(x):
     """
     Mish: A Self Regularized Non-Monotonic Neural Activation Function
@@ -82,6 +90,16 @@ def lisht(x):
     return (B.tanh(x) * x)
 
 
+@tf.function(experimental_relax_shapes=True)
+def gelu(x):
+    return 0.5 * x * (1 + B.tanh(x * 0.7978845608 * (1 + 0.044715 * x * x)))
+
+
+@tf.function(experimental_relax_shapes=True)
+def fast_gelu(x):
+    return B.hard_sigmoid(1.702 * x) * x
+
+
 def rrelu(x, min=RRELU_MIN, max=RRELU_MAX):
     return x if x >= 0 else tf.random.uniform(min, max) * x
 
@@ -103,6 +121,7 @@ FN_LOOKUP = {
     'identity': tf.identity,
     'inverse': lambda x: -x,
     'soft_argmax': soft_argmax,
+    'random_logistic_map': logistic_map,
     'log_softmax': tf.nn.log_softmax,
     'softmax': 'softmax',
     'softplus': B.softplus,
@@ -121,6 +140,8 @@ FN_LOOKUP = {
     'mish': mish,
     'lisht': lisht,
     'rrelu': rrelu,
+    'fast_gelu': fast_gelu,
+    'gelu': gelu,
     'relu': B.relu,
     'lrelu': tf.nn.leaky_relu,
     'crelu': tf.nn.crelu,

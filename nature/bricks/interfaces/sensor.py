@@ -3,7 +3,6 @@ import tensorflow as tf
 import nature
 
 L = tf.keras.layers
-NORM = L.BatchNormalization
 
 
 class Sensor(L.Layer):
@@ -29,14 +28,13 @@ class Sensor(L.Layer):
         if new_dimension is not self.d_code:
             self.channel_changer = nature.OP_1D(units=self.d_code)
         self.reshape = L.Reshape((-1, new_dimension))
-        self.norm = NORM()
-        self.built = True
+        super().build(shape)
 
+    @tf.function
     def call(self, x):
         x = self.expander(x)
         x = self.coords(x)
         x = self.dense(x)
         x = self.reshape(x)
-        x = self.norm(x)
         x = self.channel_changer(x)
         return x

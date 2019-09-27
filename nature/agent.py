@@ -17,8 +17,8 @@ TASK_PREPPERS = [get_images]
 OPTIMIZER = Radam()
 DTYPE = tf.float32
 
-IMAGE_SHAPE = (16, 16, 1)
-CODE_SHAPE = (32, 8)
+IMAGE_SHAPE = (8, 8, 1)
+CODE_SHAPE = (4, 8)
 LOSS_SHAPE = (3,)
 BATCH = 5
 
@@ -38,30 +38,41 @@ class Agent:
 
     def practice(self):
         task = choice(TASK_PREPPERS)(self)
+        task = self.add_specs(task)
         task.graph, task.model = TaskModel(
             self, in_specs=task.in_specs, out_specs=task.out_specs)
         with tf.device("/gpu:0"):
             self.run_data_session(task)
 
+    def add_specs(self, task):
+        in_specs, out_specs = list(task.in_specs), list(task.out_specs)
+        in_specs += in_specs + out_specs + out_specs + [self.loss_spec] * 3
+        out_specs += [self.loss_spec]
+        task.in_specs, task.out_specs = in_specs, out_specs
+        return task
+
     @tf.function
     def run_data_session(self, task):
-        prior_image = get_uniform(self.image_spec.shape, batch=self.batch)
-        y_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
-        prior_loss = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
-        value_pred = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
-        criticism = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
-        model, loss = task.model, task.loss
-        for step, (image, y_true) in task.data.enumerate():
+        data, model, loss = task.data, task.model, task.loss
+        last_image = tf.ones((BATCH, *IMAGE_SHAPE), tf.float32)
+        last_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
+        last_loss = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
+        last_true = tf.ones_like(last_pred)
+        value_pred = tf.ones_like(last_loss)
+        criticism = tf.ones_like(last_loss)
+        for step, (image, y_true) in data.enumerate():
             with tf.GradientTape() as tape:
                 tape.watch([
-                    image, prior_image, y_pred,
-                    value_pred, criticism, prior_loss])
+                    model.trainable_variables,
+                    image, last_image, last_true, last_pred,
+                    value_pred, criticism, last_loss])
                 outputs = model([
-                    image, prior_image, y_pred,
-                    value_pred, criticism, prior_loss])
+                    image, last_image, last_true, last_pred,
+                    value_pred, criticism, last_loss])
                 y_pred, value_pred, criticism = outputs
                 class_loss = tf.expand_dims(loss(y_true, y_pred), -1)
                 value_loss = MAE(class_loss, value_pred)
+                criticism = criticism + value_pred
                 critic_loss = MAE(class_loss, criticism)
                 losses = [class_loss, value_loss, critic_loss, model.losses]
             grads = tape.gradient(losses, model.trainable_variables)
@@ -69,8 +80,9 @@ class Agent:
                 zip(grads, model.trainable_variables))
             critic_loss = tf.expand_dims(critic_loss, -1)
             value_loss = tf.expand_dims(value_loss, -1)
-            prior_loss = tf.concat([class_loss, value_loss, critic_loss], -1)
-            prior_image = image
+            last_loss = tf.concat([class_loss, value_loss, critic_loss], -1)
+            last_image = image
+            last_true = y_true
             tf.print(
                 step, reduce_mean(class_loss),
                 "value:", reduce_mean(value_pred), reduce_mean(value_loss),

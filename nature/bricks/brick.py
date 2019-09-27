@@ -1,15 +1,16 @@
+import tensorflow as tf
 import nature
 import random
 
 bricks = [
+    nature.Transformer,
     nature.Integral,
-    nature.Recirculator,
+    nature.Delta,
     nature.Slim,
     nature.SWAG,
-    nature.OP_1D,
     nature.MLP,
-    nature.Transformer,
-    nature.Derivative,
+    # nature.Recirculator,
+    # nature.Derivative,
 ]
 
 

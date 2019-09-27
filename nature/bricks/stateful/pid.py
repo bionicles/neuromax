@@ -1,5 +1,4 @@
 import tensorflow as tf
-from tools import get_size
 import nature
 L = tf.keras.layers
 
@@ -10,11 +9,9 @@ class PID(L.Layer):
         super(PID, self).__init__()
 
     def build(self, shape):
-        size = get_size(shape[1:])
-        self.mixer = nature.FC(units=size)
+        self.mixer = nature.FC(units=shape[-1], activation="gelu")
         self.derivative = nature.Derivative()
         self.integral = nature.Integral()
-        self.shape = shape
         self.built = True
 
     @tf.function

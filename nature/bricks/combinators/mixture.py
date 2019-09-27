@@ -8,6 +8,7 @@ N_COMPONENTS = 2
 LAYER_FN = nature.Quadratic
 UNITS = 32
 
+
 class Mixture(L.Layer):
 
     def __init__(self, n_components=N_COMPONENTS, layer_fn=LAYER_FN, units=UNITS):

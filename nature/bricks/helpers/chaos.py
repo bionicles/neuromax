@@ -1,8 +1,8 @@
 import tensorflow as tf
 
 DISTRIBUTION = "truncated_normal"
+PHI = 1.618 * 0.8
 MODE = 'fan_avg'
-PHI = 1.6180339 * 0.96
 
 
 class EdgeOfChaos(tf.keras.initializers.VarianceScaling):

@@ -2,7 +2,9 @@ import tensorflow as tf
 import nature
 
 L = tf.keras.layers
+# NORM = L.BatchNormalization
 ENSEMBLE_SIZE = 5
+FN = None
 
 
 class Regresser(L.Layer):
@@ -12,15 +14,18 @@ class Regresser(L.Layer):
         self.out_shape = out_shape
 
     def build(self, shape):
-        self.mlp = nature.MLP()
+        self.one = nature.MLP()
+        # self.norm = NORM()
         ensemble_shape = list(self.out_shape)
         ensemble_shape.append(ENSEMBLE_SIZE)
-        self.resize = nature.Resizer(self.ensemble_shape)
-        self.built = True
+        self.resize = nature.Resizer(
+            ensemble_shape, layer=nature.FC, key=FN)
+        super().build(shape)
 
     @tf.function
     def call(self, x):
-        x = self.mlp(x)
+        x = self.one(x)
+        # x = self.norm(x)
         x = self.resize(x)
-        x = self.reduce_mean(x, axis=-1)
+        x = tf.reduce_mean(x, axis=-1)
         return x

@@ -1,10 +1,11 @@
 import tensorflow as tf
-from tools import get_size
 import nature
 
 L = tf.keras.layers
-LAYER = L.Dense
-FN = 'softmax'
+# NORM = L.BatchNormalization
+LAYER = nature.FC
+FN1 = 'mish'
+FN2 = 'softmax'
 
 
 class Classifier(L.Layer):
@@ -13,13 +14,15 @@ class Classifier(L.Layer):
         self.out_shape = shape
 
     def build(self, shape):
-        self.out = LAYER(units=get_size(self.out_shape), activation=FN)
-        self.resize = nature.Resizer(self.out_shape)
-        # self.norm = L.BatchNormalization()
-        self.built = True
+        self.one = nature.MLP()
+        # self.norm = NORM()
+        self.resize = nature.Resizer(self.out_shape, layer=LAYER, key=FN1)
+        self.out = LAYER(units=self.out_shape[-1], activation=FN2)
+        super().build(shape)
 
     @tf.function
     def call(self, x):
+        x = self.one(x)
         # x = self.norm(x)
         x = self.resize(x)
         x = x - tf.math.reduce_max(x, axis=1, keepdims=True)

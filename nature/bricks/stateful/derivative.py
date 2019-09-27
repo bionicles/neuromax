@@ -6,14 +6,14 @@ L = tf.keras.layers
 class Derivative(L.Layer):
 
     def __init__(self, *args, **kwargs):
-        super(Derivative, self).__init__()
+        super().__init__()
 
     def build(self, shape):
-        self.state = tf.zeros(shape)
-        self.built = True
+        self.state = self.add_weight("state", shape, trainable=False)
+        super().build(shape)
 
     @tf.function
     def call(self, x):
         derivative = self.state - x
-        self.state = tf.identity(x)
+        self.state.assign(x)
         return derivative

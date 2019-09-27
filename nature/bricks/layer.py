@@ -1,6 +1,7 @@
+import tensorflow as tf
 import nature
 
-LAYER_FN = nature.NoiseDrop
+LAYER_FN = nature.FC
 UNITS = 8
 
 

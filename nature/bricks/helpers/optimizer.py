@@ -33,7 +33,7 @@ def Radam():
     if WARMUP:
         opt = RAdamOptimizer(
             learning_rate=1e-3, min_lr=1e-5,
-            total_steps=100000, warmup_proportion=0.01, amsgrad=True)
+            total_steps=100000, warmup_proportion=0.0042, amsgrad=True)
     else:
         opt = RAdamOptimizer(amsgrad=True)
     return look(opt)

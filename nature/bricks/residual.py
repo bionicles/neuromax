@@ -4,8 +4,9 @@ from tools import make_id
 import nature
 
 L = tf.keras.layers
-OPTIONS = [nature.Recirculator]
+OPTIONS = [nature.Quadratic]
 N = 2
+
 
 class ResBlock(L.Layer):
 

@@ -22,7 +22,7 @@ def NoiseDrop(
             units=units,
             activation=activation,
             kernel_regularizer=kernel_regularizer(),
-            activity_regularizer=activity_regularizer(),
+            # activity_regularizer=activity_regularizer(),
             bias_regularizer=bias_regularizer(),
             kernel_initializer=kernel_initializer(),
             bias_initializer=bias_initializer(dist='truncated'),

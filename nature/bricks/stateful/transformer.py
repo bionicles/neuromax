@@ -15,14 +15,14 @@ class Transformer(L.Layer):
         units = shape[-1] if not self.units else self.units
         self.attention = nature.Attention(units=units)
         self.add_norm_1 = nature.AddNorm()
-        self.layer = LAYER(units=units)
-        self.add_norm_2 = nature.AddNorm()
-        self.built = True
+        # self.layer = LAYER(units=units)
+        # self.add_norm_2 = nature.AddNorm()
+        super().build(shape)
 
     @tf.function
     def call(self, x):
         y = self.attention(x)
         y = self.add_norm_1([x, y])
-        z = self.layer(x)
-        y = self.add_norm_2([x, y, z])
+        # z = self.layer(x)
+        # y = self.add_norm_2([y, z])
         return y

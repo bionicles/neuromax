@@ -5,7 +5,7 @@ L = tf.keras.layers
 LAYER = nature.Layer
 NORM = nature.Norm
 KEY = 'mish'
-UNITS = 32
+UNITS = 4
 POWER = 5
 
 
@@ -16,9 +16,9 @@ class SWAG(L.Layer):
         self.layers = []
         for p in range(power):
             norm_preact = nature.NormPreact(key=KEY)
-            super(SWAG, self).__setattr__(f"np_{p}", norm_preact)
+            super().__setattr__(f"np_{p}", norm_preact)
             layer = layer_fn(units=units)
-            super(SWAG, self).__setattr__(f"layer_{p}", layer)
+            super().__setattr__(f"layer_{p}", layer)
             self.layers.append((norm_preact, layer))
         self.multiply = L.Multiply()
         self.addnorm = nature.AddNorm()

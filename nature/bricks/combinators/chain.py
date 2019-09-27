@@ -10,6 +10,7 @@ UNITS = 3
 
 L = tf.keras.layers
 
+
 def Chain(units=UNITS, constructor=OPTIONS):
     if isinstance(constructor, list):
         constructor = choice(OPTIONS)

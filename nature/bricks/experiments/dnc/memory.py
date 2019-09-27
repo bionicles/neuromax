@@ -231,7 +231,7 @@ class Memory:
         # temporal_link_addressing
         forward_weighting, backward_weighting = TemporalLinkAddressing.weightings(link_matrix, prev_read_weightings,)
         # blend_addressing_modes
-        read_weightings = tf.einsum( "bsr,bnrs->bnr", interface.read_modes, tf.stack([backward_weighting, lookup_weighting, forward_weighting], axis=3))
+        read_weightings = tf.einsum("bsr,bnrs->bnr", interface.read_modes, tf.stack([backward_weighting, lookup_weighting, forward_weighting], axis=3))
         read_vectors = tf.matmul(memory_matrix, read_weightings, adjoint_a=True)
         return read_weightings, read_vectors
 
