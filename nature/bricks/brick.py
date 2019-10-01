@@ -1,22 +1,24 @@
-import tensorflow as tf
 import nature
-import random
 
-bricks = [
-    nature.Transformer,
-    nature.Integral,
-    nature.Delta,
-    nature.Slim,
-    nature.SWAG,
+OPTIONS = [
+    nature.Circulator,
+    nature.ConvSet,
     nature.MLP,
-    # nature.Recirculator,
-    # nature.Derivative,
-]
+    nature.Attention,
+    nature.SWAG,
+    nature.Delta,
+    nature.Transformer,
+    nature.Slim,
+    nature.Chain,
+    nature.Stack,
+    ]
 
 
-def pick_brick():
-    return random.choice([nature.Chain, nature.Stack])
-
-
-def Brick(id):
-    return bricks[id] if id <= len(bricks) else pick_brick
+def Brick(id, AI, no_combinators=False):
+    if no_combinators:
+        brick = nature.Chain
+        while brick in [nature.Chain, nature.Stack]:
+            brick = AI.pull(f"brick_{id}", OPTIONS)
+    else:
+        brick = AI.pull(f"brick_{id}", OPTIONS, id=False)
+    return brick

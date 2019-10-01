@@ -1,5 +1,5 @@
 # order matters!
-from nature.bricks.helpers.optimizer import SGD, Adam, Nadam, Radam
+from nature.bricks.helpers.optimizer import Radam
 
 from nature.bricks.helpers.regularize import L1L2, Regularizer
 from nature.bricks.built_in.drop import Drop
@@ -24,7 +24,6 @@ from nature.bricks.activations.no_op import NoOp
 from nature.bricks.activations.channelwise import Channelwise
 from nature.bricks.activations.add_norm import AddNorm
 from nature.bricks.activations.norm_preact import NormPreact
-from nature.bricks.quadratic import Quadratic
 from nature.bricks.numbers import ConcatNumber
 from nature.bricks.OP_1D import OP_1D
 from nature.bricks.OP_FC import OP_FC
@@ -33,23 +32,26 @@ from nature.bricks.slim import Slim
 
 from nature.bricks.stateful.attention import Attention
 from nature.bricks.stateful.integral import Integral
+from nature.bricks.stateful.avg import RunningAvg
+from nature.bricks.stateful.subtract_avg import SubtractAvg
 from nature.bricks.stateful.derivative import Derivative
 from nature.bricks.stateful.delta import Delta
 from nature.bricks.stateful.transformer import Transformer
 from nature.bricks.stateful.pid import PID
 from nature.bricks.residual import ResBlock
-from nature.bricks.recirculator import Recirculator
+from nature.bricks.mlp import MLP
+from nature.bricks.circulator import Circulator
 from nature.bricks.dense import DenseBlock
 from nature.bricks.interfaces.resize import Resizer
-from nature.bricks.combinators.add import Add
 from nature.bricks.combinators.merge import Merge
-from nature.bricks.combinators.mixture import Mixture
-from nature.bricks.mlp import MLP
+from nature.bricks.conv_set import ConvSet
+
 from nature.bricks.interfaces.regresser import Regresser
 from nature.bricks.interfaces.classifier import Classifier
 from nature.bricks.interfaces.coords import Coordinator
 from nature.bricks.interfaces.sensor import Sensor
 from nature.bricks.interfaces.actuator import Actuator
+
 from nature.bricks.combinators.stack import Stack
 from nature.bricks.combinators.chain import Chain
 from nature.bricks.brick import Brick

@@ -4,14 +4,14 @@ import nature
 L = tf.keras.layers
 NORM = nature.Norm
 CHANNELWISE = False
-DEFAULT = "mish"
+DEFAULT = None
 
 
 class NormPreact(L.Layer):
-    def __init__(self, key=DEFAULT, channelwise=CHANNELWISE):
-        super(NormPreact, self).__init__()
+    def __init__(self, AI, key=DEFAULT, channelwise=CHANNELWISE):
+        super().__init__()
         layer_fn = nature.Channelwise if channelwise else nature.Fn
-        self.fn = layer_fn(key=key)
+        self.fn = layer_fn(AI) if key is None else layer_fn(AI, key=key)
         self.norm = NORM()
         self.built = True
 

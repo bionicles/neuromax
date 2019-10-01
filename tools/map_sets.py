@@ -1,10 +1,10 @@
 from itertools import combinations as sets
 import tensorflow as tf
+import numpy as np
 
 from tools import log
 
 DEFAULT_POOL_AXIS = 1
-np = None
 
 
 def map_sets_tf(tensor, set_size, fn, pool, pool_axis=DEFAULT_POOL_AXIS):
@@ -24,9 +24,7 @@ def map_sets_tf(tensor, set_size, fn, pool, pool_axis=DEFAULT_POOL_AXIS):
         pool(map(fn, sets(iterable, set_size)))
     """
     log("map_sets_tf", tensor, set_size, fn, pool, color="red")
-    if np is None:
-        import numpy as np
-    indices = tf.flatten(np.indices(tensor.shape))
+    indices = tf.reshape(np.indices(tensor.shape), [-1])
     if set_size is 0:
         return pool(tf.map_fn(fn, tensor), axis=pool_axis)
     else:

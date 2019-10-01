@@ -8,13 +8,14 @@ L = tf.keras.layers
 
 class Resizer(L.Layer):
 
-    def __init__(self, out_shape, key=None, layer=LAYER):
+    def __init__(self, AI, out_shape, key=None, layer=None, hyper=None):
         super(Resizer, self).__init__()
-        self.resize = layer(units=get_size(out_shape))
+        size = get_size(out_shape)
+        self.resize = nature.Layer(AI, units=size, layer_fn=layer, hyper=hyper)
         self.reshape = L.Reshape(out_shape)
+        self.fn = nature.Fn(AI, key=key)
         self.out_shape = out_shape
         self.flatten = L.Flatten()
-        self.fn = nature.Fn(key=key)
         self.built = True
 
     @tf.function

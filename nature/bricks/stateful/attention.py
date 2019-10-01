@@ -1,42 +1,47 @@
 import tensorflow as tf
 import nature
 
+
 L = tf.keras.layers
 
+INIT = nature.Init
+REG = nature.L1L2
 LAYER = nature.Layer
-MEMORY_SIZE = 128
-D_MODEL = 16
-N_HEADS = 2
-P_DROP = 0.5
+D_MODEL_OPTIONS = [8, 16, 32, 64, 128, 256]
+MEMORY_SIZE_OPTIONS = [32, 512]
+N_HEADS_OPTIONS = [1, 2, 4]
+DROP_OPTIONS = [0., 0.5]
 UNITS = None
 
 
 class Attention(L.Layer):
 
-    def __init__(
-            self,
-            memory_size=MEMORY_SIZE,
-            d_model=D_MODEL,
-            n_heads=N_HEADS,
-            units=UNITS,
-            p_drop=P_DROP):
+    def __init__(self, AI, units=UNITS, layer_fn=LAYER):
         super(Attention, self).__init__()
-        self.d_model, self.n_heads = d_model, n_heads
-        assert d_model % self.n_heads == 0
-        self.depth = d_model // self.n_heads
-        self.dense = LAYER(units=d_model)
-        self.wq = LAYER(units=d_model)
-        self.wk = LAYER(units=d_model)
-        self.wv = LAYER(units=d_model)
+        self.memory_size = AI.pull("attn_memory_size", MEMORY_SIZE_OPTIONS)
+        self.d_model = AI.pull("attn_d_model", D_MODEL_OPTIONS)
+        self.n_heads = AI.pull("attn_n_heads", N_HEADS_OPTIONS)
+        self.p_drop = AI.pull("attn_p_drop", DROP_OPTIONS)
+        assert self.d_model % self.n_heads == 0
+        self.depth = self.d_model // self.n_heads
+        self.delta = nature.Delta(AI)
         self.memory = self.add_weight(
-            'memory', (1, memory_size, d_model), initializer=nature.Init(),
-            trainable=False)
-        self.p_drop = p_drop
+            'memory', (1, self.memory_size, self.d_model), initializer=INIT(),
+            regularizer=REG(), trainable=False)
+        self.dense = nature.Layer(AI, units=self.d_model, layer_fn=layer_fn)
+        self.wq = nature.Layer(AI, units=self.d_model, layer_fn=layer_fn)
+        self.wk = nature.Layer(AI, units=self.d_model, layer_fn=layer_fn)
+        self.wv = nature.Layer(AI, units=self.d_model, layer_fn=layer_fn)
+        self.layer_fn = layer_fn
         self.units = units
+        self.ai = AI
 
     def build(self, shape):
         units = self.units if self.units else shape[-1]
-        self.channel_changer = LAYER(units=units)
+        self.channel_changer = tf.identity
+        if units != self.d_model:
+            self.channel_changer = nature.Layer(
+                self.ai, units=units, layer_fn=self.layer_fn)
         super().build(shape)
 
     @tf.function
@@ -75,9 +80,10 @@ class Attention(L.Layer):
         scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, n_heads, depth)
         concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
         attended = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
-        attended, new_memory = tf.split(attended, [seq_len, MEMORY_SIZE], axis=1)
-        new_memory = tf.math.reduce_mean(new_memory, 0, keepdims=True)
-        self.memory.assign(new_memory)
+        attended, memory = tf.split(attended, [seq_len, self.memory_size], axis=1)
+        memory = tf.math.reduce_mean(memory, 0, keepdims=True)
+        memory = self.delta(memory)
+        self.memory.assign(memory)
         attended = self.channel_changer(attended)
         return attended
 

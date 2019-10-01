@@ -1,5 +1,4 @@
 import tensorflow as tf
-# from tools import log
 import nature
 
 L = tf.keras.layers
@@ -23,10 +22,10 @@ class Sensor(L.Layer):
             self.coords = nature.Coordinator(shape)
             new_dimension = shape[-1] + len(shape[1:-1])
         if len(shape) is 4:
-            self.dense = nature.DenseBlock(layer_fn=nature.Conv2D)
+            self.dense = nature.DenseBlock(self.AI, layer_fn=nature.Conv2D)
             new_dimension = new_dimension + self.dense.d_increase
         if new_dimension is not self.d_code:
-            self.channel_changer = nature.OP_1D(units=self.d_code)
+            self.channel_changer = nature.OP_1D(self.AI, units=self.d_code)
         self.reshape = L.Reshape((-1, new_dimension))
         super().build(shape)
 

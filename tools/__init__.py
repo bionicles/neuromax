@@ -14,6 +14,7 @@ from tools.map_sets import map_sets_tf
 from tools.normalize import normalize
 from tools.get_spec import get_spec
 from tools.get_size import get_size
+from tools.prettify import prettify
 from tools.make_id import make_id
 from tools.get_hw import get_hw
 from tools.add_up import add_up

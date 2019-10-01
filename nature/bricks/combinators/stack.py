@@ -1,17 +1,16 @@
-from tools import pipe, stack, safe_sample
-from random import choice
 import nature
 
-MIN, MAX = 1, 1
-UNITS = 3
-
-OPTIONS = [nature.Transformer]
+MIN, MAX = 2, 4
+UNITS = 4
 
 
-def Stack(units=UNITS, options=OPTIONS):
-    if isinstance(options, list):
-        constructor = choice(options)
-    n_bricks = safe_sample(MIN, MAX)
-    def wrapped():
-        return constructor(units=units)
-    return pipe(*stack(wrapped, n_bricks))
+def Stack(AI, units=UNITS):
+    n_bricks = AI.pull("stack_size", MIN, MAX, id=False)
+
+    def call(x):
+        for n in range(n_bricks):
+            brick = nature.Brick(
+                f"stack_brick_{n}", AI, no_combinators=True)
+            x = brick(AI, units=units)(x)
+        return x
+    return call

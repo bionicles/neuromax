@@ -1,38 +1,35 @@
 import tensorflow as tf
 import random
-
 from tools import pipe
 import nature
 
-K = tf.keras
-L = K.layers
-
+L = tf.keras.layers
 LAYER_FN = [nature.Attention, nature.SWAG, nature.NoiseDrop, nature.Conv1D]
-N_LAYERS = 3
-UNITS = 4
+LAYERS = [2, 4]
+UNITS = [1, 2, 4, 8]
 
 
 class DenseBlock(L.Layer):
 
-    def __init__(self, layer_fn=LAYER_FN, units=UNITS):
+    def __init__(self, AI, layer_fn=LAYER_FN):
         super().__init__()
-        self.d_increase = UNITS * N_LAYERS
+        n_layers = AI.pull("dense_n_layers", LAYERS, id=False)
+        units = AI.pull("dense_units", UNITS, id=False)
+        self.d_increase = units * n_layers
         self.concat = L.Concatenate(-1)
-        self.units = units
         self.layers = []
-        for n in range(N_LAYERS):
+        for n in range(n_layers):
             if isinstance(layer_fn, list):
-                layer_fn = random.choice(LAYER_FN)
-            np = nature.NormPreact()
+                layer_fn = random.choice(layer_fn)
+            np = nature.NormPreact(AI)
             super().__setattr__(f"np_{n}", np)
-            layer = nature.Layer(units, layer_fn=layer_fn)
+            layer = nature.Layer(AI, units=units, layer_fn=layer_fn)
             super().__setattr__(f"layer_{n}", layer)
             self.layers.append(pipe(np, layer))
         self.built = True
 
     @tf.function
     def call(self, x):
-        y = x
         for layer in self.layers:
-            y = self.concat([y, layer(y)])
-        return y
+            x = self.concat([x, layer(x)])
+        return x

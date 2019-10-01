@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-DISTRIBUTION = "truncated_normal"
-PHI = 1.618 * 0.8
+DISTRIBUTION = "normal"
+PHI = 1.618 * (1. - (0.2 ** 4))
 MODE = 'fan_avg'
 
 

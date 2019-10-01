@@ -10,13 +10,13 @@ UNITS = 16
 
 
 def NoiseDrop(
+        units=UNITS,
+        activation=ACTIVATION,
         kernel_regularizer=REGULARIZER,
         activity_regularizer=REGULARIZER,
         bias_regularizer=REGULARIZER,
         kernel_initializer=INITIALIZER,
         bias_initializer=INITIALIZER,
-        activation=ACTIVATION,
-        units=UNITS,
         **kwargs):
     return _NoiseDrop(
             units=units,

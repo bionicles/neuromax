@@ -29,9 +29,7 @@ def get_images(AI, key=DEFAULT_DATASET):
         image = tf.image.resize(tf.cast(image, tf.float32), hw)
         label = tf.cast(tf.one_hot(label, n_classes), tf.float32)
         return image, label
-    data = data.map(unpack)
-    data = data.batch(AI.batch)
-    data = data.repeat(10)
+    data = data.map(unpack).batch(AI.batch).repeat(10)
     data = data.prefetch(tf.data.experimental.AUTOTUNE)
     out_specs = [get_spec(n=n_classes, format="onehot")]
     in_specs = [AI.image_spec]

@@ -1,40 +1,44 @@
-from tools import map_sets_tf
 import tensorflow as tf
+from tools import make_id
 import nature
 L = tf.keras.layers
-CONCAT_AXIS = 1
-POOL_AXIS = 1
-N = 3
+
+N = [2, 3]
 
 
 class ConvSet(L.Layer):
-    def __init__(self, n=N):
-        super(ConvSet, self).__init__()
-        self.kernel = Kernel()
-        self.built = True
-        self.n = n
 
-    @tf.function
-    def op(self, set, i):
-        inputs = tf.concat([*set, i], CONCAT_AXIS)
-        return self.kernel(inputs)
-
-    @tf.function
-    def call(self, x):
-        return tf.map_fn(
-            lambda i: map_sets_tf(
-                x, self.n, lambda set: self.op(set, i),
-                lambda y: tf.reduce_sum(y, POOL_AXIS)), x)
-
-
-class Kernel(L.Layer):
-    def __init__(self):
-        super(Kernel, self).__init__()
+    def __init__(self, AI, units=None):
+        n = AI.pull(f"conv_set_n", N, id=False)
+        super().__init__(name=make_id(f"conv_set_{n}"))
+        self.call = self.call_for_two if n is 2 else self.call_for_three
+        self.ai = AI
 
     def build(self, shape):
-        self.layer = nature.Resize(shape)
-        self.built = True
+        self.kernel = nature.FC(units=shape[-1])
+        self.concat = L.Concatenate(-1)
+        self.sub = L.Subtract()
+        super().build(shape)
 
     @tf.function
-    def call(self, x):
-        return self.layer(x)
+    def call_for_two(self, x, training=None):
+        return tf.map_fn(
+            lambda uno: tf.reduce_sum(
+                tf.map_fn(
+                    lambda dos: self.kernel(
+                            self.concat([uno, dos])
+                        ), x), 0), x)
+
+    @tf.function
+    def call_for_three(self, x, training=None):
+        return tf.map_fn(
+            lambda uno: tf.reduce_sum(
+                tf.map_fn(
+                    lambda dos: tf.reduce_sum(
+                        tf.map_fn(
+                            lambda tres: self.kernel(
+                                self.concat([uno, dos, tres])
+                                ), x), 0), x), 0), x)
+
+    def compute_output_shape(self, shape):
+        return shape

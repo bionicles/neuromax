@@ -4,7 +4,7 @@ from tools import make_id
 import nature
 
 L = tf.keras.layers
-OPTIONS = [nature.Quadratic]
+OPTIONS = [nature.SWAG]
 N = 2
 
 

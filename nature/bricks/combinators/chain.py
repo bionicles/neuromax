@@ -1,30 +1,22 @@
-from random import choice
 import tensorflow as tf
-
-from tools import safe_sample
 import nature
 
-OPTIONS = [nature.ResBlock]
-MIN, MAX = 2, 2
+MIN, MAX = 2, 4
 UNITS = 3
 
 L = tf.keras.layers
 
 
-def Chain(units=UNITS, constructor=OPTIONS):
-    if isinstance(constructor, list):
-        constructor = choice(OPTIONS)
-    n_bricks = safe_sample(MIN, MAX)
-    wrapped = constructor
-    if constructor is nature.Recirculator:
-        def wrapped():
-            return constructor(units=units)
+def Chain(AI, units=UNITS):
+    n_bricks = AI.pull("chain_length", MIN, MAX, id=False)
 
     def call(x):
         arr = []
         y = x
-        for brick_number in range(n_bricks):
-            y = wrapped()(y)
+        for n in range(n_bricks):
+            brick = nature.Brick(
+                f"chain_{id}_brick_{n}", AI, no_combinators=True)
+            y = brick(AI, units=units)(y)
             arr.append(y)
         return L.Concatenate(1)(arr)
     return call

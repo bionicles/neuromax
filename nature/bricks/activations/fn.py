@@ -11,7 +11,7 @@ B, L = K.backend, K.layers
 RRELU_MIN, RRELU_MAX = 0.123, 0.314
 HARD_MIN, HARD_MAX = -1., 1.
 SOFT_ARGMAX_BETA = 1e10
-DEFAULT = 'mish'
+DEFAULT = 'tanh'
 
 
 @tf.function(experimental_relax_shapes=True)
@@ -49,6 +49,7 @@ def mish(x):
     return (x * B.tanh(B.softplus(x)))
 
 
+@tf.function(experimental_relax_shapes=True)
 def soft_argmax(x, beta=SOFT_ARGMAX_BETA):
     """
     https://stackoverflow.com/questions/46926809/getting-around-tf-argmax-which-is-not-differentiable
@@ -59,11 +60,12 @@ def soft_argmax(x, beta=SOFT_ARGMAX_BETA):
         tf.nn.softmax(x * beta) * x_range, axis=-1)
 
 
+@tf.function(experimental_relax_shapes=True)
 def gaussian(x):
     return B.exp(-B.pow(x, 2))
 
 
-@tf.function
+@tf.function(experimental_relax_shapes=True)
 def hard_tanh(x, min=HARD_MIN, max=HARD_MAX):
     if x > max:
         return max * tf.ones_like(x)
@@ -73,7 +75,7 @@ def hard_tanh(x, min=HARD_MIN, max=HARD_MAX):
         return x
 
 
-@tf.function
+@tf.function(experimental_relax_shapes=True)
 def hard_lisht(x, min=HARD_MIN, max=HARD_MAX):
     if x < min or x > max:
         return max
@@ -81,7 +83,7 @@ def hard_lisht(x, min=HARD_MIN, max=HARD_MAX):
         return tf.math.abs(x)
 
 
-@tf.function
+@tf.function(experimental_relax_shapes=True)
 def lisht(x):
     """
     LiSHT: Non-Parametric Linearly Scaled Hyperbolic Tangent
@@ -100,14 +102,17 @@ def fast_gelu(x):
     return B.hard_sigmoid(1.702 * x) * x
 
 
+@tf.function(experimental_relax_shapes=True)
 def rrelu(x, min=RRELU_MIN, max=RRELU_MAX):
     return x if x >= 0 else tf.random.uniform(min, max) * x
 
 
+@tf.function(experimental_relax_shapes=True)
 def tanh_shrink(x):
     return x - B.tanh(x)
 
 
+@tf.function(experimental_relax_shapes=True)
 def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
     if x > max:
         return x
@@ -117,7 +122,7 @@ def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
         return 0
 
 
-FN_LOOKUP = {
+FNS = {
     'identity': tf.identity,
     'inverse': lambda x: -x,
     'soft_argmax': soft_argmax,
@@ -183,18 +188,19 @@ LAYERS = {
 
 
 def random_fn():
-    return FN_LOOKUP[random.choice(FN_LOOKUP.keys())],
+    return FNS[random.choice(FNS.keys())],
 
 
 def clean_activation(key):
     if callable(key):
         return key
-    return FN_LOOKUP[key]
+    return FNS[key]
 
 
-def Fn(key=DEFAULT):
+def Fn(AI, key=DEFAULT):
     if key is None:
-        key = 'identity'
+        key = DEFAULT
+    #     key = AI.pull("fn", list(LAYERS.keys()) + list(FNS.keys()), id=False)
     if key in LAYERS.keys():
         return LAYERS[key]()
     return L.Activation(clean_activation(key.lower()), name=make_id(key))

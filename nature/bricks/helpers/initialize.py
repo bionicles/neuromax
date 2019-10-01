@@ -1,10 +1,12 @@
 # https://towardsdatascience.com/hyper-parameters-in-action-part-ii-weight-initializers-35aee1a28404
 import tensorflow as tf
+
+
 from nature import EdgeOfChaos
 initializers = tf.keras.initializers
 
 
-DIST = "chaos"
+DIST = "truncated"
 
 
 def Init(dist=DIST):

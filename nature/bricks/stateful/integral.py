@@ -8,11 +8,12 @@ class Integral(L.Layer):
         super().__init__()
 
     def build(self, shape):
-        self.state = self.add_weight("state", shape, trainable=False)
+        self.state = self.add_weight("state", shape[1:], trainable=False)
         super().build(shape)
 
     @tf.function
     def call(self, x):
+        x = tf.reduce_mean(x, 0)
         self.state.assign_add(x)
         return self.state
 

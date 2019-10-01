@@ -1,11 +1,10 @@
 import tensorflow as tf
 
 from tools import next_power_of_two_past
-from nature import Conv1D, Norm
+import nature
 
 L = tf.keras.layers
 
-NORM = Norm
 UNITS = 4
 
 
@@ -16,21 +15,16 @@ def get_units(shape):
 
 class OP_1D(L.Layer):
 
-    def __init__(self, units=UNITS):
+    def __init__(self, AI, units=UNITS):
         super(OP_1D, self).__init__()
         self.d_out = units
+        self.ai = AI
 
     def build(self, shape):
-        self.layer_1 = Conv1D(units=get_units(shape))
-        self.layer_2 = Conv1D(units=self.d_out)
-        self.norm_1 = NORM()
-        self.norm_2 = NORM()
-        self.built = True
+        self.layer_1 = nature.Conv1D(units=get_units(shape))
+        self.layer_2 = nature.Conv1D(units=self.d_out)
+        super().build(shape)
 
     @tf.function
     def call(self, x):
-        x = self.layer_1(x)
-        x = self.norm_1(x)
-        x = self.layer_2(x)
-        x = self.norm_2(x)
-        return x
+        return self.layer_2(self.layer_1(x))

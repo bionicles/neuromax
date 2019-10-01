@@ -9,6 +9,8 @@ def get_size(shape):
     log(shape, color='yellow')
     if isinstance(shape, int):
         return shape
+    if len(shape) is 1:
+        return shape[0]
     if None in shape:
         raise Exception("cannot get size for shape:", shape)
     if is_tensor(shape):

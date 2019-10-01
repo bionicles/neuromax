@@ -1,11 +1,10 @@
 import tensorflow as tf
 
+
 from nature import Init, L1L2
 
 K = tf.keras
 L = K.layers
-
-
 LAYER_CLASS = L.Dense  # NoiseDrop
 INITIALIZER = Init
 REGULARIZER = L1L2
