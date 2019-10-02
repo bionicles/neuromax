@@ -13,8 +13,8 @@ class DenseBlock(L.Layer):
 
     def __init__(self, AI, layer_fn=LAYER_FN):
         super().__init__()
-        n_layers = AI.pull("dense_n_layers", LAYERS, id=False)
-        units = AI.pull("dense_units", UNITS, id=False)
+        n_layers = AI.pull("dense_n_layers", LAYERS)
+        units = AI.pull("dense_units", UNITS)
         self.d_increase = units * n_layers
         self.concat = L.Concatenate(-1)
         self.layers = []

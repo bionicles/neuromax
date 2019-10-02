@@ -6,7 +6,8 @@ class LogisticMap(L.Layer):
 
     def __init__(self):
         super(LogisticMap, self).__init__()
-        self.r = tf.random.uniform((), minval=3.57, maxval=4.)
+        self.r = 3.57
+        # self.r = tf.random.uniform((), minval=3.57, maxval=4.)
         self.built = True
 
     @tf.function

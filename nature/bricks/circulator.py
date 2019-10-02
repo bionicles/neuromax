@@ -1,14 +1,10 @@
 import tensorflow as tf
+from tools import error
 import nature
 
 L = tf.keras.layers
 LAYER_OPTIONS = [nature.Layer, nature.Attention, nature.MLP, nature.SWAG]
 LOOP_OPTIONS = [1, 2, 3, 4]
-
-
-# @tf.function(experimental_relax_shapes=True)
-def ERR(true, pred):
-    return tf.math.abs(tf.math.subtract(true, pred))
 
 
 class Circulator(L.Layer):
@@ -40,11 +36,11 @@ class Circulator(L.Layer):
             code = self.fn(self.encode(prev_reconstruction))
             reconstruction = self.fn(self.decode(code))
             errors.extend([
-                ERR(prev_prediction, prediction),
-                ERR(x, prediction) * 420.,
-                ERR(prev_reconstruction, reconstruction),
-                ERR(x, reconstruction) * 420.,
-                ERR(prev_code, code)])
+                error(prev_prediction, prediction),
+                error(x, prediction) * 420.,
+                error(prev_reconstruction, reconstruction),
+                error(x, reconstruction) * 420.,
+                error(prev_code, code)])
             prev_reconstruction = reconstruction
             prev_prediction = prediction
             prev_code = code

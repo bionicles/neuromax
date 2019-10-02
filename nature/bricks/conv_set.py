@@ -9,7 +9,7 @@ N = [2, 3]
 class ConvSet(L.Layer):
 
     def __init__(self, AI, units=None):
-        n = AI.pull(f"conv_set_n", N, id=False)
+        n = AI.pull(f"conv_set_n", N)
         super().__init__(name=make_id(f"conv_set_{n}"))
         self.call = self.call_for_two if n is 2 else self.call_for_three
         self.ai = AI

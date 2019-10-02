@@ -13,13 +13,13 @@ UNITS = 2048
 
 
 def FC(
+        units=UNITS,
         kernel_regularizer=REGULARIZER,
         activity_regularizer=REGULARIZER,
         bias_regularizer=REGULARIZER,
         kernel_initializer=INITIALIZER,
         bias_initializer=INITIALIZER,
         activation=ACTIVATION,
-        units=UNITS,
         **kwargs
         ):
     return LAYER_CLASS(

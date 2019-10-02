@@ -2,16 +2,16 @@ import tensorflow as tf
 from tools import get_size
 import nature
 
-LAYER = nature.Layer
 L = tf.keras.layers
+KEY = "identity"
 
 
 class Resizer(L.Layer):
 
-    def __init__(self, AI, out_shape, key=None, layer=None, hyper=None):
+    def __init__(self, AI, out_shape, key=KEY):
         super(Resizer, self).__init__()
         size = get_size(out_shape)
-        self.resize = nature.Layer(AI, units=size, layer_fn=layer, hyper=hyper)
+        self.resize = nature.FC(units=size)
         self.reshape = L.Reshape(out_shape)
         self.fn = nature.Fn(AI, key=key)
         self.out_shape = out_shape
@@ -23,8 +23,7 @@ class Resizer(L.Layer):
         x = self.flatten(x)
         x = self.resize(x)
         x = self.reshape(x)
-        x = self.fn(x)
-        return x
+        return self.fn(x)
 
     def compute_output_shape(self, shape):
         return self.out_shape

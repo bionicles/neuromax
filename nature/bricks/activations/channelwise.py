@@ -8,9 +8,10 @@ KEY = "logistic"
 
 class Channelwise(L.Layer):
 
-    def __init__(self, key=KEY):
+    def __init__(self, AI, key=KEY):
         super().__init__()
         self.keys = key
+        self.ai = AI
 
     def build(self, shape):
         d_in = shape[-1]
@@ -21,8 +22,8 @@ class Channelwise(L.Layer):
         self.split = L.Lambda(lambda x: tf.split(x, d_in, -1))
         self.fns = []
         for k in range(d_in):
-            fn = Fn(key=self.keys[k])
-            super().__setattr__(self, f"fn_{k}", fn)
+            fn = Fn(self.ai, key=self.keys[k])
+            super().__setattr__(self, f"f_{k}", fn)
             self.fns.append((k, fn))
         self.concat = L.Concatenate(-1)
         self.built = True

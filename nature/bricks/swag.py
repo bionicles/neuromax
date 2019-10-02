@@ -1,9 +1,16 @@
+# The SWAG Algorithm (loosely based on)
+# https://arxiv.org/abs/1811.11813
+
+# also similar to a N-ary generalization of:
+# Universal Approximation with Quadratic Deep Networks
+# https://arxiv.org/pdf/1808.00098.pdf
+
 import tensorflow as tf
 import nature
 
 L = tf.keras.layers
 LAYER = nature.Layer
-MIN_POWER, MAX_POWER = 2, 8
+MIN_POWER, MAX_POWER = 1, 4
 
 
 class SWAG(L.Layer):

@@ -1,4 +1,4 @@
-from tensorflow_addons.activations import sparsemax
+from tensorflow_addons.activations import sparsemax, gelu
 import tensorflow as tf
 import random
 
@@ -16,7 +16,7 @@ DEFAULT = 'tanh'
 
 @tf.function(experimental_relax_shapes=True)
 def logistic_map(x):
-    r = tf.random.uniform((), minval=3.57, maxval=4.)
+    r = tf.random.truncated_normal((), mean=3.57, stddev=0.005)
     min = tf.math.reduce_min(x)
     x = (x - min) / (tf.math.reduce_max(x) - min)
     return r * x * (1. - x)
@@ -92,9 +92,9 @@ def lisht(x):
     return (B.tanh(x) * x)
 
 
-@tf.function(experimental_relax_shapes=True)
-def gelu(x):
-    return 0.5 * x * (1 + B.tanh(x * 0.7978845608 * (1 + 0.044715 * x * x)))
+# @tf.function(experimental_relax_shapes=True)
+# def gelu(x):
+#     return 0.5 * x * (1 + B.tanh(x * 0.7978845608 * (1 + 0.044715 * x * x)))
 
 
 @tf.function(experimental_relax_shapes=True)
@@ -108,12 +108,12 @@ def rrelu(x, min=RRELU_MIN, max=RRELU_MAX):
 
 
 @tf.function(experimental_relax_shapes=True)
-def tanh_shrink(x):
+def tanhshrink(x):
     return x - B.tanh(x)
 
 
 @tf.function(experimental_relax_shapes=True)
-def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
+def hardshrink(x, min=HARD_MIN, max=HARD_MAX):
     if x > max:
         return x
     elif x < min:
@@ -122,8 +122,31 @@ def hard_shrink(x, min=HARD_MIN, max=HARD_MAX):
         return 0
 
 
+# https://pdfs.semanticscholar.org/4be0/701f2d2a34ffb746595bcb251c091ff4a702.pdf
+# best on cifar 100:
+@tf.function(experimental_relax_shapes=True)
+def evolved_1(x):
+    if x < 0.:
+        x = B.hard_sigmoid(x) * B.elu(x)
+    elif x >= 0.:
+        x = B.hard_sigmoid(x) * tf.nn.selu(x)
+    return x
+
+
+# best on cifar_10:
+@tf.function(experimental_relax_shapes=True)
+def evolved_2(x):
+    if x < 0.:
+        x = B.softplus(x) * B.elu(x)
+    elif x >= 0.:
+        x = B.hard_sigmoid(x) * x
+    return x
+
+
 FNS = {
     'identity': tf.identity,
+    'evolved_1': evolved_1,
+    'evolved_2': evolved_2,
     'inverse': lambda x: -x,
     'soft_argmax': soft_argmax,
     'random_logistic_map': logistic_map,
@@ -135,8 +158,8 @@ FNS = {
     'softsign': B.softsign,
     'sparsemax': sparsemax,
     'hard_lisht': hard_lisht,
-    'hard_shrink': hard_shrink,
-    'tanh_shrink': tanh_shrink,
+    'hard_shrink': hardshrink,
+    'tanh_shrink': tanhshrink,
     'hard_lisht': hard_lisht,
     'hard_tanh': hard_tanh,
     'gaussian': gaussian,
@@ -200,7 +223,7 @@ def clean_activation(key):
 def Fn(AI, key=DEFAULT):
     if key is None:
         key = DEFAULT
-    #     key = AI.pull("fn", list(LAYERS.keys()) + list(FNS.keys()), id=False)
+    #     key = AI.pull("fn", list(LAYERS.keys()) + list(FNS.keys()))
     if key in LAYERS.keys():
         return LAYERS[key]()
     return L.Activation(clean_activation(key.lower()), name=make_id(key))

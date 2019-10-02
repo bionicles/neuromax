@@ -13,11 +13,9 @@ class Linear(L.Layer):
     def __init__(self):
         super(Linear, self).__init__()
         self.m = self.add_weight(
-            initializer=tf.keras.initializers.ones(),
-            regularizer=L1L2(), trainable=True)
+            initializer="ones", regularizer=L1L2(), trainable=True)
         self.b = self.add_weight(
-            initializer="glorot_normal",
-            regularizer=L1L2(), trainable=True)
+            initializer="glorot_normal", regularizer=L1L2(), trainable=True)
 
     @tf.function
     def call(self, x):

@@ -3,7 +3,7 @@ import nature
 
 
 LAYER = nature.Layer
-MIN_LAYERS, MAX_LAYERS = 1, 4
+MIN_LAYERS, MAX_LAYERS = 2, 3
 UNITS_OPTIONS = [64, 128, 256]
 
 

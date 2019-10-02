@@ -12,8 +12,8 @@ def wrap(opt):
 
 
 def Radam(AI):
-    steps = AI.pull("steps", 1e4, 1e6, log_uniform=True, id=False)
-    warmup = AI.pull("warmup", 10, 1000, id=False)
+    steps = AI.pull("radam_steps", 1e4, 1e6, log_uniform=True)
+    warmup = AI.pull("radam_warmup", 10, 1000)
     proportion = warmup / steps
     opt = RAdamOptimizer(
         learning_rate=1e-3, min_lr=1e-5,

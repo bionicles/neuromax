@@ -3,7 +3,7 @@ import os
 
 from tools import log
 
-FOLDER = '.'
+FOLDER = './pngs'
 
 
 def screenshot_graph(G, filename, folder=FOLDER):

@@ -7,11 +7,12 @@ AXIS = 1
 
 class Merge(L.Layer):
 
-    def __init__(self, code_shape, axis=AXIS):
-        super(Merge, self).__init__()
-        self.code_shape = code_shape
-        self.d_code = code_shape[-1]
+    def __init__(self, AI, axis=AXIS):
+        super().__init__()
+        self.code_shape = AI.code_spec.shape
+        self.d_code = self.code_shape[-1]
         self.axis = axis
+        self.ai = AI
 
     def build(self, shapes):
         self.expander = L.Lambda(lambda x: tf.expand_dims(x, -1))

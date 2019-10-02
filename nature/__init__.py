@@ -5,6 +5,7 @@ from nature.bricks.helpers.regularize import L1L2, Regularizer
 from nature.bricks.built_in.drop import Drop
 from nature.bricks.helpers.chaos import EdgeOfChaos
 from nature.bricks.helpers.initialize import Init
+from nature.bricks.projector import Projector
 from nature.bricks.built_in.input import Input
 from nature.bricks.built_in.conv_1D import Conv1D
 from nature.bricks.built_in.conv_2D import Conv2D
@@ -38,6 +39,7 @@ from nature.bricks.stateful.derivative import Derivative
 from nature.bricks.stateful.delta import Delta
 from nature.bricks.stateful.transformer import Transformer
 from nature.bricks.stateful.pid import PID
+from nature.bricks.stateful.echo import Echo
 from nature.bricks.residual import ResBlock
 from nature.bricks.mlp import MLP
 from nature.bricks.circulator import Circulator

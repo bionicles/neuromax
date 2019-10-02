@@ -6,7 +6,7 @@ K = tf.keras
 
 SHOW_SHAPES = False
 SUMMARIZE = True
-FOLDER = "."
+FOLDER = './pngs'
 
 
 def plot_model(

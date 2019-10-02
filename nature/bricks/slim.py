@@ -12,7 +12,7 @@ N_OPTIONS = [16, 32, 64]
 class Slim(L.Layer):
 
     def __init__(self, AI, units=None):
-        self.N = AI.pull("slim_n", N_OPTIONS, id=False)
+        self.N = AI.pull("slim_n", N_OPTIONS)
         super().__init__(name=make_id(f"slim_{self.N}"))
         self.ai = AI
 

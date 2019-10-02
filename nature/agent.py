@@ -15,12 +15,12 @@ MAE = L.MeanAbsoluteError(reduction=L.Reduction.NONE)
 TASK_PREPPERS = [get_images]
 OPTIMIZER = Radam
 BUFFER = 9001
-REPEATS = 42
-STEPS = 10
+STEPS = 420
 
-D_CODE_OPTIONS = [1, 2, 4, 8, 16, 32]
+# D_CODE_OPTIONS = [1, 2, 4, 8, 16, 32]
+D_CODE_OPTIONS = [4]
 IMAGE_SHAPE = (16, 16, 1)
-CODE_SHAPE = [4, 4]
+CODE_SHAPE = [16, 4]
 LOSS_SHAPE = (3,)
 BATCH = 32
 
@@ -30,7 +30,7 @@ class Agent:
 
     def __init__(self, trial):
         self.hp = trial
-        CODE_SHAPE[-1] = self.pull("d_code", D_CODE_OPTIONS, id=False)
+        CODE_SHAPE[-1] = self.pull("d_code", D_CODE_OPTIONS)
         self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
         self.code_spec = get_spec(shape=CODE_SHAPE, format="code")
         self.loss_spec = get_spec(shape=LOSS_SHAPE, format="loss")
@@ -45,20 +45,13 @@ class Agent:
         task = self.add_specs(choice(TASK_PREPPERS)(self))
         task.graph, task.model = TaskModel(
             self, in_specs=task.in_specs, out_specs=task.out_specs)
-        params = B.log(tf.cast(task.model.count_params(), tf.float32))
-        for repeat in range(REPEATS):
-            with tf.device("/gpu:0"):
-                objective = self.run_data_session(repeat, task)
-            objective = objective * params
-            self.objectives.append(objective)
-            log(f"OBJECTIVE {repeat}: {objective}", color="green", debug=True)
-            self.hp.report(objective, repeat)
-            # Handle pruning based on the intermediate value.
-            if self.hp.should_prune() or tf.math.is_nan(objective):
-                raise optuna.structs.TrialPruned()
-        self.objective = tf.math.reduce_mean(self.objectives)
-        log("OBJECTIVE", self.objective, "PARAMS", params, color="blue")
-        self.objective = self.objective * params
+        params = tf.math.log(tf.cast(task.model.count_params(), tf.float32))
+        data, model, loss = task.data, task.model, task.loss
+        last_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
+        with tf.device("/gpu:0"):
+            objective = self.run_data_session(data, model, loss, last_pred)
+        self.objective = objective * params
+        log(f"OBJECTIVE {self.objective}", color="green", debug=True)
 
     def add_specs(self, task):
         in_specs, out_specs = list(task.in_specs), list(task.out_specs)
@@ -67,15 +60,13 @@ class Agent:
         task.in_specs, task.out_specs = in_specs, out_specs
         return task
 
-    @tf.function
-    def run_data_session(self, repeat, task):
-        data, model, loss = task.data, task.model, task.loss
-        last_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
+    @tf.function(experimental_relax_shapes=True)
+    def run_data_session(self, data, model, loss, last_pred):
         last_loss = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
         v_pred, criticism = tf.ones_like(last_loss), tf.ones_like(last_loss)
         last_true = tf.ones_like(last_pred)
         objective = 0.
-        for step, (image, y_true) in data.shuffle(BUFFER).take(STEPS).enumerate():
+        for step, (image, y_true) in data.take(STEPS).enumerate():
             with tf.GradientTape() as tape:
                 y_pred, v_pred, criticism = model([
                     image, last_true, last_pred, v_pred, criticism, last_loss])
@@ -91,37 +82,36 @@ class Agent:
             v_loss = tf.expand_dims(v_loss, -1)
             last_loss = tf.concat([class_loss, v_loss, c_loss], -1)
             last_true, last_pred = tf.identity(y_true), tf.identity(y_pred)
-            # correct = tf.math.reduce_sum(tf.math.argmax(y_true, axis=1) == tf.math.argmax(y_pred, axis=1))
             tf.print(
-                repeat, step, "L:", prettify(class_loss),
+                step, "L:", prettify(class_loss),
                 "P:", prettify(v_pred), prettify(criticism),
                 "E:", prettify(v_loss), prettify(c_loss))
             objective = objective + tf.math.reduce_sum(last_loss)
         return objective
 
-    def pull(self, *args, log_uniform=False, id=True):
+    def pull(self, *args, log_uniform=False, id=False):
         args = list(args)
         assert isinstance(args[0], str)
         if id:
             args[0] = make_id(args[0])
         if isinstance(args[1], list):
-            # Categorical parameter
+            # Categorical
             # opt = trial.suggest_categorical('optimizer', ['MomentumSGD', 'Adam'])
             return self.log_and_return(args, self.hp.suggest_categorical(*args))
         elif isinstance(args[1], int) and isinstance(args[2], int):
-            # Int parameter
+            # Int
             # num_layers = trial.suggest_int('num_layers', 1, 3)
             return self.log_and_return(args, self.hp.suggest_int(*args))
         elif isinstance(args[1], float) and isinstance(args[2], float):
-            # Uniform parameter
+            # Uniform
             # dropout_rate = trial.suggest_uniform('dropout_rate', 0.0, 1.0)
-            # Loguniform parameter
+            # Loguniform
             # learning_rate = trial.suggest_loguniform('learning_rate', 1e-5, 1e-2)
             if log_uniform:
                 return self.log_and_return(args, self.hp.suggest_loguniform(*args))
             return self.log_and_return(args, self.hp.suggest_uniform(*args))
         elif len(args) is 4:
-            # Discrete-uniform parameter
+            # Discrete-uniform
             # drop_path_rate = trial.suggest_discrete_uniform('drop_path_rate', 0.0, 1.0, 0.1)
             return self.log_and_return(args, self.hp.suggest_discrete_uniform(*args))
         else:

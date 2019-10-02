@@ -1,7 +1,10 @@
+# https://arxiv.org/pdf/1908.10920.pdf
+# https://arxiv.org/pdf/1805.08266.pdf
 import tensorflow as tf
 
 DISTRIBUTION = "normal"
-PHI = 1.618 * (1. - (0.2 ** 4))
+# SCALE = 1.618 * (1. - (0.2 ** 4))
+SCALE = 1.75 * (1. - (0.2 ** 4))
 MODE = 'fan_avg'
 
 
@@ -24,7 +27,7 @@ class EdgeOfChaos(tf.keras.initializers.VarianceScaling):
     def __init__(self, seed=None):
         super(EdgeOfChaos, self).__init__(
             distribution=DISTRIBUTION,
-            scale=PHI,
+            scale=SCALE,
             mode=MODE,
             seed=seed)
 

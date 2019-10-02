@@ -3,6 +3,7 @@ from tools.next_power_of_two_past import next_power_of_two_past
 from tools.get_kl_from_uniform import get_kl_from_uniform
 from tools.compute_entropy import compute_entropy
 from tools.tile_for_batch import tile_for_batch
+from tools.spectral_norm import spectral_norm
 from tools.get_uniform import get_uniform
 from tools.map_attrdict import map_attrdict
 from tools.safe_sample import safe_sample
@@ -18,5 +19,6 @@ from tools.prettify import prettify
 from tools.make_id import make_id
 from tools.get_hw import get_hw
 from tools.add_up import add_up
+from tools.error import error
 from tools.stack import stack
 from tools.pipe import pipe

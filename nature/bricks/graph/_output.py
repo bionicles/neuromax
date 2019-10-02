@@ -20,7 +20,7 @@ def get_output(G, AI, id):
     else:
         inputs = [get_output(G, AI, p) for p in list(G.predecessors(id))]
         if len(inputs) > 1:
-            inputs = nature.Merge(AI.code_spec.shape)(inputs)
+            inputs = nature.Merge(AI)(inputs)
         else:
             inputs = inputs[0]
         if node_type is "merge":

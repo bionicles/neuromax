@@ -2,22 +2,22 @@ import tensorflow as tf
 import nature
 
 L = tf.keras.layers
-FIRST_OPTIONS = [nature.SWAG, nature.MLP, nature.Attention]
+FIRST_OPTIONS = ["SWAG", "MLP", "Attention"]
 LAYER = nature.FC
 FN2 = 'softmax'
 
 
 class Classifier(L.Layer):
     def __init__(self, AI, shape):
-        super(Classifier, self).__init__()
+        first = AI.pull("regresser_first_layer", FIRST_OPTIONS)
+        super().__init__(name=f"classifier_{first}")
+        self.first = getattr(nature, first)
         self.out_shape = shape
         self.ai = AI
 
     def build(self, shape):
-        first = self.ai.pull("classifier_first_layer", FIRST_OPTIONS, id=False)
-        self.one = first(self.ai, layer_fn=LAYER)
-        self.resize = nature.Resizer(
-            self.ai, self.out_shape, layer=LAYER, key=FN2)
+        self.one = self.first(self.ai, layer_fn=LAYER)
+        self.resize = nature.Resizer(self.ai, self.out_shape, key=FN2)
         super().build(shape)
 
     @tf.function

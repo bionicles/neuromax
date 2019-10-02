@@ -8,7 +8,7 @@ L = tf.keras.layers
 
 
 def Chain(AI, units=UNITS):
-    n_bricks = AI.pull("chain_length", MIN, MAX, id=False)
+    n_bricks = AI.pull("chain_length", MIN, MAX)
 
     def call(x):
         arr = []

@@ -4,7 +4,7 @@ from nature import add_node, get_output, screenshot_graph
 from tools import plot_model, log
 
 K, L = tf.keras, tf.keras.layers
-MIN_STACKS, MAX_STACKS = 0, 2
+MIN_STACKS, MAX_STACKS = 1, 1
 
 
 def TaskGraph(AI, in_specs, out_specs):
@@ -16,7 +16,7 @@ def TaskGraph(AI, in_specs, out_specs):
     add_node(G, "m_2", "black", "circle", "merge")
     add_node(G, "sink", "gold", "cylinder", "sink")
     G.add_edges_from([('m_0', 'm_1'), ('m_1', 'm_2'), ('m_2', 'critic')])
-    n_stacks = AI.pull("n_stacks", MIN_STACKS, MAX_STACKS, id=False)
+    n_stacks = AI.pull("n_stacks", MIN_STACKS, MAX_STACKS)
     for i in range(n_stacks):
         add_node(G, i, "black", "square", "brick")
         G.add_edges_from([("m_0", i), (i, 'm_1')])
