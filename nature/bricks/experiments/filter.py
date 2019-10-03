@@ -13,8 +13,7 @@ class Filter(L.Layer):
         self.filter = N.OP(self.ai, units=1)
         super().built(shape)
 
+    @tf.function
     def call(self, x):
-        d_out = tf.shape(x)[-1]
-        y = self.filter(x)
-        y = tf.tile(y, [1, 1, d_out])
-        return self.multiply([x, y])
+        return self.multiply([
+            x, tf.tile(self.filter(x), [1, 1, tf.shape(x)[-1]])])
