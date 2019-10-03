@@ -43,7 +43,7 @@ def Model(G, AI):
 
 def TaskModel(AI, in_specs, out_specs):
     G = TaskGraph(AI, in_specs, out_specs)
-    screenshot_graph(G, f'graph_{AI.hp.number}')
+    # screenshot_graph(G, f'graph_{AI.hp.number}')
     model = Model(G, AI)
-    plot_model(model, f"model_{AI.hp.number}")
+    # plot_model(model, f"model_{AI.hp.number}")
     return G, model

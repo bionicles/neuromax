@@ -3,6 +3,7 @@ import tensorflow as tf
 L = tf.keras.layers
 
 
+@tf.function
 def update(existing_aggregate, new_value):
     """
     for a new value, compute the new count, new mean, the new M2.
@@ -20,6 +21,7 @@ def update(existing_aggregate, new_value):
     return (count, mean, M2)
 
 
+@tf.function
 def finalize(existing_aggregate):
     """retrieve the mean, variance and sample variance from an aggregate"""
     (count, mean, M2) = existing_aggregate
@@ -33,10 +35,11 @@ def finalize(existing_aggregate):
 class OnlineStats(L.Layer):
 
     def __init__(self, x):
-        super(OnlineStats, self).__init__()
+        super().__init__()
         zeros = tf.zeros_like(x)
         self.aggregate = (0, zeros, zeros)
 
+    @tf.function
     def call(self, x):
         self.aggregate = update(self.aggregate, x)
         mean, variance, sample_variance = finalize(self.aggregate)

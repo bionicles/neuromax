@@ -1,7 +1,6 @@
 # agent.py - handle multitask AI
 from random import choice
 import tensorflow as tf
-import optuna
 from tools import get_spec, get_uniform, prettify, make_id, log
 from nature import TaskModel, Radam
 from nurture import get_images
@@ -15,7 +14,7 @@ MAE = L.MeanAbsoluteError(reduction=L.Reduction.NONE)
 TASK_PREPPERS = [get_images]
 OPTIMIZER = Radam
 BUFFER = 9001
-STEPS = 420
+STEPS = 10
 
 # D_CODE_OPTIONS = [1, 2, 4, 8, 16, 32]
 D_CODE_OPTIONS = [4]

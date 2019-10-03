@@ -6,7 +6,7 @@ from nature import EdgeOfChaos
 initializers = tf.keras.initializers
 
 
-DIST = "truncated"
+DIST = "chaos"
 
 
 def Init(dist=DIST):

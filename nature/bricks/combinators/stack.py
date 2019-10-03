@@ -9,7 +9,7 @@ def Stack(AI, units=UNITS):
 
     def call(x):
         for n in range(n_bricks):
-            brick = nature.Brick(f"stack_brick_{n}", AI, no_combinators=True)
+            brick = nature.Brick(f"stack_brick_{n}", AI, no_combinators=1)
             x = brick(AI, units=units)(x)
         return x
     return call
