@@ -5,6 +5,7 @@ from tools import get_spec, get_uniform, prettify, make_id, log
 from nature import TaskModel, Radam
 from nurture import get_images
 
+
 DTYPE = tf.float32
 B = tf.keras.backend
 L = tf.keras.losses
@@ -13,12 +14,11 @@ CLASSIFIER_LOSS = L.CategoricalCrossentropy(reduction=L.Reduction.NONE)
 MAE = L.MeanAbsoluteError(reduction=L.Reduction.NONE)
 TASK_PREPPERS = [get_images]
 OPTIMIZER = Radam
-BUFFER = 9001
-STEPS = 10
+STEPS = 42
 
 # D_CODE_OPTIONS = [1, 2, 4, 8, 16, 32]
+D_IMAGE_OPTIONS = [8, 16, 28]
 D_CODE_OPTIONS = [4]
-IMAGE_SHAPE = (16, 16, 1)
 CODE_SHAPE = [16, 4]
 LOSS_SHAPE = (3,)
 BATCH = 32
@@ -28,9 +28,11 @@ class Agent:
     """Entity which solves tasks using models made of bricks"""
 
     def __init__(self, trial):
-        self.hp = trial
-        CODE_SHAPE[-1] = self.pull("d_code", D_CODE_OPTIONS)
-        self.image_spec = get_spec(shape=IMAGE_SHAPE, format="image")
+        self.trial = trial
+        CODE_SHAPE[-1] = self.d_code = self.pull("d_code", D_CODE_OPTIONS)
+        self.d_image = self.pull('d_image', D_IMAGE_OPTIONS)
+        self.image_spec = get_spec(
+            shape=(self.d_image, self.d_image, 1), format="image")
         self.code_spec = get_spec(shape=CODE_SHAPE, format="code")
         self.loss_spec = get_spec(shape=LOSS_SHAPE, format="loss")
         self.classifier_loss = CLASSIFIER_LOSS
@@ -39,12 +41,15 @@ class Agent:
         self.objectives = []
         self.batch = BATCH
         self.practice()
+        self.trial.set_user_attr(
+            'dataset', f'{STEPS} steps of {self.d_image}x{self.d_image} mnist')
 
     def practice(self):
         task = self.add_specs(choice(TASK_PREPPERS)(self))
         task.graph, task.model = TaskModel(
             self, in_specs=task.in_specs, out_specs=task.out_specs)
         params = tf.math.log(tf.cast(task.model.count_params(), tf.float32))
+        log("PARAMS {params}", color="green", debug=True)
         data, model, loss = task.data, task.model, task.loss
         last_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
         with tf.device("/gpu:0"):
@@ -86,40 +91,37 @@ class Agent:
                 "P:", prettify(v_pred), prettify(criticism),
                 "E:", prettify(v_loss), prettify(c_loss))
             objective = objective + tf.math.reduce_sum(last_loss)
-        return objective
+        return tf.math.log(objective)
 
     def pull(self, *args, log_uniform=False, id=False):
         args = list(args)
         assert isinstance(args[0], str)
-        if id:
-            args[0] = make_id(args[0])
+        args[0] = make_id(args[0]) if id else args[0]
+        # opt = trial.suggest_categorical('optimizer', ['MomentumSGD', 'Adam'])
         if isinstance(args[1], list):
-            # Categorical
-            # opt = trial.suggest_categorical('optimizer', ['MomentumSGD', 'Adam'])
-            return self.log_and_return(args, self.hp.suggest_categorical(*args))
+            return self.log_and_return(
+                args, self.trial.suggest_categorical(*args))
+        # num_layers = trial.suggest_int('num_layers', 1, 3)
         elif isinstance(args[1], int) and isinstance(args[2], int):
-            # Int
-            # num_layers = trial.suggest_int('num_layers', 1, 3)
-            return self.log_and_return(args, self.hp.suggest_int(*args))
+            return self.log_and_return(args, self.trial.suggest_int(*args))
+        # learning_rate = trial.suggest_loguniform('learning_rate', 1e-5, 1e-2)
+        # dropout_rate = trial.suggest_uniform('dropout_rate', 0.0, 1.0)
         elif isinstance(args[1], float) and isinstance(args[2], float):
-            # Uniform
-            # dropout_rate = trial.suggest_uniform('dropout_rate', 0.0, 1.0)
-            # Loguniform
-            # learning_rate = trial.suggest_loguniform('learning_rate', 1e-5, 1e-2)
             if log_uniform:
-                return self.log_and_return(args, self.hp.suggest_loguniform(*args))
-            return self.log_and_return(args, self.hp.suggest_uniform(*args))
+                return self.log_and_return(
+                    args, self.trial.suggest_loguniform(*args))
+            return self.log_and_return(args, self.trial.suggest_uniform(*args))
+        # rate = trial.suggest_discrete_uniform('rate', 0.0, 1.0, 0.1)
         elif len(args) is 4:
-            # Discrete-uniform
-            # drop_path_rate = trial.suggest_discrete_uniform('drop_path_rate', 0.0, 1.0, 0.1)
-            return self.log_and_return(args, self.hp.suggest_discrete_uniform(*args))
+            return self.log_and_return(
+                args, self.trial.suggest_discrete_uniform(*args))
         else:
             log("FAILED TO PULL FOR ARGS", args, color="red")
             raise Exception("AI.Pull failed")
 
     @staticmethod
     def log_and_return(args, hp):
-        log(f"HP {args[0]}", hp)
+        log(f"HP {args}: {hp}")
         return hp
     # @tf.function
     # def run_env_episode(self):
