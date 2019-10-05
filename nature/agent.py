@@ -100,7 +100,7 @@ class Agent:
                 step, "L:", prettify(class_loss),
                 "P:", prettify(v_pred), prettify(criticism),
                 "E:", prettify(v_loss), prettify(c_loss))
-            sum_loss = tf.math.reduce_sum(last_loss)
+            sum_loss = tf.math.reduce_mean(last_loss)
             objectives.append(sum_loss)
         tf.print("objectives", objectives)
         mean = tf.math.reduce_mean(objectives)
