@@ -6,7 +6,7 @@ L = tf.keras.layers
 
 def get_output(G, AI, id):
     node = G.node[id]
-    log('get output for', node, color="red")
+    log('get output for', node)
     if node["shape"] is "cylinder":
         return
     if node["output"] is not None:

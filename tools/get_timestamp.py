@@ -1,13 +1,16 @@
+from subprocess import check_output
 from datetime import datetime
 import pytz
 
 # https://docs.python.org/3/library/datetime.html#strftime-strptime-behavior
-FORMAT = "%d %B %Y (%A) by BAH on HHI 16.04 TF 2.0 GTX 1070 at %X %p %Z"
+FORMAT = "%X %p %Z %A %-d %B %Y"
 TIMEZONE = "US/Eastern"
 
 
 def get_timestamp():
-    return pytz.timezone(TIMEZONE).localize(datetime.now()).strftime(FORMAT)
+    stamp = pytz.timezone(TIMEZONE).localize(datetime.now()).strftime(FORMAT)
+    hash = check_output('git describe --always', shell=True).decode().rstrip()
+    return f'{stamp} on git {hash}'
 
 
 # http://pytz.sourceforge.net/

@@ -7,7 +7,7 @@ K, L, B = tf.keras, tf.keras.layers, tf.keras.backend
 
 
 def Coordinator(shape):
-    log("build coordinator with shape:", shape, debug=True, color='green')
+    log("build coordinator with shape:", shape)
     if len(shape) is 2:
         return ConcatCoords2D()
     elif len(shape) is 3:

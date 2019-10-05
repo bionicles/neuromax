@@ -8,12 +8,12 @@ import tensorflow as tf
 import nature
 
 L = tf.keras.layers
-UNITS = 4
+UNITS = 1024
 
 
-def get_units(shape):
-    # units = tf.math.reduce_prod(shape) / 5 + 4
-    return 64
+# def get_units(shape):
+#     # units = tf.math.reduce_prod(shape) / 5 + 4
+#     return 1024
 
 
 class OP_FC(L.Layer):
@@ -23,7 +23,7 @@ class OP_FC(L.Layer):
         self.units = units
 
     def build(self, shape):
-        self.one = nature.FC(units=get_units(shape))
+        self.one = nature.FC(units=UNITS)
         self.two = nature.FC(units=self.units)
         super().build(shape)
 

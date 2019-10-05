@@ -14,7 +14,7 @@ def Chain(AI, units=UNITS):
         arr = []
         y = x
         for n in range(n_bricks):
-            brick = nature.Brick(f"chain_{id}_brick_{n}", AI, no_combinators=1)
+            brick = nature.Brick(f"chain_brick_{n}", AI, no_combinators=1)
             y = brick(AI, units=units)(y)
             arr.append(y)
         return L.Concatenate(1)(arr)

@@ -1,4 +1,4 @@
-from keras_radam.training import RAdamOptimizer
+from tensorflow_addons.optimizers import MovingAverage, Lookahead, RectifiedAdam
 import tensorflow as tf
 
 
@@ -6,19 +6,12 @@ Opt = tf.keras.optimizers
 
 
 def wrap(opt):
-    return opt
-    # return MovingAverage(opt)
-    # return Lookahead(opt, sync_period=6, slow_step_size=0.5)
+    return MovingAverage(Lookahead(opt))
 
 
 def Radam(AI):
-    steps = AI.pull("radam_steps", 1e4, 1e6, log_uniform=True)
-    warmup = AI.pull("radam_warmup", 10, 1000)
-    proportion = warmup / steps
-    opt = RAdamOptimizer(
-        learning_rate=1e-3, min_lr=1e-5,
-        total_steps=steps, warmup_proportion=proportion, amsgrad=True)
-    return wrap(opt)
+    steps = AI.pull("radam_steps", 1e2, 1e5, log_uniform=True)
+    return wrap(RectifiedAdam(total_steps=steps))
 
 
 # def SGD():

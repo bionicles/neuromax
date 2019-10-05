@@ -4,7 +4,7 @@ from nature import add_node, get_output, screenshot_graph
 from tools import plot_model, log
 
 K, L = tf.keras, tf.keras.layers
-MIN_STACKS, MAX_STACKS = 1, 1
+MIN_STACKS, MAX_STACKS = 0, 4
 
 
 def TaskGraph(AI, in_specs, out_specs):

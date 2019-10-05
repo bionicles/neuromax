@@ -1,17 +1,14 @@
 import tensorflow as tf
-
-# from tools import get_size, next_power_of_two_past
+from tools import get_size
 import nature
 
 L = tf.keras.layers
-
 UNITS = 4
 
 
 def get_units(shape):
-    return 64
-    # d_in = get_size(shape)
-    # return next_power_of_two_past(d_in * d_in + 4)
+    d_in = get_size(shape)
+    return d_in * d_in + 1
 
 
 class OP_1D(L.Layer):

@@ -3,7 +3,7 @@ from tools import error
 import nature
 
 L = tf.keras.layers
-LAYER_OPTIONS = [nature.Layer, nature.Attention, nature.MLP, nature.SWAG]
+LAYER_OPTIONS = ['Layer', 'Attention', 'MLP', 'SWAG']
 LOOP_OPTIONS = [1, 2, 3, 4]
 
 
@@ -12,7 +12,8 @@ class Circulator(L.Layer):
     def __init__(self, AI, units=None, layer_fn=None):
         super().__init__()
         if not layer_fn:
-            self.layer = AI.pull("circulator_layer", LAYER_OPTIONS, id=False)
+            layer = AI.pull("circulator_layer", LAYER_OPTIONS, id=False)
+            self.layer = getattr(nature, layer)
         self.n_loops = AI.pull("circulator_loops", LOOP_OPTIONS, id=False)
         self.ai = AI
 

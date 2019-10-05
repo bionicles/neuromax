@@ -2,6 +2,7 @@ import tensorflow as tf
 
 from .tile_for_batch import tile_for_batch
 
+
 def get_uniform(x, batch=None):
     shape = x
     if tf.is_tensor(x):

@@ -25,14 +25,11 @@ def get_images(AI, key=DEFAULT_DATASET):
     n_classes = info.features["label"].num_classes
 
     def unpack(element):
-        image, label = element['image'], element['label']
-        image = tf.image.resize(tf.cast(image, tf.float32), hw)
-        label = tf.cast(tf.one_hot(label, n_classes), tf.float32)
+        image = tf.image.resize(tf.cast(element['image'], tf.float32), hw)
+        label = tf.cast(tf.one_hot(element['label'], n_classes), tf.float32)
         return image, label
-    data = data.map(unpack).batch(AI.batch).repeat(10)
+    data = data.map(unpack).batch(AI.batch)
     data = data.prefetch(tf.data.experimental.AUTOTUNE)
-    out_specs = [get_spec(n=n_classes, format="onehot")]
-    in_specs = [AI.image_spec]
     return AttrDict(
-        key=key, data=data, loss=AI.classifier_loss,
-        in_specs=in_specs, out_specs=out_specs)
+        key=key, data=data, loss=AI.classifier_loss, in_specs=[AI.image_spec],
+        out_specs=[get_spec(n=n_classes, format="onehot")])

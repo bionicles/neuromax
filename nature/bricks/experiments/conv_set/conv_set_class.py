@@ -61,9 +61,9 @@ class KConvSet1D(L.Layer):
 
     def call_all_for_one(self, inputs):  # output unknown = ragged actuator
         """All input elements innervate each output element"""
-        log("")
-        log("we map all inputs onto one output", color="green")
-        log(f"[{self.in_spec.shape}] in_spec", color="white")
+        # log("")
+        # log("we map all inputs onto one output", color="green")
+        # log(f"[{self.in_spec.shape}] in_spec", color="white")
         code, placeholder = inputs
         placeholder_with_coords = concat_1D_coords(placeholder)
         placeholder_with_coords = tf.squeeze(placeholder_with_coords, 0)
@@ -75,10 +75,10 @@ class KConvSet1D(L.Layer):
             lambda coord: self.kernel(
                 tf.concat([code, coord], 0)
                 ), tf.expand_dims(coords, 1))
-        log(f"[{self.out_spec.shape}] out_spec", color="blue")
+        # log(f"[{self.out_spec.shape}] out_spec", color="blue")
         output = tf.reduce_sum(output, 1)
-        log(list(output.shape), "output", color="yellow")
-        log("")
+        # log(list(output.shape), "output", color="yellow")
+        # log("")
         return output
 
     # TODO: find a nice recursive approach to N-ary set convolutions

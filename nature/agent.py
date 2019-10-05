@@ -1,27 +1,28 @@
 # agent.py - handle multitask AI
 from random import choice
 import tensorflow as tf
-from tools import get_spec, get_uniform, prettify, make_id, log
+import optuna
+
+from tools import get_spec, get_value, get_uniform, prettify, make_id, log
 from nature import TaskModel, Radam
 from nurture import get_images
 
-
 DTYPE = tf.float32
-B = tf.keras.backend
-L = tf.keras.losses
+B, L = tf.keras.backend, tf.keras.losses
 REGRESSER_LOSS = L.MeanSquaredLogarithmicError(reduction=L.Reduction.NONE)
 CLASSIFIER_LOSS = L.CategoricalCrossentropy(reduction=L.Reduction.NONE)
 MAE = L.MeanAbsoluteError(reduction=L.Reduction.NONE)
 TASK_PREPPERS = [get_images]
 OPTIMIZER = Radam
-STEPS = 42
 
-# D_CODE_OPTIONS = [1, 2, 4, 8, 16, 32]
+REPEATS = 5
+STEPS = 5
+BATCH = 2
+
+D_CODE_OPTIONS = [1, 2, 4, 8, 16, 32]
 D_IMAGE_OPTIONS = [8, 16, 28]
-D_CODE_OPTIONS = [4]
-CODE_SHAPE = [16, 4]
+CODE_LENGTH = 16
 LOSS_SHAPE = (3,)
-BATCH = 32
 
 
 class Agent:
@@ -29,11 +30,10 @@ class Agent:
 
     def __init__(self, trial):
         self.trial = trial
-        CODE_SHAPE[-1] = self.d_code = self.pull("d_code", D_CODE_OPTIONS)
-        self.d_image = self.pull('d_image', D_IMAGE_OPTIONS)
-        self.image_spec = get_spec(
-            shape=(self.d_image, self.d_image, 1), format="image")
-        self.code_spec = get_spec(shape=CODE_SHAPE, format="code")
+        d_image = self.pull('d_image', D_IMAGE_OPTIONS)
+        self.image_spec = get_spec(shape=(d_image, d_image, 1), format="image")
+        d_code = self.pull("d_code", D_CODE_OPTIONS)
+        self.code_spec = get_spec(shape=(CODE_LENGTH, d_code), format="code")
         self.loss_spec = get_spec(shape=LOSS_SHAPE, format="loss")
         self.classifier_loss = CLASSIFIER_LOSS
         self.regresser_loss = REGRESSER_LOSS
@@ -41,21 +41,31 @@ class Agent:
         self.objectives = []
         self.batch = BATCH
         self.practice()
-        self.trial.set_user_attr(
-            'dataset', f'{STEPS} steps of {self.d_image}x{self.d_image} mnist')
 
     def practice(self):
         task = self.add_specs(choice(TASK_PREPPERS)(self))
         task.graph, task.model = TaskModel(
             self, in_specs=task.in_specs, out_specs=task.out_specs)
-        params = tf.math.log(tf.cast(task.model.count_params(), tf.float32))
-        log("PARAMS {params}", color="green", debug=True)
+        log('hyperparameters:', self.trial.params, color="green")
+        params = tf.cast(task.model.count_params(), tf.float32)
+        log_params = tf.math.log(params)
+        log(f"params: {params} & log(params): {log_params}", color="green")
         data, model, loss = task.data, task.model, task.loss
         last_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
-        with tf.device("/gpu:0"):
-            objective = self.run_data_session(data, model, loss, last_pred)
-        self.objective = objective * params
-        log(f"OBJECTIVE {self.objective}", color="green", debug=True)
+        for i in range(REPEATS):
+            with tf.device("/gpu:0"):
+                objective = self.run_data_session(data, model, loss, last_pred)
+            log(f"  {i + 1}/{REPEATS} Objective: {objective}", color="green")
+            if tf.math.is_nan(objective):
+                objective = 123456789.
+            self.trial.report(get_value(objective), i)
+            if self.trial.should_prune():
+                raise optuna.structs.TrialPruned()
+            self.objectives.append(objective)
+            mean = tf.math.reduce_mean(self.objectives)
+            std = tf.math.reduce_std(self.objectives)
+            log(f"Mean: {mean} --- Std: {std}", color="green")
+        self.objective = (mean + std) * log_params
 
     def add_specs(self, task):
         in_specs, out_specs = list(task.in_specs), list(task.out_specs)
@@ -64,13 +74,13 @@ class Agent:
         task.in_specs, task.out_specs = in_specs, out_specs
         return task
 
-    @tf.function(experimental_relax_shapes=True)
+    # @tf.function  #(experimental_relax_shapes=True)
     def run_data_session(self, data, model, loss, last_pred):
         last_loss = tf.ones((BATCH, LOSS_SHAPE[0]), tf.float32)
         v_pred, criticism = tf.ones_like(last_loss), tf.ones_like(last_loss)
         last_true = tf.ones_like(last_pred)
-        objective = 0.
-        for step, (image, y_true) in data.take(STEPS).enumerate():
+        objectives = []
+        for step, (image, y_true) in data.shuffle(314).take(STEPS).enumerate():
             with tf.GradientTape() as tape:
                 y_pred, v_pred, criticism = model([
                     image, last_true, last_pred, v_pred, criticism, last_loss])
@@ -90,8 +100,12 @@ class Agent:
                 step, "L:", prettify(class_loss),
                 "P:", prettify(v_pred), prettify(criticism),
                 "E:", prettify(v_loss), prettify(c_loss))
-            objective = objective + tf.math.reduce_sum(last_loss)
-        return tf.math.log(objective)
+            sum_loss = tf.math.reduce_sum(last_loss)
+            objectives.append(sum_loss)
+        tf.print("objectives", objectives)
+        mean = tf.math.reduce_mean(objectives)
+        std = tf.math.reduce_std(objectives)
+        return mean + std
 
     def pull(self, *args, log_uniform=False, id=False):
         args = list(args)

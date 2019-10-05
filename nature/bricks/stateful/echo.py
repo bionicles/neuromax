@@ -21,7 +21,7 @@ def get_weights(shape, dtype, stddev):
     weights = tf.nn.dropout(
         tf.random.truncated_normal(shape, stddev=stddev, dtype=dtype), P_DROP)
     norm = spectral_norm(weights)
-    log("NORM:", norm, color="yellow")
+    # log("NORM:", norm, color="yellow")
     return weights, norm
 
 

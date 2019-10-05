@@ -3,7 +3,7 @@ from tools import make_id
 import nature
 
 L = tf.keras.layers
-FIRST_OPTIONS = ["SWAG", "MLP", "Attention", "Delta"]
+FIRST_OPTIONS = ["SWAG", "MLP"]
 SIZE_OPTIONS = [1, 2, 3, 4, 5]
 FN = "identity"
 

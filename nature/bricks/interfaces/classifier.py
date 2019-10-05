@@ -2,8 +2,7 @@ import tensorflow as tf
 import nature
 
 L = tf.keras.layers
-FIRST_OPTIONS = ["SWAG", "MLP", "Attention", "Delta"]
-LAYER = nature.FC
+FIRST_OPTIONS = ["SWAG", "MLP"]
 FN2 = 'softmax'
 
 
