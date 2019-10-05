@@ -47,9 +47,9 @@ class Agent:
         task.graph, task.model = TaskModel(
             self, in_specs=task.in_specs, out_specs=task.out_specs)
         log('hyperparameters:', self.trial.params, color="green")
-        params = tf.cast(task.model.count_params(), tf.float32)
-        log_params = tf.math.log(params)
-        log(f"params: {params} & log(params): {log_params}", color="green")
+        n_params = tf.cast(task.model.count_params(), tf.float32)
+        log_params = tf.math.log(n_params)
+        log(f"n_params: {n_params} log(n_params): {log_params}", color="green")
         data, model, loss = task.data, task.model, task.loss
         last_pred = get_uniform(task.out_specs[0].shape, batch=self.batch)
         for i in range(REPEATS):
@@ -66,6 +66,10 @@ class Agent:
             std = tf.math.reduce_std(self.objectives)
             log(f"Mean: {mean} --- Std: {std}", color="green")
         self.objective = (mean + std) * log_params
+        self.trial.set_user_attr('log_params', log_params)
+        self.trial.set_user_attr('n_params', n_params)
+        self.trial.set_user_attr('mean', mean)
+        self.trial.set_user_attr('std', std)
 
     def add_specs(self, task):
         in_specs, out_specs = list(task.in_specs), list(task.out_specs)
