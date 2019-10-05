@@ -66,10 +66,10 @@ class Agent:
             std = tf.math.reduce_std(self.objectives)
             log(f"Mean: {mean} --- Std: {std}", color="green")
         self.objective = (mean + std) * log_params
-        self.trial.set_user_attr('log_params', log_params)
-        self.trial.set_user_attr('n_params', n_params)
-        self.trial.set_user_attr('mean', mean)
-        self.trial.set_user_attr('std', std)
+        self.trial.set_user_attr('log_params', get_value(log_params))
+        self.trial.set_user_attr('n_params', get_value(n_params))
+        self.trial.set_user_attr('mean', get_value(mean))
+        self.trial.set_user_attr('std', get_value(std))
 
     def add_specs(self, task):
         in_specs, out_specs = list(task.in_specs), list(task.out_specs)
