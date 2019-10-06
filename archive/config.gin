@@ -1,0 +1,76 @@
+import nature.bricks.built_in.fc
+
+FN = "mish"
+
+optimizer.key = "radam"
+
+Agent.image_shape = (16, 16, 1)
+Agent.code_shape = (4, %D_CODE)
+Agent.loss_shape = (4,)
+Agent.batch = 5
+
+TaskGraph.max_stacks = 4
+TaskGraph.min_stacks = 0
+
+Brick.options = [
+    "delta"
+    "mlp",
+    "conv_set",
+    "transformer",
+    "swag"
+    ]
+
+Layer.layer_fn = fc.FC
+Init.dist = "chaos"
+
+DenseBlock.layers = 4
+DenseBlock.units = 4
+
+ResBlock.n = 2
+
+Delta.p_drop = 0.
+Delta.fn = "mish"
+
+MLP.units_list = [512, 512]
+MLP.fns_list = [%FN, %FN]
+
+Attention.memory_size = 256
+Attention.d_model = 32
+Attention.n_heads = 2
+Attention.p_drop = 0.5
+
+SWAG.units = 128
+SWAG.key = None
+SWAG.power = 3
+
+Regresser.ensemble_size = 4
+
+Recirculator.n_loops = 2
+
+Slim.n = 8
+
+NoiseDrop.stddev = 0.04
+NoiseDrop.p_drop = 0.5
+
+ConvSet.n = 2
+
+Stack.options = [nature.Transformer]
+Stack.min, Stack.max = 1, 4
+
+Chain.options = [nature.ResBlock]
+Chain.min, Chain.max = 2, 2
+
+Merge.axis = 1
+
+NormPreact.key = %FN
+Fn.key = %FN
+
+Conv1D.layer_class = L.SeparableConv1D
+Conv1D.kernel_size = 1
+FC.layer_calss = L.Dense
+
+L1 = L2 = 1e-4
+Regularizer.l1 = %L1
+Regularizer.l2 = %L2
+L1L2.l1 = %L1
+L1L2.l2 = %L2

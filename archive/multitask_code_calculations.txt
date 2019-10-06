@@ -1,0 +1,52 @@
+if n_codes, n_judgments are always 1
+
+number of inputs is always 1 + len(task_dict.inputs) + len(task_dict.outputs)
+code is always (1 loss + (1 task_id + n_in + n_out) * code_atoms, code_channels)
+judgment shape == code shape
+actions are always: [code_prediction, loss_prediction, n_in normies, n_in reconstructions, n_out actions]
+
+shared model input shape is always (n_in * code_atoms) (padded)
+judgment output shape is always (n_in * code_atoms) (padded)
+actuator input shape is judgment output shape
+number of outputs is
+    n_inputs
+    + code shape reconstruction
+    + code shape state prediction
+    + 1 loss prediction
+    + number of outputs
+
+
+
+
+
+inputs = task_id_input + max number of inputs (1 + n_in)
+outputs: n_in normies, n_in codes, n_out judgments, n_out actions
+2 * n_in + 2 * n_out
+actions = reconstructions + code predictions + loss_prediction + actions
+n_actions = n_in + n_in + 1 + n_out
+
+in clevr, 2 inputs, 1 output
+n_in = 1 t_id + 2 (image + ragged) = 3
+n_out = 3 r (t_id + image + ragged) + 3 c_p + 1 l_p + 1 a = 8
+
+in MountainCar: 1 input, 1 output
+n_in = 1 t_id + 1 box = 2
+n_out = 2 r + 2 c_p + 1 l_p + 1 a = 6
+
+in mol: 1 input, 1 output
+n_in = 1 t_id + 1 input
+n_out = 2 r + 2 c_p + 1 l_p + 1 a = 6
+
+n_in = len(inputs) + 1
+n_out = 2 * n_in + 1 l_p + n_actions
+
+shared model inputs = max n_in (3)
+shared_model outputs = max n_out = 8
+
+codes = n_in + [tf.random.normal(code) for _ in range(max_n_in - n_in)]
+
+output indices:
+reconstructions = outputs[0:n_in]
+code_predictions = outputs[n_in:2 * n_in]
+loss_prediction = [2*n_in + 1]
+actions = [2*n_in + 1: 2*n_in + 1 + n_actions]
