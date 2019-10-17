@@ -10,7 +10,7 @@ import nature
 
 L = tf.keras.layers
 LAYER = nature.Layer
-MIN_POWER, MAX_POWER = 1, 4
+MIN_POWER, MAX_POWER = 2, 8
 
 
 class SWAG(L.Layer):

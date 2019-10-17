@@ -5,8 +5,8 @@ import nature
 
 L = tf.keras.layers
 LAYER_FN = [nature.Attention, nature.SWAG, nature.NoiseDrop, nature.Conv1D]
-LAYERS = [2, 4]
-UNITS = [1, 2, 4, 8]
+UNITS = [1, 2, 4, 8, 16, 32]
+LAYERS = [1, 2, 3, 4]
 
 
 class DenseBlock(L.Layer):

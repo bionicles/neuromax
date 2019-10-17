@@ -1,7 +1,7 @@
 import tensorflow as tf
 import nature
 
-MIN, MAX = 2, 4
+MIN, MAX = 2, 8
 UNITS = 3
 
 L = tf.keras.layers

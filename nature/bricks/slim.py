@@ -6,7 +6,7 @@ import nature
 
 L = tf.keras.layers
 LAYER = nature.Layer
-N_OPTIONS = [16, 32, 64]
+N_OPTIONS = [8, 16, 32, 64, 128]
 
 
 class Slim(L.Layer):

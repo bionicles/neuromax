@@ -7,9 +7,9 @@ L = tf.keras.layers
 INIT = nature.Init
 REG = nature.L1L2
 LAYER = nature.Layer
-D_MODEL_OPTIONS = [8, 16, 32, 64, 128, 256]
-MEMORY_SIZE_OPTIONS = [32, 512]
-N_HEADS_OPTIONS = [1, 2, 4]
+MEMORY_SIZE_OPTIONS = [128, 256, 512, 1024]
+D_MODEL_OPTIONS = [32, 64, 128, 256]
+N_HEADS_OPTIONS = [1, 2, 4, 8]
 DROP_OPTIONS = [0., 0.5]
 UNITS = None
 

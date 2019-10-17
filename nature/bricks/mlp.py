@@ -3,8 +3,8 @@ import nature
 
 
 LAYER = nature.Layer
-MIN_LAYERS, MAX_LAYERS = 2, 3
-UNITS_OPTIONS = [64, 128, 256]
+MIN_LAYERS, MAX_LAYERS = 2, 4
+UNITS_OPTIONS = [64, 128, 256, 512]
 
 
 class MLP(tf.keras.layers.Layer):

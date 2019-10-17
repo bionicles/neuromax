@@ -2,15 +2,14 @@
 # http://www.scholarpedia.org/article/Echo_state_network
 # https://arxiv.org/pdf/1906.03186.pdf
 import tensorflow as tf
-from tools import spectral_norm, log, make_id
+from tools import spectral_norm, make_id
 import nature
 
 L, B = tf.keras.layers, tf.keras.backend
-LAYER = nature.OP_FC
-MAX_SPECTRAL_NORM, STDDEV, BACKOFF = 0.99, 0.1, 0.005
+UNITS = [128, 256, 512, 1024]
+STDDEV, BACKOFF = 0.1, 0.005
 LEAK_RATE = 0.04
 P_DROP = 0.5
-UNITS = [32, 64]
 
 
 def dot_1D(x, weight, batch):
@@ -25,13 +24,17 @@ def get_weights(shape, dtype, stddev):
     return weights, norm
 
 
-def init_echo_state(shape, dtype=tf.float32):
-    stddev = STDDEV
-    weights, norm = get_weights(shape, dtype, stddev)
-    while norm >= MAX_SPECTRAL_NORM:
-        stddev = stddev - 0.01
+def get_init_echo_state(ai):
+    desired_spectral_norm = ai.pull("spectral_norm", 0., 1.)
+
+    def init_echo_state(shape, dtype=tf.float32):
+        stddev = STDDEV
         weights, norm = get_weights(shape, dtype, stddev)
-    return weights
+        while norm >= desired_spectral_norm:
+            stddev = stddev - 0.01
+            weights, norm = get_weights(shape, dtype, stddev)
+        return weights
+    return init_echo_state
 
 
 class Echo(L.Layer):
@@ -45,7 +48,8 @@ class Echo(L.Layer):
         self.batch = shape[0]
         self.y = self.add_weight("y", [self.batch, *self.ai.code_spec.shape])
         self.output_layer = nature.Resizer(self.ai, self.ai.code_spec.shape)
-        self.adjacency = nature.Projector(self.units, init=init_echo_state)
+        self.adjacency = nature.Projector(
+            self.units, init=get_init_echo_state(self.ai))
         self.state = self.add_weight("state", [self.batch, self.units])
         self.input_weights = nature.Projector(self.units)
         self.feedback = nature.Projector(self.units)

@@ -15,12 +15,12 @@ MAE = L.MeanAbsoluteError(reduction=L.Reduction.NONE)
 TASK_PREPPERS = [get_images]
 OPTIMIZER = Radam
 
-REPEATS = 5
-STEPS = 5
+REPEATS = 10
+STEPS = 10
 BATCH = 2
 
-D_CODE_OPTIONS = [1, 2, 4, 8, 16, 32]
-D_IMAGE_OPTIONS = [8, 16, 28]
+D_IMAGE_OPTIONS = [8, 14, 16, 28]
+D_CODE_OPTIONS = [4, 8, 16, 32]
 CODE_LENGTH = 16
 LOSS_SHAPE = (3,)
 
@@ -65,7 +65,7 @@ class Agent:
             mean = tf.math.reduce_mean(self.objectives)
             std = tf.math.reduce_std(self.objectives)
             log(f"Mean: {mean} --- Std: {std}", color="green")
-        self.objective = (mean + std) * log_params
+        self.objective = mean * 4 + std + log_params * 0.2
         self.trial.set_user_attr('log_params', get_value(log_params))
         self.trial.set_user_attr('n_params', get_value(n_params))
         self.trial.set_user_attr('mean', get_value(mean))
