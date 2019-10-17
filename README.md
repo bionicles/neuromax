@@ -6,12 +6,12 @@ https://www.youtube.com/watch?v=YR5ApYxkU-U
 
 WIP/ALPHA.
 
-Not where I want it yet, and may contain, ahem, harsh language...
-
-# TLDR: AI for BIOLOGISTS by BIOLOGISTS
+Not where I want it yet, and may contain, ahem,
 
 I set out to replace GROMACS with NEUROMAX.
 All I got was this shitty AI inspired by the Biobricks standard.
+
+# TLDR: biologically inspired AI 
 
 - nature: contains the agent which assembles a graph of bricks
 - nurture: contains tasks/data from which to learn
