@@ -26,4 +26,5 @@ I intend to convert my dev process for this repo to a document-driven style
 definitely happy to work with you on new tasks, bricks, or tools
 
 call/text Bion Howard 843.830.2918 between 1-5pm EST for any issues
+
 I check email (bion@bitpharma.com) rarely to focus on code
