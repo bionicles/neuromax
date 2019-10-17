@@ -1,0 +1,14 @@
+On i7-8700K CPU @ 3.70GHz:
+2VZ8 works ( 30,281 atoms )
+4FQR fails, ( 90,792 )
+1igt works (immunoglobulin)
+4HG4 works ( 58,742 )
+3VX8 works easily ( 7605 )
+
+On 1070 ti GPU:
+1igt fails ( 12,956 )
+3ZGY flies ( 7912 )
+1L8W flies ( 7984 )
+5IJV fails ( 26729 )
+5DZB works ( 10212 )
+1C9T fails ( 12078 )

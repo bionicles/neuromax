@@ -2,6 +2,23 @@ __pycache__/
 .DS_STORE
 *.pyc
 .ipynb_checkpoints/
+<<<<<<< HEAD
+tfrecord/
+xyz/
+rxn/
+mol/
+pdb/
+runs/
+*.pdb
+*.png
+*.mpg
+*.gif
+*.rsmi
+*.txt
+*.tfrecord
+*.xyz
+*.cif
+=======
 archive/runs/
 *.pdb
 *.png
@@ -21,3 +38,4 @@ runs/
 nature/tasks/clevr/CLEVR_v1.0
 !graph.png
 !model.png
+>>>>>>> b08c95836dcbb9e392047d92b72157308df0d2f3
