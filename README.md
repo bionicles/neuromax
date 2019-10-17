@@ -4,7 +4,9 @@ https://www.youtube.com/watch?v=YR5ApYxkU-U
 
 # STATUS:
 
-WIP/ALPHA
+WIP/ALPHA.
+
+Not where I want it yet, and may contain, ahem, harsh language...
 
 # TLDR: AI for BIOLOGISTS by BIOLOGISTS
 
@@ -19,4 +21,4 @@ All I got was this shitty AI inspired by the Biobricks standard.
 definitely happy to work with you on new tasks, bricks, or tools
 
 call/text Bion Howard 843.830.2918 between 1-5pm EST for any issues
-i check email (bion@bitpharma.com) rarely to focus on code
+I check email (bion@bitpharma.com) rarely to focus on code
